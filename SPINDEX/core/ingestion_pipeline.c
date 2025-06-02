@@ -108,9 +108,40 @@ int pipeline_init(SpindexIngestionPipeline *pipeline,
     pipeline->app_config = config;
     pipeline->all_loaded_plugins = loaded_plugins;
     pipeline->num_all_plugins = num_plugins;
+    pipeline->active_indexer_plugin = NULL;
+    pipeline->active_indexer_plugin_data = NULL; // Needs proper handling via plugin_loader later
 
-    LOG_INFO("Ingestion pipeline initialized. Aware of %d loaded plugins.", num_plugins);
-    LOG_INFO("Plugin directory from config: %s", config->plugin_directory); // Example: using config
+    if (config->active_indexer_name && strlen(config->active_indexer_name) > 0) {
+        LOG_INFO("Attempting to find and set active indexer: '%s'", config->active_indexer_name);
+        for (int i = 0; i < num_plugins; ++i) {
+            if (loaded_plugins[i].info.type == SPINDEX_PLUGIN_TYPE_INDEXER &&
+                strcmp(loaded_plugins[i].info.name, config->active_indexer_name) == 0) {
+
+                pipeline->active_indexer_plugin = &loaded_plugins[i];
+                LOG_INFO("Active indexer plugin set: %s (Version: %s)",
+                         pipeline->active_indexer_plugin->info.name,
+                         pipeline->active_indexer_plugin->info.version);
+
+                // IMPORTANT NOTE: The current plugin_loader calls init() without parameters.
+                // The indexer plugin (e.g. ElasticsearchIndexer) itself handles its own data via static global.
+                // If plugin_loader were enhanced to pass void** to init, we would store that pointer here:
+                // e.g., if (pipeline->active_indexer_plugin->init(config, &pipeline->active_indexer_plugin_data) != 0) { ... }
+                // For now, active_indexer_plugin_data remains NULL at the pipeline level.
+                // The plugin's process_data will use its internally managed (static global) data.
+                break;
+            }
+        }
+        if (!pipeline->active_indexer_plugin) {
+            LOG_WARN("Configured active indexer '%s' not found or not of type INDEXER.", config->active_indexer_name);
+        }
+    } else {
+        LOG_INFO("No active indexer configured.");
+    }
+
+    LOG_INFO("Ingestion pipeline initialized. Aware of %d loaded plugins. Active indexer: %s",
+        num_plugins,
+        pipeline->active_indexer_plugin ? pipeline->active_indexer_plugin->info.name : "None");
+    LOG_INFO("Plugin directory from config: %s", config->plugin_directory);
 
     return 0;
 }
@@ -223,16 +254,67 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
     LOG_DEBUG("Final data from parser (first 50 bytes): %.*s", 50, (char*)parsed_chunk->data);
 
     // DO NOT free_processed_data_chunk(parsed_chunk); here anymore.
-    LOG_INFO("Finished processing for file: %s. Returning final chunk.", file_path);
-    return parsed_chunk; // Return the final chunk
+    // Instead, pass it to the indexer if one is configured.
+
+    if (pipeline->active_indexer_plugin && parsed_chunk) {
+        LOG_INFO("Passing data from parser to active indexer: %s", pipeline->active_indexer_plugin->info.name);
+        // The indexer's process_data will use its own internally managed data (static global for now)
+        ProcessedDataChunk* indexing_status_chunk = pipeline->active_indexer_plugin->process_data(parsed_chunk);
+
+        if (indexing_status_chunk) {
+            // Indexers might return a status chunk, which should be freed by the pipeline.
+            LOG_INFO("Indexer '%s' returned a status chunk (type %d, length %zu). Freeing it.",
+                     pipeline->active_indexer_plugin->info.name,
+                     indexing_status_chunk->data_type,
+                     indexing_status_chunk->length);
+            free_processed_data_chunk(indexing_status_chunk);
+        } else {
+            LOG_INFO("Indexer '%s' completed (returned NULL).", pipeline->active_indexer_plugin->info.name);
+        }
+        // The original parsed_chunk was consumed by the indexer (or should have been managed by it)
+        // Our current indexer plugins typically don't modify the input chunk but return new or NULL.
+        // The es_indexer returns NULL. If it took ownership, we wouldn't free parsed_chunk.
+        // If it copied data, parsed_chunk still needs freeing here.
+        // Current es_indexer doesn't take ownership, it just uses the data.
+        // So, parsed_chunk should be freed after indexing.
+        free_processed_data_chunk(parsed_chunk);
+        LOG_INFO("Finished processing for file: %s. Data passed to indexer. Returning NULL from pipeline.", file_path);
+        return NULL; // Data consumed by indexer, pipeline flow ends for this item.
+    } else if (parsed_chunk) {
+        // No active indexer, but we have a parsed chunk.
+        // This behavior might need to be defined: does it get returned or discarded?
+        // For now, let's return it, as per previous behavior if no indexer.
+        LOG_INFO("Finished processing for file: %s. No active indexer. Returning final parsed chunk.", file_path);
+        return parsed_chunk;
+    } else {
+        // No parsed_chunk (parser failed), already logged.
+        LOG_INFO("Finished processing for file: %s. No parsed data to index or return.", file_path);
+        return NULL;
+    }
 }
 
 void pipeline_shutdown(SpindexIngestionPipeline *pipeline) {
     if (!pipeline) return;
     LOG_INFO("Ingestion pipeline shutting down.");
-    // Free any resources specifically allocated by the pipeline struct itself, if any.
-    // For now, the struct mostly holds references, so not much to do here.
-    pipeline->all_loaded_plugins = NULL;
+
+    // Shutdown active indexer plugin
+    // IMPORTANT: This assumes the plugin_loader's unload_plugins will also call shutdown.
+    // However, if the plugin has specific state managed via plugin_data (which we aim for),
+    // the pipeline should explicitly shut down the plugins it initialized with specific data.
+    // The current ElasticsearchIndexer uses a static global, so its shutdown (called by unload_plugins)
+    // will handle its own static data. This active_indexer_plugin_data is currently NULL.
+    if (pipeline->active_indexer_plugin) {
+        LOG_INFO("Pipeline explicitly acknowledging shutdown for active indexer: %s (actual shutdown by plugin_loader)",
+                 pipeline->active_indexer_plugin->info.name);
+        // If plugin_data was used:
+        // if (pipeline->active_indexer_plugin->shutdown) {
+        //     pipeline->active_indexer_plugin->shutdown(pipeline->active_indexer_plugin_data);
+        // }
+        // pipeline->active_indexer_plugin_data = NULL; // Clear our stored data pointer
+    }
+
+    pipeline->all_loaded_plugins = NULL; // Dereference, not free
     pipeline->num_all_plugins = 0;
-    pipeline->app_config = NULL;
+    pipeline->app_config = NULL;      // Dereference
+    pipeline->active_indexer_plugin = NULL; // Dereference
 }

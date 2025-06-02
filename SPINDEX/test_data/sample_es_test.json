@@ -1,0 +1,7 @@
+{\
+  "id": "e2e_test_001",\
+  "message": "Hello Elasticsearch from SPINDEX end-to-end test!",\
+  "timestamp": "2024-06-02T14:00:00Z",\
+  "source": "SPINDEX_E2E_TEST",\
+  "value": 42.7\
+}

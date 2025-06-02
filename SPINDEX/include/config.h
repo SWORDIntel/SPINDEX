@@ -27,6 +27,13 @@ typedef struct {
     int max_concurrent_files;
     size_t input_buffer_size;
 
+    // Elasticsearch settings
+    char *elasticsearch_url;        // Dynamically allocated
+    char *elasticsearch_index_name; // Dynamically allocated
+
+    // Active plugins
+    char *active_indexer_name;      // Dynamically allocated, e.g., "ElasticsearchIndexer"
+
     // Add other configuration parameters as needed
     // For example:
     // char output_directory[MAX_CONFIG_STR_LEN];

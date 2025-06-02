@@ -16,6 +16,11 @@ typedef struct {
     int num_all_plugins;               // Total number of loaded plugins
     const SpindexConfig *app_config;   // Reference to the application configuration
 
+    // Active indexer details
+    SpindexPlugin *active_indexer_plugin;     // Pointer to the active indexer plugin instance
+    void* active_indexer_plugin_data;         // Data specific to the active indexer instance (managed by plugin)
+                                              // NOTE: Current plugin_loader needs enhancement to support this properly.
+
     // Future fields might include:
     // - Caches for frequently used plugins
     // - Thread pool for parallel processing

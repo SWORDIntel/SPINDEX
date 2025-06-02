@@ -1,4 +1,6 @@
+#define _GNU_SOURCE // For strdup, strcasecmp
 #include "config_manager.h" // Corresponding header
+#include "utils.h"          // For LOG_WARN etc.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,6 +60,21 @@ void set_default_config(SpindexConfig *config) {
     config->log_level = LOG_LEVEL_INFO;
     config->max_concurrent_files = 10;
     config->input_buffer_size = 4096; // 4KB
+
+    // Free existing if any, then strdup default
+    if (config->elasticsearch_url) free(config->elasticsearch_url);
+    config->elasticsearch_url = strdup("http://localhost:9200");
+
+    if (config->elasticsearch_index_name) free(config->elasticsearch_index_name);
+    config->elasticsearch_index_name = strdup("spindex_default_idx");
+
+    if (config->active_indexer_name) free(config->active_indexer_name);
+    config->active_indexer_name = strdup("ElasticsearchIndexer"); // Default active indexer
+
+    if (!config->elasticsearch_url || !config->elasticsearch_index_name || !config->active_indexer_name) {
+        // Handle strdup failure, though simple for this context
+        fprintf(stderr, "set_default_config: strdup failed for ES or Indexer settings.\n");
+    }
 }
 
 int parse_config_file(const char *filepath, SpindexConfig *config) {
@@ -114,6 +131,27 @@ int parse_config_file(const char *filepath, SpindexConfig *config) {
             config->max_concurrent_files = atoi(value);
         } else if (strcmp(key, "input_buffer_size") == 0) {
             config->input_buffer_size = (size_t)atol(value);
+        } else if (strcmp(key, "elasticsearch_url") == 0) {
+            if (config->elasticsearch_url) free(config->elasticsearch_url);
+            config->elasticsearch_url = strdup(value);
+            if (!config->elasticsearch_url) fprintf(stderr, "parse_config_file: strdup failed for elasticsearch_url\n");
+        } else if (strcmp(key, "elasticsearch_index_name") == 0) {
+            if (config->elasticsearch_index_name) free(config->elasticsearch_index_name);
+            config->elasticsearch_index_name = strdup(value);
+            if (!config->elasticsearch_index_name) fprintf(stderr, "parse_config_file: strdup failed for elasticsearch_index_name\n");
+        } else if (strcmp(key, "active_indexer_name") == 0) {
+            if (config->active_indexer_name) free(config->active_indexer_name);
+            config->active_indexer_name = strdup(value);
+            if (!config->active_indexer_name) fprintf(stderr, "parse_config_file: strdup failed for active_indexer_name\n");
+        } else if (strcmp(key, "active_preprocessor_name") == 0) {
+            // These fields are not currently in SpindexConfig struct, but parsing them defensively.
+            LOG_WARN("Config key 'active_preprocessor_name' found but not used by SpindexConfig directly yet.");
+            // if (config->active_preprocessor_name) free(config->active_preprocessor_name);
+            // config->active_preprocessor_name = strdup(value);
+        } else if (strcmp(key, "active_parser_name") == 0) {
+            LOG_WARN("Config key 'active_parser_name' found but not used by SpindexConfig directly yet.");
+            // if (config->active_parser_name) free(config->active_parser_name);
+            // config->active_parser_name = strdup(value);
         } else {
             fprintf(stderr, "parse_config_file: Unknown configuration key on line %d: %s\n", line_number, key);
         }
@@ -127,12 +165,20 @@ void free_config_resources(SpindexConfig *config) {
     // Currently, SpindexConfig uses fixed-size char arrays and simple types.
     // If any char* members were dynamically allocated (e.g., with strdup),
     // they would need to be freed here.
-    // For example:
-    // if (config && config->some_dynamic_string) {
-    //     free(config->some_dynamic_string);
-    //     config->some_dynamic_string = NULL;
-    // }
-    (void)config; // Unused parameter for now
+    if (config) {
+        if (config->elasticsearch_url) {
+            free(config->elasticsearch_url);
+            config->elasticsearch_url = NULL;
+        }
+        if (config->elasticsearch_index_name) {
+            free(config->elasticsearch_index_name);
+            config->elasticsearch_index_name = NULL;
+        }
+        if (config->active_indexer_name) {
+            free(config->active_indexer_name);
+            config->active_indexer_name = NULL;
+        }
+    }
 }
 
 void print_config(const SpindexConfig *config) {
@@ -146,5 +192,8 @@ void print_config(const SpindexConfig *config) {
     printf("Log Level:            %s (%d)\n", loglevel_to_string(config->log_level), config->log_level);
     printf("Max Concurrent Files: %d\n", config->max_concurrent_files);
     printf("Input Buffer Size:    %zu\n", config->input_buffer_size);
+    printf("Elasticsearch URL:    %s\n", config->elasticsearch_url ? config->elasticsearch_url : "N/A");
+    printf("Elasticsearch Index:  %s\n", config->elasticsearch_index_name ? config->elasticsearch_index_name : "N/A");
+    printf("Active Indexer Name:  %s\n", config->active_indexer_name ? config->active_indexer_name : "N/A");
     printf("---------------------------\n");
 }

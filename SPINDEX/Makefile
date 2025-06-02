@@ -8,7 +8,7 @@ CFLAGS = -Wall -Wextra -g -std=c11 -fPIC
 # Include directories
 INCLUDE_DIRS = -I./include -I./core
 # LDFLAGS for linking
-LDFLAGS = -ldl -rdynamic # For dlopen, dlsym, and allowing plugins to access host symbols
+LDFLAGS = -ldl -rdynamic -lcurl # For dlopen, dlsym, plugins, and libcurl
 
 # Directories
 CORE_DIR = ./core
@@ -57,6 +57,23 @@ TEST_PLUGINS_STAGING_DIR = $(BUILD_DIR)/plugins_for_test
 PLUGIN_OBJ_DIR = $(BUILD_DIR)/plugins/obj
 PLUGIN_LIB_DIR = $(BUILD_DIR)/plugins/lib
 
+TEST_ES_CLIENT_SRC = $(CORE_DIR)/test_elasticsearch_client.c
+TEST_ES_CLIENT_DEPS = $(BUILD_DIR)/core/elasticsearch_client.o $(BUILD_DIR)/core/utils.o # Assuming es_client uses utils for logging
+TEST_ES_CLIENT_TARGET = $(BUILD_DIR)/test_elasticsearch_client
+
+TEST_ES_INDEXING_SRC = $(CORE_DIR)/test_elasticsearch_indexing.c
+TEST_ES_INDEXING_DEPS = \
+    $(BUILD_DIR)/core/config_manager.o \
+    $(BUILD_DIR)/core/ingestion_pipeline.o \
+    $(BUILD_DIR)/core/plugin_loader.o \
+    $(BUILD_DIR)/core/utils.o \
+    $(BUILD_DIR)/core/elasticsearch_client.o \
+    plugins # Depends on all plugins being built and staged
+TEST_ES_INDEXING_TARGET = $(BUILD_DIR)/test_elasticsearch_indexing
+
+# For the rule below, we need the .o files for linking, and 'plugins' to ensure .so are built for copying.
+TEST_ES_INDEXING_LINK_OBJS = $(filter %.o,$(TEST_ES_INDEXING_DEPS))
+
 
 # Plugin sources & build artifact definitions
 DUMMY_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/dummy_plugin
@@ -73,6 +90,11 @@ JSON_PARSER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/parsers
 JSON_PARSER_PLUGIN_SRC = $(JSON_PARSER_PLUGIN_SRC_DIR)/json_parser.c
 JSON_PARSER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/parsers/json_parser.o
 JSON_PARSER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/json_parser.so
+
+ELASTICSEARCH_INDEXER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/indexers
+ELASTICSEARCH_INDEXER_PLUGIN_SRC = $(ELASTICSEARCH_INDEXER_PLUGIN_SRC_DIR)/elasticsearch_indexer.c
+ELASTICSEARCH_INDEXER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/indexers/elasticsearch_indexer.o
+ELASTICSEARCH_INDEXER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/elasticsearch_indexer.so
 
 # Phony targets
 .PHONY: all clean plugins tests
@@ -91,10 +113,34 @@ $(BUILD_DIR)/core/%.o: $(CORE_DIR)/%.c
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
 	@echo "Compiled core object: $@"
 
+# Specific rule for elasticsearch_client.o to list its dependencies more clearly
+$(BUILD_DIR)/core/elasticsearch_client.o: $(CORE_DIR)/elasticsearch_client.c $(INCLUDE_DIR)/elasticsearch_client.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $(CORE_DIR)/elasticsearch_client.c -o $@
+	@echo "Compiled core object (specific rule): $@"
+
+
 # --- Test Program Rules ---
-tests: $(TEST_CONFIG_LOADER_TARGET) $(TEST_PLUGIN_LOADER_TARGET) $(TEST_LOGGER_TARGET) $(TEST_HW_DETECT_TARGET) $(TEST_PIPELINE_TARGET)
+tests: $(TEST_CONFIG_LOADER_TARGET) $(TEST_PLUGIN_LOADER_TARGET) $(TEST_LOGGER_TARGET) $(TEST_HW_DETECT_TARGET) $(TEST_PIPELINE_TARGET) $(TEST_ES_CLIENT_TARGET) $(TEST_ES_INDEXING_TARGET)
 
 $(TEST_CONFIG_LOADER_TARGET): $(TEST_CONFIG_LOADER_SRC) $(TEST_CONFIG_LOADER_DEPS)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $^ -o $@ $(LDFLAGS)
+	@echo "Built test program: $@"
+
+$(TEST_ES_INDEXING_TARGET): $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS) plugins
+	@mkdir -p $(@D)
+	# Ensure plugins are staged for this test
+	@mkdir -p $(TEST_PLUGINS_STAGING_DIR)
+	cp $(PLUGIN_LIB_DIR)/dummy_plugin.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/json_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/json_parser.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/elasticsearch_indexer.so $(TEST_PLUGINS_STAGING_DIR)/
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS) -o $@ $(LDFLAGS)
+	@echo "Built test program: $@"
+	@echo "Staged plugins for test in $(TEST_PLUGINS_STAGING_DIR)"
+
+$(TEST_ES_CLIENT_TARGET): $(TEST_ES_CLIENT_SRC) $(TEST_ES_CLIENT_DEPS)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $^ -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
@@ -106,6 +152,7 @@ $(TEST_PIPELINE_TARGET): $(TEST_PIPELINE_SRC) $(TEST_PIPELINE_DEPS)
 	cp $(PLUGIN_LIB_DIR)/dummy_plugin.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/json_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/json_parser.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/elasticsearch_indexer.so $(TEST_PLUGINS_STAGING_DIR)/
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_PIPELINE_SRC) \
 		$(filter %.o,$^) -o $@ $(LDFLAGS) # Link only .o files from DEPS, not .so
 	@echo "Built test program: $@"
@@ -128,7 +175,7 @@ $(TEST_PLUGIN_LOADER_TARGET): $(TEST_PLUGIN_LOADER_SRC) $(TEST_PLUGIN_LOADER_DEP
 
 
 # --- Plugin Rules ---
-plugins: $(DUMMY_PLUGIN_SO) $(JSON_PREPROCESSOR_PLUGIN_SO) $(JSON_PARSER_PLUGIN_SO)
+plugins: $(DUMMY_PLUGIN_SO) $(JSON_PREPROCESSOR_PLUGIN_SO) $(JSON_PARSER_PLUGIN_SO) $(ELASTICSEARCH_INDEXER_PLUGIN_SO)
 	@echo "All specified plugins built."
 
 # Rule for dummy_plugin object file
@@ -145,6 +192,12 @@ $(JSON_PREPROCESSOR_PLUGIN_OBJ): $(JSON_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/
 
 # Rule for json_parser object file
 $(JSON_PARSER_PLUGIN_OBJ): $(JSON_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for elasticsearch_indexer object file
+$(ELASTICSEARCH_INDEXER_PLUGIN_OBJ): $(ELASTICSEARCH_INDEXER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h $(INCLUDE_DIR)/elasticsearch_client.h
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
 	@echo "Compiled plugin object: $@"
@@ -167,6 +220,13 @@ $(JSON_PARSER_PLUGIN_SO): $(JSON_PARSER_PLUGIN_OBJ)
 	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
 	@echo "Built plugin: $@"
 
+# Rule to build elasticsearch_indexer.so from its object file
+# It needs to link with elasticsearch_client.o
+$(ELASTICSEARCH_INDEXER_PLUGIN_SO): $(ELASTICSEARCH_INDEXER_PLUGIN_OBJ) $(BUILD_DIR)/core/elasticsearch_client.o
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
 # A more generic rule for plugins (if structure is consistent)
 # For example, if each plugin is in its own dir under $(PLUGIN_DIR)
 # and has one main .c file named after the directory:
@@ -181,6 +241,7 @@ clean:
 	rm -f $(PLUGIN_DIR)/dummy_plugin/dummy_plugin.so
 	rm -f $(PLUGIN_DIR)/preprocessors/json_preprocessor.so
 	rm -f $(PLUGIN_DIR)/parsers/json_parser.so
+	rm -f $(PLUGIN_DIR)/indexers/elasticsearch_indexer.so
 	@echo "Clean complete."
 
 # Note: main.c doesn't exist yet. The $(TARGET_APP) rule will fail until it's created.
