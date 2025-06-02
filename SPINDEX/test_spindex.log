@@ -1,0 +1,8 @@
+[2025-06-02 05:38:17] [INFO] [core/utils.c:42] Logging system initialized. Log level: DEBUG.
+[2025-06-02 05:38:17] [DEBUG] [core/test_logger.c:13] This is a DEBUG message. (Value: 123)
+[2025-06-02 05:38:17] [INFO] [core/test_logger.c:14] This is an INFO message.
+[2025-06-02 05:38:17] [WARN] [core/test_logger.c:15] This is a WARNING message.
+[2025-06-02 05:38:17] [ERROR] [core/test_logger.c:16] This is an ERROR message. errno: 42 (Just an example)
+[2025-06-02 05:38:17] [TRACE] [core/test_logger.c:21] This is another TRACE message. (Should BE visible NOW)
+[2025-06-02 05:38:17] [DEBUG] [core/test_logger.c:22] Another DEBUG message. (String: test)
+[2025-06-02 05:38:17] [INFO] [core/utils.c:46] Logging system shutting down.

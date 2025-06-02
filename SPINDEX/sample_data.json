@@ -1,0 +1,8 @@
+{\
+  "name": "Sample Document for SPINDEX",\
+  "version": "1.0",\
+  "data": {\
+    "id": "doc001",\
+    "text": "This is sample text for the pipeline. It is JSON."\
+  }\
+}
