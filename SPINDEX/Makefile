@@ -116,6 +116,24 @@ CSV_PARSER_PLUGIN_SRC = $(CSV_PARSER_PLUGIN_SRC_DIR)/csv_parser.c
 CSV_PARSER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/parsers/csv_parser.o
 CSV_PARSER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/csv_parser.so
 
+# Decompressor Plugin Base Directory
+DECOMPRESSORS_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/decompressors
+
+# ZIP Decompressor Plugin
+ZIP_DECOMPRESSOR_PLUGIN_SRC = $(DECOMPRESSORS_PLUGIN_SRC_DIR)/zip_decompressor.c
+ZIP_DECOMPRESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/decompressors/zip_decompressor.o
+ZIP_DECOMPRESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/zip_decompressor.so
+
+# Gzip Decompressor Plugin
+GZIP_DECOMPRESSOR_PLUGIN_SRC = $(DECOMPRESSORS_PLUGIN_SRC_DIR)/gzip_decompressor.c
+GZIP_DECOMPRESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/decompressors/gzip_decompressor.o
+GZIP_DECOMPRESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/gzip_decompressor.so
+
+# Zstd Decompressor Plugin
+ZSTD_DECOMPRESSOR_PLUGIN_SRC = $(DECOMPRESSORS_PLUGIN_SRC_DIR)/zstd_decompressor.c
+ZSTD_DECOMPRESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/decompressors/zstd_decompressor.o
+ZSTD_DECOMPRESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/zstd_decompressor.so
+
 # Phony targets
 .PHONY: all clean plugins tests
 
@@ -160,6 +178,9 @@ $(TEST_ES_INDEXING_TARGET): $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS
 	cp $(PLUGIN_LIB_DIR)/txt_parser.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/csv_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/csv_parser.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/zip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/gzip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/zstd_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS) -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
 	@echo "Staged plugins for test in $(TEST_PLUGINS_STAGING_DIR)"
@@ -181,6 +202,9 @@ $(TEST_PIPELINE_TARGET): $(TEST_PIPELINE_SRC) $(TEST_PIPELINE_DEPS)
 	cp $(PLUGIN_LIB_DIR)/txt_parser.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/csv_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/csv_parser.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/zip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/gzip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/zstd_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_PIPELINE_SRC) \
 		$(filter %.o,$^) -o $@ $(LDFLAGS) # Link only .o files from DEPS, not .so
 	@echo "Built test program: $@"
@@ -204,7 +228,8 @@ $(TEST_PLUGIN_LOADER_TARGET): $(TEST_PLUGIN_LOADER_SRC) $(TEST_PLUGIN_LOADER_DEP
 
 # --- Plugin Rules ---
 plugins: $(DUMMY_PLUGIN_SO) $(JSON_PREPROCESSOR_PLUGIN_SO) $(JSON_PARSER_PLUGIN_SO) $(ELASTICSEARCH_INDEXER_PLUGIN_SO) \
-         $(TXT_PREPROCESSOR_PLUGIN_SO) $(TXT_PARSER_PLUGIN_SO) $(CSV_PREPROCESSOR_PLUGIN_SO) $(CSV_PARSER_PLUGIN_SO)
+         $(TXT_PREPROCESSOR_PLUGIN_SO) $(TXT_PARSER_PLUGIN_SO) $(CSV_PREPROCESSOR_PLUGIN_SO) $(CSV_PARSER_PLUGIN_SO) \
+         $(ZIP_DECOMPRESSOR_PLUGIN_SO) $(GZIP_DECOMPRESSOR_PLUGIN_SO) $(ZSTD_DECOMPRESSOR_PLUGIN_SO)
 	@echo "All specified plugins built."
 
 # Rule for dummy_plugin object file
@@ -251,6 +276,24 @@ $(CSV_PREPROCESSOR_PLUGIN_OBJ): $(CSV_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/pl
 
 # Rule for csv_parser object file
 $(CSV_PARSER_PLUGIN_OBJ): $(CSV_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for zip_decompressor object file
+$(ZIP_DECOMPRESSOR_PLUGIN_OBJ): $(ZIP_DECOMPRESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for gzip_decompressor object file
+$(GZIP_DECOMPRESSOR_PLUGIN_OBJ): $(GZIP_DECOMPRESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for zstd_decompressor object file
+$(ZSTD_DECOMPRESSOR_PLUGIN_OBJ): $(ZSTD_DECOMPRESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
 	@echo "Compiled plugin object: $@"
@@ -303,6 +346,24 @@ $(CSV_PARSER_PLUGIN_SO): $(CSV_PARSER_PLUGIN_OBJ)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
 	@echo "Built plugin: $@"
+
+# Rule to build zip_decompressor.so from its object file
+$(ZIP_DECOMPRESSOR_PLUGIN_SO): $(ZIP_DECOMPRESSOR_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build gzip_decompressor.so from its object file
+$(GZIP_DECOMPRESSOR_PLUGIN_SO): $(GZIP_DECOMPRESSOR_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS) -lz
+	@echo "Built plugin (linked with -lz): $@"
+
+# Rule to build zstd_decompressor.so from its object file
+$(ZSTD_DECOMPRESSOR_PLUGIN_SO): $(ZSTD_DECOMPRESSOR_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS) -lzstd
+	@echo "Built plugin (linked with -lzstd): $@"
 
 # A more generic rule for plugins (if structure is consistent)
 # For example, if each plugin is in its own dir under $(PLUGIN_DIR)

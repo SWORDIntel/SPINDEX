@@ -13,6 +13,33 @@ static const char *get_file_extension(const char *filename) {
     return dot + 1;
 }
 
+// Helper function to get compression type from file extension
+static const char* get_compression_type_from_extension(const char *filename) {
+    const char *ext = get_file_extension(filename);
+    if (ext == NULL || *ext == '\0') return NULL; // No valid extension
+    if (strcmp(ext, "zip") == 0) return "ZIP";
+    if (strcmp(ext, "gz") == 0 || strcmp(ext, "gzip") == 0) return "GZIP";
+    if (strcmp(ext, "zst") == 0 || strcmp(ext, "zstd") == 0) return "ZSTD";
+    return NULL;
+}
+
+// Helper function to find a decompressor plugin by compression type string
+static SpindexPlugin* find_decompressor_plugin(const char *compression_type, SpindexPlugin *plugins, int num_plugins) {
+    if (!compression_type) return NULL;
+    for (int i = 0; i < num_plugins; i++) {
+        // Ensure plugin_interface.h defines SpindexPluginType correctly
+        // and data_types.h has SPINDEX_PLUGIN_TYPE_DECOMPRESSOR
+        if (plugins[i].info.type == SPINDEX_PLUGIN_TYPE_DECOMPRESSOR) { 
+            if (strstr(plugins[i].info.name, compression_type) != NULL) {
+                LOG_DEBUG("Found decompressor plugin '%s' for type '%s'", plugins[i].info.name, compression_type);
+                return &plugins[i];
+            }
+        }
+    }
+    LOG_DEBUG("No decompressor plugin found for compression type: %s", compression_type);
+    return NULL;
+}
+
 // Helper function to find a plugin by name (simple exact match on plugin info name)
 // In a real system, plugins might register capabilities (e.g., "handles_json_preprocessing")
 static SpindexPlugin* find_plugin_by_name(const char *name, SpindexPlugin *plugins, int num_plugins) {
@@ -188,13 +215,70 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
         // If no indexer, raw data will be returned.
         // A better approach might be to return NULL immediately.
         // For this iteration, let's return NULL for unsupported types to stop processing.
+        // Make sure to free current_chunk if it was allocated before returning.
+        // However, current_chunk is not yet initialized at this point if we return early.
         return NULL;
     }
+
+    ProcessedDataChunk *original_chunk = read_file_to_chunk(file_path);
+    if (!original_chunk) {
+        LOG_ERROR("Failed to read file content from %s", file_path);
+        return NULL;
+    }
+    ProcessedDataChunk *current_chunk = original_chunk;
+
+    // --- Start of Decompression Logic ---
+    const char *compression_type = get_compression_type_from_extension(file_path);
+    if (compression_type && current_chunk) { // current_chunk should always be valid here
+        LOG_INFO("File %s detected as potentially %s compressed.", file_path, compression_type);
+        SpindexPlugin *decompressor = find_decompressor_plugin(compression_type, pipeline->all_loaded_plugins, pipeline->num_all_plugins);
+
+        if (decompressor && decompressor->process_data) {
+            LOG_INFO("Invoking decompressor '%s' for file %s", decompressor->info.name, file_path);
+            ProcessedDataChunk *chunk_after_decompression = decompressor->process_data(current_chunk);
+
+            if (chunk_after_decompression) {
+                LOG_INFO("Decompressor '%s' completed. Output chunk (type %d) length: %zu",
+                         decompressor->info.name, chunk_after_decompression->data_type, chunk_after_decompression->length);
+                if (current_chunk != chunk_after_decompression) {
+                    free_processed_data_chunk(current_chunk); // Free original compressed data
+                }
+                current_chunk = chunk_after_decompression; // Update current_chunk to decompressed data
+            } else {
+                LOG_ERROR("Decompressor plugin '%s' failed for %s. Skipping further processing.", decompressor->info.name, file_path);
+                free_processed_data_chunk(current_chunk); // Free original compressed data
+                return NULL; // Stop processing this file
+            }
+        } else {
+            LOG_INFO("No suitable decompressor plugin found for type '%s', or plugin misconfigured. Proceeding with data as is.", compression_type);
+            // current_chunk remains the original data (which is current_chunk itself)
+        }
+    }
+    // --- End of Decompression Logic ---
+    // current_chunk now holds either original_chunk (if no compression/decompressor) or decompressed_chunk
+
+    // Re-check logic for unsupported extension *after* potential decompression
+    // The preproc_name and parser_name are determined by the original extension.
+    // If they are empty, it means the original extension was unsupported.
+    if (strlen(preproc_name) == 0 && strlen(parser_name) == 0) {
+        LOG_ERROR("Unsupported file extension: .%s for file %s (even after potential decompression).", extension, file_path);
+        // If current_chunk is to be discarded:
+        if (pipeline->active_indexer_plugin && pipeline->active_indexer_plugin->process_data && current_chunk) {
+             LOG_INFO("Passing raw/decompressed data of unsupported file type '%s' to indexer '%s'.", extension, pipeline->active_indexer_plugin->info.name);
+             // This behavior might be debatable - indexing unknown types.
+        } else {
+            LOG_INFO("No indexer for unsupported file type '%s', or data processing failed. Discarding chunk.", extension);
+            free_processed_data_chunk(current_chunk);
+            return NULL;
+        }
+    }
+
 
     if (strlen(preproc_name) > 0) {
         preprocessor = find_plugin_by_name(preproc_name, pipeline->all_loaded_plugins, pipeline->num_all_plugins);
         if (!preprocessor) {
-            LOG_ERROR("Preprocessor plugin '%s' not found.", preproc_name);
+            LOG_ERROR("Preprocessor plugin '%s' not found for extension '%s'.", preproc_name, extension);
+            free_processed_data_chunk(current_chunk); // Clean up before returning
             return NULL;
         }
         LOG_INFO("Found preprocessor: %s (Version: %s, Type: %d)", preprocessor->info.name, preprocessor->info.version, preprocessor->info.type);
@@ -203,76 +287,77 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
     if (strlen(parser_name) > 0) {
         parser = find_plugin_by_name(parser_name, pipeline->all_loaded_plugins, pipeline->num_all_plugins);
          if (!parser) {
-            LOG_ERROR("Parser plugin '%s' not found.", parser_name);
+            LOG_ERROR("Parser plugin '%s' not found for extension '%s'.", parser_name, extension);
+            free_processed_data_chunk(current_chunk); // Clean up
             return NULL;
         }
         LOG_INFO("Found parser: %s (Version: %s, Type: %d)", parser->info.name, parser->info.version, parser->info.type);
     }
+    
+    // If after decompression, the determined preprocessor/parser is null (e.g. for unsupported original types)
+    // and we haven't returned yet (because an indexer might take it raw), we need to handle this path.
+    // The current logic for unsupported extensions (empty preproc_name/parser_name) handles this by potentially passing to indexer.
 
-
-    ProcessedDataChunk *original_chunk = read_file_to_chunk(file_path);
-    if (!original_chunk) {
-        LOG_ERROR("Failed to read file content from %s", file_path);
-        return NULL;
-    }
-
-    ProcessedDataChunk *preprocessed_chunk = NULL;
-    if (preprocessor && preprocessor->process_data) {
+    ProcessedDataChunk *chunk_after_preproc = NULL;
+    if (preprocessor && preprocessor->process_data && current_chunk) {
         LOG_INFO("Invoking preprocessor '%s' for file %s", preprocessor->info.name, file_path);
-        preprocessed_chunk = preprocessor->process_data(original_chunk);
-        if (!preprocessed_chunk) {
+        chunk_after_preproc = preprocessor->process_data(current_chunk);
+        if (!chunk_after_preproc) {
             LOG_ERROR("Preprocessor plugin '%s' failed to process data for %s.", preprocessor->info.name, file_path);
-            free_processed_data_chunk(original_chunk);
+            free_processed_data_chunk(current_chunk);
             return NULL;
         }
         LOG_INFO("Preprocessor '%s' completed. Output chunk (type %d) length: %zu",
-                 preprocessor->info.name, preprocessed_chunk->data_type, preprocessed_chunk->length);
-        if (preprocessed_chunk != original_chunk) {
-             free_processed_data_chunk(original_chunk);
+                 preprocessor->info.name, chunk_after_preproc->data_type, chunk_after_preproc->length);
+        if (chunk_after_preproc != current_chunk) { // If new chunk was returned
+             free_processed_data_chunk(current_chunk);
         }
+        current_chunk = chunk_after_preproc;
     } else {
-        LOG_INFO("No preprocessor found or required for %s. Using original content.", file_path);
-        preprocessed_chunk = original_chunk;
+        LOG_INFO("No preprocessor found or required for %s, or current_chunk is NULL. Using data as is.", file_path);
+        // current_chunk remains as is (either original or decompressed)
     }
 
-
-    ProcessedDataChunk *parsed_chunk = NULL;
-    if (parser && parser->process_data) {
+    ProcessedDataChunk *chunk_after_parser = NULL;
+    if (parser && parser->process_data && current_chunk) {
         LOG_INFO("Invoking parser '%s'", parser->info.name);
-        parsed_chunk = parser->process_data(preprocessed_chunk);
-        if (!parsed_chunk) {
+        chunk_after_parser = parser->process_data(current_chunk);
+        if (!chunk_after_parser) {
             LOG_ERROR("Parser plugin '%s' failed to process data.", parser->info.name);
-            free_processed_data_chunk(preprocessed_chunk);
+            free_processed_data_chunk(current_chunk);
             return NULL;
         }
         LOG_INFO("Parser '%s' completed. Output chunk (type %d) length: %zu",
-                 parser->info.name, parsed_chunk->data_type, parsed_chunk->length);
-        if (parsed_chunk != preprocessed_chunk) {
-            free_processed_data_chunk(preprocessed_chunk);
+                 parser->info.name, chunk_after_parser->data_type, chunk_after_parser->length);
+        if (chunk_after_parser != current_chunk) { // If new chunk was returned
+            free_processed_data_chunk(current_chunk);
         }
-    } else {
-        LOG_ERROR("No parser plugin found for %s. Cannot complete processing.", file_path);
-        free_processed_data_chunk(preprocessed_chunk);
-        return NULL;
+        current_chunk = chunk_after_parser;
+    } else if (current_chunk) { // If there's data but no parser (e.g. unsupported type but indexer wants raw)
+        LOG_INFO("No parser plugin found or required for %s, or current_chunk is NULL. Using data as is for indexer.", file_path);
+        // current_chunk remains as is (original, or decompressed, or preprocessed)
+        // This path is taken if preproc_name/parser_name were empty initially for an unsupported type
+        // and an indexer is active.
+    } else { // current_chunk is NULL, something failed before
+        LOG_ERROR("Cannot proceed to parser stage, current_chunk is NULL for %s.", file_path);
+        return NULL; // Should have been caught earlier, but as a safeguard.
     }
 
-    // At this point, parsed_chunk contains the final processed data.
-    // The caller (test harness) is now responsible for freeing it.
-    LOG_INFO("File %s successfully processed. Final data (type %d) length: %zu. Source ID: %s",
-             file_path, parsed_chunk->data_type, parsed_chunk->length, parsed_chunk->source_id ? parsed_chunk->source_id : "N/A");
 
-    LOG_DEBUG("Final data from parser (first 50 bytes): %.*s", 50, (char*)parsed_chunk->data);
+    // At this point, current_chunk contains the final processed data.
+    LOG_INFO("File %s processing stages completed. Final data (type %d) length: %zu. Source ID: %s",
+             file_path, current_chunk ? current_chunk->data_type : -1, current_chunk ? current_chunk->length : 0, current_chunk && current_chunk->source_id ? current_chunk->source_id : "N/A");
 
-    // DO NOT free_processed_data_chunk(parsed_chunk); here anymore.
-    // Instead, pass it to the indexer if one is configured.
+    if (current_chunk && current_chunk->data) { // Ensure there's actually data
+        LOG_DEBUG("Final data from pipeline (first 50 bytes): %.*s", 50, (char*)current_chunk->data);
+    }
 
-    if (pipeline->active_indexer_plugin && parsed_chunk) {
-        LOG_INFO("Passing data from parser to active indexer: %s", pipeline->active_indexer_plugin->info.name);
-        // The indexer's process_data will use its own internally managed data (static global for now)
-        ProcessedDataChunk* indexing_status_chunk = pipeline->active_indexer_plugin->process_data(parsed_chunk);
+
+    if (pipeline->active_indexer_plugin && current_chunk) {
+        LOG_INFO("Passing data to active indexer: %s", pipeline->active_indexer_plugin->info.name);
+        ProcessedDataChunk* indexing_status_chunk = pipeline->active_indexer_plugin->process_data(current_chunk);
 
         if (indexing_status_chunk) {
-            // Indexers might return a status chunk, which should be freed by the pipeline.
             LOG_INFO("Indexer '%s' returned a status chunk (type %d, length %zu). Freeing it.",
                      pipeline->active_indexer_plugin->info.name,
                      indexing_status_chunk->data_type,
@@ -281,24 +366,14 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
         } else {
             LOG_INFO("Indexer '%s' completed (returned NULL).", pipeline->active_indexer_plugin->info.name);
         }
-        // The original parsed_chunk was consumed by the indexer (or should have been managed by it)
-        // Our current indexer plugins typically don't modify the input chunk but return new or NULL.
-        // The es_indexer returns NULL. If it took ownership, we wouldn't free parsed_chunk.
-        // If it copied data, parsed_chunk still needs freeing here.
-        // Current es_indexer doesn't take ownership, it just uses the data.
-        // So, parsed_chunk should be freed after indexing.
-        free_processed_data_chunk(parsed_chunk);
+        free_processed_data_chunk(current_chunk); // Free the data that was passed to indexer
         LOG_INFO("Finished processing for file: %s. Data passed to indexer. Returning NULL from pipeline.", file_path);
-        return NULL; // Data consumed by indexer, pipeline flow ends for this item.
-    } else if (parsed_chunk) {
-        // No active indexer, but we have a parsed chunk.
-        // This behavior might need to be defined: does it get returned or discarded?
-        // For now, let's return it, as per previous behavior if no indexer.
-        LOG_INFO("Finished processing for file: %s. No active indexer. Returning final parsed chunk.", file_path);
-        return parsed_chunk;
+        return NULL; 
+    } else if (current_chunk) {
+        LOG_INFO("Finished processing for file: %s. No active indexer. Returning final chunk.", file_path);
+        return current_chunk;
     } else {
-        // No parsed_chunk (parser failed), already logged.
-        LOG_INFO("Finished processing for file: %s. No parsed data to index or return.", file_path);
+        LOG_INFO("Finished processing for file: %s. No data to index or return.", file_path);
         return NULL;
     }
 }
