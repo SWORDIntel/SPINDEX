@@ -1,6 +1,3 @@
-Okay, this is a feature-rich Telegram bot! Here's a comprehensive README based on the provided Python script.
-
-```markdown
 # Telegram Autobot (Python) with Enhanced Error Handling 🤖💬
 
 A versatile Telegram bot built with Python and Telethon, designed for interacting with Large Language Models (LLMs), fetching web content, performing chat analysis, and more. It features robust error handling, configurable commands, and message logging.
