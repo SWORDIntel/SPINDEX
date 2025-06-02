@@ -43,7 +43,7 @@ A versatile Telegram bot built with Python and Telethon, designed for interactin
 *   pip (Python package installer)
 *   A Telegram API ID and Hash (get them from [my.telegram.org](https://my.telegram.org/apps))
 *   Access to LLM endpoints (OpenAI, custom, and/or a local "uncensored" model)
-*   (Optional) The `zindex5` executable/script accessible in your system's PATH or in the bot's directory for the `/z` command.
+*   (Optional) The `SPINDEX` executable/script accessible in your system's PATH or in the bot's directory for the `/z` command.
 *   (Optional) Access to the `https://md-to-pdf.fly.dev` service for PDF conversion (or you can replace this with your own).
 
 ## ⚙️ Setup & Installation
@@ -51,8 +51,8 @@ A versatile Telegram bot built with Python and Telethon, designed for interactin
 1.  **Clone the repository (if applicable) or save the script:**
     ```bash
     # If you have it in a git repo:
-    # git clone <your-repo-url>
-    # cd <your-repo-directory>
+    # git clone https://github.com/SWORDIntel/C5IEMO
+    # cd C5IEMO
     ```
     Save the provided Python script as `autobot.py` (or any name you prefer).
 
@@ -201,6 +201,3 @@ The bot incorporates several error handling mechanisms:
 Feel free to fork the project, make improvements, and submit pull requests!
 
 ---
-
-This README should provide a good overview and guide for setting up and using your Telegram Autobot. Remember to replace placeholders with your actual information.
-```
