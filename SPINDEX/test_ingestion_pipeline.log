@@ -1,0 +1,150 @@
+[2025-06-02 10:44:19] [INFO] [core/utils.c:42] Logging system initialized. Log level: DEBUG.
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:15] Test program started. Logger initialized.
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:27] Successfully loaded 'test_spindex_es.conf'.
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:29] Overriding plugin_directory for test: /app/SPINDEX/build/plugins_for_test
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:32] Initial configuration for test run:
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:39] Loading plugins from: /app/SPINDEX/build/plugins_for_test
+[2025-06-02 10:44:19] [INFO] [plugins/indexers/elasticsearch_indexer.c:47] [ElasticsearchIndexer v0.1.0] Initializing... (Simplified for debugging)
+[2025-06-02 10:44:19] [INFO] [plugins/indexers/elasticsearch_indexer.c:49] [ElasticsearchIndexer v0.1.0] Initialization complete. (Simplified for debugging)
+[2025-06-02 10:44:19] [INFO] [plugins/parsers/txt_parser.c:103] [TXTParser v0.1.0] Initializing...
+[2025-06-02 10:44:19] [INFO] [plugins/preprocessors/json_preprocessor.c:39] [JSONPreprocessor v0.2.0] Initializing...
+[2025-06-02 10:44:19] [INFO] [plugins/preprocessors/json_preprocessor.c:41] [JSONPreprocessor v0.2.0] Initialization complete.
+[2025-06-02 10:44:19] [INFO] [plugins/parsers/csv_parser.c:92] [CSVParser v0.1.0] Initializing...
+[2025-06-02 10:44:19] [INFO] [plugins/preprocessors/txt_preprocessor.c:54] [TXTPreprocessor v0.1.0] Initializing...
+[2025-06-02 10:44:19] [INFO] [plugins/preprocessors/csv_preprocessor.c:33] [CSVPreprocessor v0.1.0] Initializing...
+[2025-06-02 10:44:19] [INFO] [plugins/parsers/json_parser.c:38] [JSONParser v0.1.0] Initializing...
+[2025-06-02 10:44:19] [INFO] [plugins/parsers/json_parser.c:41] [JSONParser v0.1.0] Initialization complete.
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:55] 8 plugin(s) loaded successfully.
+[2025-06-02 10:44:19] [DEBUG] [./core/test_ingestion_pipeline.c:57] Loaded Plugin 1: Name=ElasticsearchIndexer, Version=0.1.0, Type=3, Desc=Indexes data into Elasticsearch.
+[2025-06-02 10:44:19] [DEBUG] [./core/test_ingestion_pipeline.c:57] Loaded Plugin 2: Name=TXTParser, Version=0.1.0, Type=2, Desc=Parses preprocessed text into a structured format (simple JSON).
+[2025-06-02 10:44:19] [DEBUG] [./core/test_ingestion_pipeline.c:57] Loaded Plugin 3: Name=JSONPreprocessor, Version=0.2.0, Type=1, Desc=Basic JSON Preprocessor (trims, checks structure)
+[2025-06-02 10:44:19] [DEBUG] [./core/test_ingestion_pipeline.c:57] Loaded Plugin 4: Name=CSVParser, Version=0.1.0, Type=2, Desc=Parses CSV data into a JSON array of objects.
+[2025-06-02 10:44:19] [DEBUG] [./core/test_ingestion_pipeline.c:57] Loaded Plugin 5: Name=TXTPreprocessor, Version=0.1.0, Type=1, Desc=Preprocesses plain text files (e.g., trims whitespace).
+[2025-06-02 10:44:19] [DEBUG] [./core/test_ingestion_pipeline.c:57] Loaded Plugin 6: Name=CSVPreprocessor, Version=0.1.0, Type=1, Desc=Preprocesses CSV files (currently pass-through).
+[2025-06-02 10:44:19] [DEBUG] [./core/test_ingestion_pipeline.c:57] Loaded Plugin 7: Name=DummyPlugin, Version=0.1.0, Type=0, Desc=
+[2025-06-02 10:44:19] [DEBUG] [./core/test_ingestion_pipeline.c:57] Loaded Plugin 8: Name=JSONParser, Version=0.1.0, Type=2, Desc=Parses JSON data. (Currently placeholder implementation)
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:64] --- Testing JSON file processing (indexer: ElasticsearchIndexer) ---
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:115] Attempting to find and set active indexer: 'ElasticsearchIndexer'
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:121] Active indexer plugin set: ElasticsearchIndexer (Version: 0.1.0)
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:141] Ingestion pipeline initialized. Aware of 8 loaded plugins. Active indexer: ElasticsearchIndexer
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:144] Plugin directory from config: /app/SPINDEX/build/plugins_for_test
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:155] Starting processing for file: /app/SPINDEX/test_data/sample_specific.json
+[2025-06-02 10:44:19] [DEBUG] [core/ingestion_pipeline.c:158] File extension: .json
+[2025-06-02 10:44:19] [DEBUG] [core/ingestion_pipeline.c:172] File type JSON identified. Required preprocessor: 'JSONPreprocessor', parser: 'JSONParser'
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:200] Found preprocessor: JSONPreprocessor (Version: 0.2.0, Type: 1)
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:209] Found parser: JSONParser (Version: 0.1.0, Type: 2)
+[2025-06-02 10:44:19] [DEBUG] [core/ingestion_pipeline.c:84] Successfully read file '/app/SPINDEX/test_data/sample_specific.json' into chunk, size 310 bytes, type 2.
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:221] Invoking preprocessor 'JSONPreprocessor' for file /app/SPINDEX/test_data/sample_specific.json
+[2025-06-02 10:44:19] [INFO] [plugins/preprocessors/json_preprocessor.c:54] [JSONPreprocessor v0.2.0] Processing data...
+[2025-06-02 10:44:19] [DEBUG] [plugins/preprocessors/json_preprocessor.c:60] [JSONPreprocessor] Received input data (first 50 bytes): {\
+  "record_id": "json_test_001",\
+  "description
+[2025-06-02 10:44:19] [DEBUG] [plugins/preprocessors/json_preprocessor.c:159] [JSONPreprocessor] plugin_internal_preprocess_json: Starting with raw content.
+[2025-06-02 10:44:19] [DEBUG] [plugins/preprocessors/json_preprocessor.c:211] [JSONPreprocessor] Content appears to start with valid JSON char.
+[2025-06-02 10:44:19] [DEBUG] [plugins/preprocessors/json_preprocessor.c:214] [JSONPreprocessor] plugin_internal_preprocess_json: Finished.
+[2025-06-02 10:44:19] [INFO] [plugins/preprocessors/json_preprocessor.c:94] [JSONPreprocessor] Preprocessing complete. Output length: 309
+[2025-06-02 10:44:19] [DEBUG] [plugins/preprocessors/json_preprocessor.c:95] [JSONPreprocessor] Processed data (first 50 bytes): {\
+  "record_id": "json_test_001",\
+  "description
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:228] Preprocessor 'JSONPreprocessor' completed. Output chunk (type 3) length: 309
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:241] Invoking parser 'JSONParser'
+[2025-06-02 10:44:19] [INFO] [plugins/parsers/json_parser.c:57] [JSONParser v0.1.0] Processing data...
+[2025-06-02 10:44:19] [DEBUG] [plugins/parsers/json_parser.c:64] [JSONParser] Received input data (length 309, source_id '/app/SPINDEX/test_data/sample_specific.json_preprocessed_by_JSONPreprocessor'): {\
+  "record_id": "json_test_001",\
+  "description": "A specific JSON file for testing the SPINDEX i
+[2025-06-02 10:44:19] [INFO] [plugins/parsers/json_parser.c:108] [JSONParser] Data processing complete. Output length: 317
+[2025-06-02 10:44:19] [DEBUG] [plugins/parsers/json_parser.c:109] [JSONParser] Output data (first 100 bytes): Parsed: {\
+  "record_id": "json_test_001",\
+  "description": "A specific JSON file for testing the S
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:248] Parser 'JSONParser' completed. Output chunk (type 4) length: 317
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:261] File /app/SPINDEX/test_data/sample_specific.json successfully processed. Final data (type 4) length: 317. Source ID: /app/SPINDEX/test_data/sample_specific.json_preprocessed_by_JSONPreprocessor_parsed_by_JSONParser
+[2025-06-02 10:44:19] [DEBUG] [core/ingestion_pipeline.c:264] Final data from parser (first 50 bytes): Parsed: {\
+  "record_id": "json_test_001",\
+  "des
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:270] Passing data from parser to active indexer: ElasticsearchIndexer
+[2025-06-02 10:44:19] [INFO] [plugins/indexers/elasticsearch_indexer.c:60] [ElasticsearchIndexer v0.1.0] Processing data for indexing... (Simplified for debugging)
+[2025-06-02 10:44:19] [WARN] [plugins/indexers/elasticsearch_indexer.c:68] [ElasticsearchIndexer] Indexing process is currently stubbed out for debugging.
+[2025-06-02 10:44:19] [DEBUG] [plugins/indexers/elasticsearch_indexer.c:82] [ElasticsearchIndexer] Document JSON (first 100 bytes): Parsed: {\
+  "record_id": "json_test_001",\
+  "description": "A specific JSON file for testing the S
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:282] Indexer 'ElasticsearchIndexer' completed (returned NULL).
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:291] Finished processing for file: /app/SPINDEX/test_data/sample_specific.json. Data passed to indexer. Returning NULL from pipeline.
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:78] JSON Test: Pipeline returned NULL as expected (data consumed by indexer 'ElasticsearchIndexer').
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:308] Ingestion pipeline shutting down.
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:317] Pipeline explicitly acknowledging shutdown for active indexer: ElasticsearchIndexer (actual shutdown by plugin_loader)
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:92] --- Testing TXT file processing (disabling indexer to check parser output) ---
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:96] Re-initializing pipeline with indexer disabled in config for TXT test...
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:138] No active indexer configured.
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:141] Ingestion pipeline initialized. Aware of 8 loaded plugins. Active indexer: None
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:144] Plugin directory from config: /app/SPINDEX/build/plugins_for_test
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:155] Starting processing for file: /app/SPINDEX/test_data/sample.txt
+[2025-06-02 10:44:19] [DEBUG] [core/ingestion_pipeline.c:158] File extension: .txt
+[2025-06-02 10:44:19] [DEBUG] [core/ingestion_pipeline.c:176] File type TXT identified. Required preprocessor: 'TXTPreprocessor', parser: 'TXTParser'
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:200] Found preprocessor: TXTPreprocessor (Version: 0.1.0, Type: 1)
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:209] Found parser: TXTParser (Version: 0.1.0, Type: 2)
+[2025-06-02 10:44:19] [DEBUG] [core/ingestion_pipeline.c:84] Successfully read file '/app/SPINDEX/test_data/sample.txt' into chunk, size 109 bytes, type 2.
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:221] Invoking preprocessor 'TXTPreprocessor' for file /app/SPINDEX/test_data/sample.txt
+[2025-06-02 10:44:19] [DEBUG] [plugins/preprocessors/txt_preprocessor.c:64] [TXTPreprocessor] Processing data for source_id: /app/SPINDEX/test_data/sample.txt
+[2025-06-02 10:44:19] [DEBUG] [plugins/preprocessors/txt_preprocessor.c:94] [TXTPreprocessor] Finished processing source_id: /app/SPINDEX/test_data/sample.txt. Output length: 108
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:228] Preprocessor 'TXTPreprocessor' completed. Output chunk (type 3) length: 108
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:241] Invoking parser 'TXTParser'
+[2025-06-02 10:44:19] [DEBUG] [plugins/parsers/txt_parser.c:112] [TXTParser] Processing data for source_id: /app/SPINDEX/test_data/sample.txt
+[2025-06-02 10:44:19] [DEBUG] [plugins/parsers/txt_parser.c:113] [TXTParser] Input data type: 3
+[2025-06-02 10:44:19] [DEBUG] [plugins/parsers/txt_parser.c:153] [TXTParser] Finished processing source_id: /app/SPINDEX/test_data/sample.txt. Output JSON length: 130
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:248] Parser 'TXTParser' completed. Output chunk (type 6) length: 130
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:261] File /app/SPINDEX/test_data/sample.txt successfully processed. Final data (type 6) length: 130. Source ID: /app/SPINDEX/test_data/sample.txt
+[2025-06-02 10:44:19] [DEBUG] [core/ingestion_pipeline.c:264] Final data from parser (first 50 bytes): {"text_content":"This is a sample text file.\nIt h
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:297] Finished processing for file: /app/SPINDEX/test_data/sample.txt. No active indexer. Returning final parsed chunk.
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:109] TXT Test: Pipeline returned chunk (type 6, length 130). Verifying...
+[2025-06-02 10:44:19] [DEBUG] [./core/test_ingestion_pipeline.c:113] TXT Parser Output (full): {"text_content":"This is a sample text file.\nIt has multiple lines.\n  Some lines have leading/trailing whitespace.  \nThe end."}
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:308] Ingestion pipeline shutting down.
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:119] --- Testing CSV file processing (indexer still disabled) ---
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:120] Re-initializing pipeline with indexer disabled in config for CSV test...
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:138] No active indexer configured.
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:141] Ingestion pipeline initialized. Aware of 8 loaded plugins. Active indexer: None
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:144] Plugin directory from config: /app/SPINDEX/build/plugins_for_test
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:155] Starting processing for file: /app/SPINDEX/test_data/sample.csv
+[2025-06-02 10:44:19] [DEBUG] [core/ingestion_pipeline.c:158] File extension: .csv
+[2025-06-02 10:44:19] [DEBUG] [core/ingestion_pipeline.c:180] File type CSV identified. Required preprocessor: 'CSVPreprocessor', parser: 'CSVParser'
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:200] Found preprocessor: CSVPreprocessor (Version: 0.1.0, Type: 1)
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:209] Found parser: CSVParser (Version: 0.1.0, Type: 2)
+[2025-06-02 10:44:19] [DEBUG] [core/ingestion_pipeline.c:84] Successfully read file '/app/SPINDEX/test_data/sample.csv' into chunk, size 144 bytes, type 2.
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:221] Invoking preprocessor 'CSVPreprocessor' for file /app/SPINDEX/test_data/sample.csv
+[2025-06-02 10:44:19] [DEBUG] [plugins/preprocessors/csv_preprocessor.c:43] [CSVPreprocessor] Processing data for source_id: /app/SPINDEX/test_data/sample.csv (pass-through)
+[2025-06-02 10:44:19] [DEBUG] [plugins/preprocessors/csv_preprocessor.c:68] [CSVPreprocessor] Finished processing source_id: /app/SPINDEX/test_data/sample.csv. Output length: 144
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:228] Preprocessor 'CSVPreprocessor' completed. Output chunk (type 7) length: 144
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:241] Invoking parser 'CSVParser'
+[2025-06-02 10:44:19] [DEBUG] [plugins/parsers/csv_parser.c:101] [CSVParser] Processing data for source_id: /app/SPINDEX/test_data/sample.csv
+[2025-06-02 10:44:19] [DEBUG] [plugins/parsers/csv_parser.c:261] [CSVParser] Finished processing source_id: /app/SPINDEX/test_data/sample.csv. Output JSON length: 235
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:248] Parser 'CSVParser' completed. Output chunk (type 8) length: 235
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:261] File /app/SPINDEX/test_data/sample.csv successfully processed. Final data (type 8) length: 235. Source ID: /app/SPINDEX/test_data/sample.csv
+[2025-06-02 10:44:19] [DEBUG] [core/ingestion_pipeline.c:264] Final data from parser (first 50 bytes): [{"ID":"1","Name":"ItemA","Value":"100","Descripti
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:297] Finished processing for file: /app/SPINDEX/test_data/sample.csv. No active indexer. Returning final parsed chunk.
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:133] CSV Test: Pipeline returned chunk (type 8, length 235). Verifying...
+[2025-06-02 10:44:19] [DEBUG] [./core/test_ingestion_pipeline.c:137] CSV Parser Output (full): [{"ID":"1","Name":"ItemA","Value":"100","Description":"First item with some details"},{"ID":"2","Name":"ItemB","Value":"250","Description":"Second item"},{"ID":"3","Name":"ItemC","Value":"75","Description":"A third entry for testing"}]
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:146] Restored active_indexer_name in config to: ElasticsearchIndexer
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:308] Ingestion pipeline shutting down.
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:148] Re-initializing pipeline with original indexer config for final shutdown...
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:115] Attempting to find and set active indexer: 'ElasticsearchIndexer'
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:121] Active indexer plugin set: ElasticsearchIndexer (Version: 0.1.0)
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:141] Ingestion pipeline initialized. Aware of 8 loaded plugins. Active indexer: ElasticsearchIndexer
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:144] Plugin directory from config: /app/SPINDEX/build/plugins_for_test
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:160] Shutting down final ingestion pipeline instance...
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:308] Ingestion pipeline shutting down.
+[2025-06-02 10:44:19] [INFO] [core/ingestion_pipeline.c:317] Pipeline explicitly acknowledging shutdown for active indexer: ElasticsearchIndexer (actual shutdown by plugin_loader)
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:163] Unloading plugins...
+[2025-06-02 10:44:19] [INFO] [plugins/indexers/elasticsearch_indexer.c:54] [ElasticsearchIndexer v0.1.0] Shutting down... (Simplified for debugging)
+[2025-06-02 10:44:19] [INFO] [plugins/indexers/elasticsearch_indexer.c:56] [ElasticsearchIndexer v0.1.0] Shutdown complete. (Simplified for debugging)
+[2025-06-02 10:44:19] [INFO] [plugins/parsers/txt_parser.c:159] [TXTParser v0.1.0] Shutting down...
+[2025-06-02 10:44:19] [INFO] [plugins/preprocessors/json_preprocessor.c:47] [JSONPreprocessor v0.2.0] Shutting down...
+[2025-06-02 10:44:19] [INFO] [plugins/preprocessors/json_preprocessor.c:49] [JSONPreprocessor v0.2.0] Shutdown complete.
+[2025-06-02 10:44:19] [INFO] [plugins/parsers/csv_parser.c:267] [CSVParser v0.1.0] Shutting down...
+[2025-06-02 10:44:19] [INFO] [plugins/preprocessors/txt_preprocessor.c:100] [TXTPreprocessor v0.1.0] Shutting down...
+[2025-06-02 10:44:19] [INFO] [plugins/preprocessors/csv_preprocessor.c:74] [CSVPreprocessor v0.1.0] Shutting down...
+[2025-06-02 10:44:19] [INFO] [plugins/parsers/json_parser.c:48] [JSONParser v0.1.0] Shutting down...
+[2025-06-02 10:44:19] [INFO] [plugins/parsers/json_parser.c:51] [JSONParser v0.1.0] Shutdown complete.
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:165] Plugins unloaded.
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:167] Freeing configuration resources...
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:169] Configuration resources freed.
+[2025-06-02 10:44:19] [INFO] [./core/test_ingestion_pipeline.c:171] --- Ingestion Pipeline Test (with TXT, CSV) Complete ---
+[2025-06-02 10:44:19] [INFO] [core/utils.c:46] Logging system shutting down.

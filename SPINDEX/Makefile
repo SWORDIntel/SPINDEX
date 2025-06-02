@@ -96,6 +96,26 @@ ELASTICSEARCH_INDEXER_PLUGIN_SRC = $(ELASTICSEARCH_INDEXER_PLUGIN_SRC_DIR)/elast
 ELASTICSEARCH_INDEXER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/indexers/elasticsearch_indexer.o
 ELASTICSEARCH_INDEXER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/elasticsearch_indexer.so
 
+TXT_PREPROCESSOR_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/preprocessors
+TXT_PREPROCESSOR_PLUGIN_SRC = $(TXT_PREPROCESSOR_PLUGIN_SRC_DIR)/txt_preprocessor.c
+TXT_PREPROCESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/preprocessors/txt_preprocessor.o
+TXT_PREPROCESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/txt_preprocessor.so
+
+TXT_PARSER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/parsers
+TXT_PARSER_PLUGIN_SRC = $(TXT_PARSER_PLUGIN_SRC_DIR)/txt_parser.c
+TXT_PARSER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/parsers/txt_parser.o
+TXT_PARSER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/txt_parser.so
+
+CSV_PREPROCESSOR_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/preprocessors
+CSV_PREPROCESSOR_PLUGIN_SRC = $(CSV_PREPROCESSOR_PLUGIN_SRC_DIR)/csv_preprocessor.c
+CSV_PREPROCESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/preprocessors/csv_preprocessor.o
+CSV_PREPROCESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/csv_preprocessor.so
+
+CSV_PARSER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/parsers
+CSV_PARSER_PLUGIN_SRC = $(CSV_PARSER_PLUGIN_SRC_DIR)/csv_parser.c
+CSV_PARSER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/parsers/csv_parser.o
+CSV_PARSER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/csv_parser.so
+
 # Phony targets
 .PHONY: all clean plugins tests
 
@@ -136,6 +156,10 @@ $(TEST_ES_INDEXING_TARGET): $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS
 	cp $(PLUGIN_LIB_DIR)/json_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/json_parser.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/elasticsearch_indexer.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/txt_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/txt_parser.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/csv_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/csv_parser.so $(TEST_PLUGINS_STAGING_DIR)/
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS) -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
 	@echo "Staged plugins for test in $(TEST_PLUGINS_STAGING_DIR)"
@@ -153,6 +177,10 @@ $(TEST_PIPELINE_TARGET): $(TEST_PIPELINE_SRC) $(TEST_PIPELINE_DEPS)
 	cp $(PLUGIN_LIB_DIR)/json_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/json_parser.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/elasticsearch_indexer.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/txt_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/txt_parser.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/csv_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/csv_parser.so $(TEST_PLUGINS_STAGING_DIR)/
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_PIPELINE_SRC) \
 		$(filter %.o,$^) -o $@ $(LDFLAGS) # Link only .o files from DEPS, not .so
 	@echo "Built test program: $@"
@@ -175,7 +203,8 @@ $(TEST_PLUGIN_LOADER_TARGET): $(TEST_PLUGIN_LOADER_SRC) $(TEST_PLUGIN_LOADER_DEP
 
 
 # --- Plugin Rules ---
-plugins: $(DUMMY_PLUGIN_SO) $(JSON_PREPROCESSOR_PLUGIN_SO) $(JSON_PARSER_PLUGIN_SO) $(ELASTICSEARCH_INDEXER_PLUGIN_SO)
+plugins: $(DUMMY_PLUGIN_SO) $(JSON_PREPROCESSOR_PLUGIN_SO) $(JSON_PARSER_PLUGIN_SO) $(ELASTICSEARCH_INDEXER_PLUGIN_SO) \
+         $(TXT_PREPROCESSOR_PLUGIN_SO) $(TXT_PARSER_PLUGIN_SO) $(CSV_PREPROCESSOR_PLUGIN_SO) $(CSV_PARSER_PLUGIN_SO)
 	@echo "All specified plugins built."
 
 # Rule for dummy_plugin object file
@@ -198,6 +227,30 @@ $(JSON_PARSER_PLUGIN_OBJ): $(JSON_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_inter
 
 # Rule for elasticsearch_indexer object file
 $(ELASTICSEARCH_INDEXER_PLUGIN_OBJ): $(ELASTICSEARCH_INDEXER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h $(INCLUDE_DIR)/elasticsearch_client.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for txt_preprocessor object file
+$(TXT_PREPROCESSOR_PLUGIN_OBJ): $(TXT_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h $(INCLUDE_DIR)/config.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for txt_parser object file
+$(TXT_PARSER_PLUGIN_OBJ): $(TXT_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for csv_preprocessor object file
+$(CSV_PREPROCESSOR_PLUGIN_OBJ): $(CSV_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h $(INCLUDE_DIR)/config.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for csv_parser object file
+$(CSV_PARSER_PLUGIN_OBJ): $(CSV_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
 	@echo "Compiled plugin object: $@"
@@ -227,6 +280,30 @@ $(ELASTICSEARCH_INDEXER_PLUGIN_SO): $(ELASTICSEARCH_INDEXER_PLUGIN_OBJ) $(BUILD_
 	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
 	@echo "Built plugin: $@"
 
+# Rule to build txt_preprocessor.so from its object file
+$(TXT_PREPROCESSOR_PLUGIN_SO): $(TXT_PREPROCESSOR_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build txt_parser.so from its object file
+$(TXT_PARSER_PLUGIN_SO): $(TXT_PARSER_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build csv_preprocessor.so from its object file
+$(CSV_PREPROCESSOR_PLUGIN_SO): $(CSV_PREPROCESSOR_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build csv_parser.so from its object file
+$(CSV_PARSER_PLUGIN_SO): $(CSV_PARSER_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
 # A more generic rule for plugins (if structure is consistent)
 # For example, if each plugin is in its own dir under $(PLUGIN_DIR)
 # and has one main .c file named after the directory:
@@ -242,6 +319,10 @@ clean:
 	rm -f $(PLUGIN_DIR)/preprocessors/json_preprocessor.so
 	rm -f $(PLUGIN_DIR)/parsers/json_parser.so
 	rm -f $(PLUGIN_DIR)/indexers/elasticsearch_indexer.so
+	rm -f $(PLUGIN_DIR)/preprocessors/txt_preprocessor.so
+	rm -f $(PLUGIN_DIR)/parsers/txt_parser.so
+	rm -f $(PLUGIN_DIR)/preprocessors/csv_preprocessor.so
+	rm -f $(PLUGIN_DIR)/parsers/csv_parser.so
 	@echo "Clean complete."
 
 # Note: main.c doesn't exist yet. The $(TARGET_APP) rule will fail until it's created.

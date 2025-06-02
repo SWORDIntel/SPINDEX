@@ -2,133 +2,174 @@
 #include "utils.h"
 #include "config_manager.h"
 #include "plugin_loader.h"
-#include "ingestion_pipeline.h" // For free_processed_data_chunk
+#include "ingestion_pipeline.h"
 #include <stdio.h>
-#include <stdlib.h> // For free
-#include <string.h> // For strncmp, strlen, strstr
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
 
 int main() {
-    printf("--- Starting Ingestion Pipeline Test ---\n");
+    printf("--- Starting Ingestion Pipeline Test (with TXT, CSV, and Indexer Handling) ---\n");
 
-    spindex_log_init("test_pipeline_run.log", LOG_LEVEL_DEBUG);
+    spindex_log_init("test_ingestion_pipeline.log", LOG_LEVEL_DEBUG);
     LOG_INFO("Test program started. Logger initialized.");
 
     SpindexConfig config;
-    memset(&config, 0, sizeof(SpindexConfig)); // Initialize struct to zero/NULL
-    set_default_config(&config);
-    snprintf(config.plugin_directory, MAX_CONFIG_STR_LEN, "/app/SPINDEX/build/plugins_for_test");
-    if (config.active_indexer_name) free(config.active_indexer_name);
-    config.active_indexer_name = strdup("ElasticsearchIndexer");
-    LOG_INFO("Configuration prepared. Plugin directory for test: %s, Active Indexer: %s",
-             config.plugin_directory, config.active_indexer_name);
+    memset(&config, 0, sizeof(SpindexConfig));
+
+    if (parse_config_file("test_spindex_es.conf", &config) != 0) {
+        LOG_WARN("Could not load 'test_spindex_es.conf'. Using default settings and overriding for test.");
+        set_default_config(&config);
+        snprintf(config.plugin_directory, MAX_CONFIG_STR_LEN, "/app/SPINDEX/build/plugins_for_test");
+        if (config.active_indexer_name) free(config.active_indexer_name);
+        config.active_indexer_name = strdup("ElasticsearchIndexer");
+    } else {
+        LOG_INFO("Successfully loaded 'test_spindex_es.conf'.");
+        snprintf(config.plugin_directory, MAX_CONFIG_STR_LEN, "/app/SPINDEX/build/plugins_for_test");
+        LOG_INFO("Overriding plugin_directory for test: %s", config.plugin_directory);
+    }
+
+    LOG_INFO("Initial configuration for test run:");
+    print_config(&config);
+
+    char* original_active_indexer_name = config.active_indexer_name ? strdup(config.active_indexer_name) : NULL;
 
     SpindexPlugin *loaded_plugins = NULL;
     int plugin_count = 0;
     LOG_INFO("Loading plugins from: %s", config.plugin_directory);
     if (load_plugins(config.plugin_directory, &loaded_plugins, &plugin_count) != 0) {
         LOG_ERROR("Failed to load plugins. Aborting test.");
+        if(original_active_indexer_name) free(original_active_indexer_name);
+        free_config_resources(&config);
         spindex_log_shutdown();
-        return 1;
+        exit(1); // Added exit
     }
     if (plugin_count == 0) {
         LOG_ERROR("No plugins were loaded from %s. Aborting test.", config.plugin_directory);
+        if(original_active_indexer_name) free(original_active_indexer_name);
         unload_plugins(loaded_plugins, plugin_count);
+        free_config_resources(&config);
         spindex_log_shutdown();
-        return 1;
+        exit(1); // Added exit
     }
     LOG_INFO("%d plugin(s) loaded successfully.", plugin_count);
-    for(int i=0; i<plugin_count; ++i) {
+     for(int i=0; i<plugin_count; ++i) {
         LOG_DEBUG("Loaded Plugin %d: Name=%s, Version=%s, Type=%d, Desc=%s",
-                  i+1,
-                  loaded_plugins[i].info.name,
-                  loaded_plugins[i].info.version,
-                  loaded_plugins[i].info.type,
-                  loaded_plugins[i].info.description
-                  );
+                  i+1, loaded_plugins[i].info.name, loaded_plugins[i].info.version,
+                  loaded_plugins[i].info.type, loaded_plugins[i].info.description);
     }
 
-    SpindexIngestionPipeline pipeline_instance; // Changed from 'pipeline' to avoid conflict with struct name
-    LOG_INFO("Initializing ingestion pipeline...");
+    SpindexIngestionPipeline pipeline_instance;
+
+    LOG_INFO("--- Testing JSON file processing (indexer: %s) ---",
+             config.active_indexer_name ? config.active_indexer_name : "None");
     if (pipeline_init(&pipeline_instance, &config, loaded_plugins, plugin_count) != 0) {
-        LOG_ERROR("Failed to initialize ingestion pipeline. Aborting.");
+        LOG_ERROR("Failed to initialize pipeline for JSON test. Aborting.");
+        if(original_active_indexer_name) free(original_active_indexer_name);
         unload_plugins(loaded_plugins, plugin_count);
+        free_config_resources(&config);
         spindex_log_shutdown();
-        return 1;
+        exit(1); // Added exit
     }
-    LOG_INFO("Ingestion pipeline initialized successfully.");
-
     const char *json_test_file_path = "/app/SPINDEX/test_data/sample_specific.json";
-    LOG_INFO("Attempting to process JSON test file: %s", json_test_file_path);
-    ProcessedDataChunk *final_chunk_from_pipeline = pipeline_process_file(&pipeline_instance, json_test_file_path);
-
-    if (final_chunk_from_pipeline) {
-        LOG_INFO("Pipeline returned a chunk for JSON file (data_type %d). This means it was NOT consumed by an indexer, or indexer passed it on.",
-                 final_chunk_from_pipeline->data_type);
-        if (pipeline_instance.active_indexer_plugin) {
-             LOG_ERROR("JSON data was expected to be consumed by indexer '%s', but pipeline returned a chunk.",
-                       pipeline_instance.active_indexer_plugin->info.name);
-        } else {
-            LOG_INFO("No active indexer, verifying parsed chunk from pipeline directly.");
-            if (final_chunk_from_pipeline->data_type == CHUNK_TYPE_PARSED_JSON_PLACEHOLDER) {
-                LOG_INFO("Output chunk data_type is CHUNK_TYPE_PARSED_JSON_PLACEHOLDER (Correct for non-indexed data).");
-            } else {
-                LOG_ERROR("Output chunk data_type is %d, expected CHUNK_TYPE_PARSED_JSON_PLACEHOLDER (%d)!",
-                          final_chunk_from_pipeline->data_type, CHUNK_TYPE_PARSED_JSON_PLACEHOLDER);
-            }
-            const char* expected_prefix = "Parsed: ";
-            if (strncmp((char*)final_chunk_from_pipeline->data, expected_prefix, strlen(expected_prefix)) == 0) {
-                LOG_INFO("Output data starts with '%s' (Correct for non-indexed data).", expected_prefix);
-            } else {
-                LOG_ERROR("Output data does not start with '%s'. Actual (first 30 bytes): '%.30s'",
-                          expected_prefix, (char*)final_chunk_from_pipeline->data);
-            }
-        }
-        free_processed_data_chunk(final_chunk_from_pipeline);
+    ProcessedDataChunk *json_pipeline_output = pipeline_process_file(&pipeline_instance, json_test_file_path);
+    if (pipeline_instance.active_indexer_plugin) {
+        assert(json_pipeline_output == NULL && "Pipeline should return NULL when indexer is active and consumes data for JSON.");
+        LOG_INFO("JSON Test: Pipeline returned NULL as expected (data consumed by indexer '%s').",
+                 pipeline_instance.active_indexer_plugin->info.name);
     } else {
-        if (pipeline_instance.active_indexer_plugin) {
-            LOG_INFO("Pipeline returned NULL for JSON file. Data assumed consumed by indexer '%s' (Correct).",
-                     pipeline_instance.active_indexer_plugin->info.name);
-        } else {
-            LOG_ERROR("Pipeline returned NULL for JSON file, but no active indexer was set. This indicates an issue in parsing/preprocessing.");
+        assert(json_pipeline_output != NULL && "Pipeline should return data when no indexer is active for JSON.");
+        if (json_pipeline_output) {
+            LOG_INFO("JSON Test: No active indexer. Pipeline returned chunk (type %d). Verifying...", json_pipeline_output->data_type);
+            assert(json_pipeline_output->data_type == CHUNK_TYPE_PARSED_JSON_PLACEHOLDER);
+            assert(json_pipeline_output->data != NULL);
+            assert(strncmp((char*)json_pipeline_output->data, "Parsed: ", strlen("Parsed: ")) == 0);
+            free_processed_data_chunk(json_pipeline_output);
         }
     }
-
-    const char *sample_txt_path = "/app/SPINDEX/test_data/sample_data.txt";
-    FILE* txt_file = fopen(sample_txt_path, "w");
-    if (txt_file) {
-        fprintf(txt_file, "This is a simple text file for testing.");
-        fclose(txt_file);
-        LOG_INFO("Attempting to process .txt file: %s", sample_txt_path);
-        ProcessedDataChunk* txt_output_chunk = pipeline_process_file(&pipeline_instance, sample_txt_path);
-        if (txt_output_chunk) {
-            LOG_INFO("Successfully processed .txt file '%s'. Pipeline returned a chunk (type %d).",
-                     sample_txt_path, txt_output_chunk->data_type);
-            free_processed_data_chunk(txt_output_chunk);
-        } else {
-            if (pipeline_instance.active_indexer_plugin) {
-                 LOG_INFO("Pipeline returned NULL for .txt file. Data assumed consumed by indexer '%s'.",
-                          pipeline_instance.active_indexer_plugin->info.name);
-            } else {
-                LOG_ERROR("Failed to process .txt file '%s'. Pipeline returned NULL and no indexer active.", sample_txt_path);
-            }
-        }
-    } else {
-        LOG_WARN("Could not create %s for testing.", sample_txt_path);
-    }
-
-    LOG_INFO("Shutting down ingestion pipeline...");
     pipeline_shutdown(&pipeline_instance);
-    LOG_INFO("Ingestion pipeline shut down.");
+
+    LOG_INFO("--- Testing TXT file processing (disabling indexer to check parser output) ---");
+    if(config.active_indexer_name) free(config.active_indexer_name);
+    config.active_indexer_name = NULL;
+
+    LOG_INFO("Re-initializing pipeline with indexer disabled in config for TXT test...");
+    if (pipeline_init(&pipeline_instance, &config, loaded_plugins, plugin_count) != 0) {
+        LOG_ERROR("Failed to re-initialize pipeline for TXT test. Aborting.");
+        if(original_active_indexer_name) free(original_active_indexer_name);
+        unload_plugins(loaded_plugins, plugin_count);
+        free_config_resources(&config);
+        spindex_log_shutdown();
+        exit(1); // Added exit
+    }
+    const char *txt_test_file_path = "/app/SPINDEX/test_data/sample.txt";
+    ProcessedDataChunk *txt_pipeline_output = pipeline_process_file(&pipeline_instance, txt_test_file_path);
+    assert(txt_pipeline_output != NULL && "TXT processing should return a chunk when indexer is disabled.");
+    if (txt_pipeline_output) {
+        LOG_INFO("TXT Test: Pipeline returned chunk (type %d, length %zu). Verifying...",
+                 txt_pipeline_output->data_type, txt_pipeline_output->length);
+        assert(txt_pipeline_output->data_type == CHUNK_TYPE_TEXT_PARSED);
+        assert(txt_pipeline_output->data != NULL);
+        LOG_DEBUG("TXT Parser Output (full): %s", (char*)txt_pipeline_output->data);
+        assert(strstr((char*)txt_pipeline_output->data, "{\"text_content\":\"This is a sample text file.\\nIt has multiple lines.\\n  Some lines have leading/trailing whitespace.  \\nThe end.\"}") != NULL);
+        free_processed_data_chunk(txt_pipeline_output);
+    }
+    pipeline_shutdown(&pipeline_instance);
+
+    LOG_INFO("--- Testing CSV file processing (indexer still disabled) ---");
+    LOG_INFO("Re-initializing pipeline with indexer disabled in config for CSV test...");
+    if (pipeline_init(&pipeline_instance, &config, loaded_plugins, plugin_count) != 0) {
+        LOG_ERROR("Failed to re-initialize pipeline for CSV test. Aborting.");
+        if(original_active_indexer_name) free(original_active_indexer_name);
+        unload_plugins(loaded_plugins, plugin_count);
+        free_config_resources(&config);
+        spindex_log_shutdown();
+        exit(1); // Added exit
+    }
+    const char *csv_test_file_path = "/app/SPINDEX/test_data/sample.csv";
+    ProcessedDataChunk *csv_pipeline_output = pipeline_process_file(&pipeline_instance, csv_test_file_path);
+    assert(csv_pipeline_output != NULL && "CSV processing should return a chunk when indexer is disabled.");
+    if (csv_pipeline_output) {
+        LOG_INFO("CSV Test: Pipeline returned chunk (type %d, length %zu). Verifying...",
+                 csv_pipeline_output->data_type, csv_pipeline_output->length);
+        assert(csv_pipeline_output->data_type == CHUNK_TYPE_CSV_PARSED);
+        assert(csv_pipeline_output->data != NULL);
+        LOG_DEBUG("CSV Parser Output (full): %s", (char*)csv_pipeline_output->data);
+        assert(strstr((char*)csv_pipeline_output->data, "[{\"ID\":\"1\",\"Name\":\"ItemA\",\"Value\":\"100\",\"Description\":\"First item with some details\"}") != NULL);
+        assert(strstr((char*)csv_pipeline_output->data, "{\"ID\":\"3\",\"Name\":\"ItemC\",\"Value\":\"75\",\"Description\":\"A third entry for testing\"}]") != NULL);
+        free_processed_data_chunk(csv_pipeline_output);
+    }
+
+    if(original_active_indexer_name){
+        if(config.active_indexer_name) free(config.active_indexer_name);
+        config.active_indexer_name = original_active_indexer_name;
+        LOG_INFO("Restored active_indexer_name in config to: %s", config.active_indexer_name);
+        pipeline_shutdown(&pipeline_instance);
+        LOG_INFO("Re-initializing pipeline with original indexer config for final shutdown...");
+        if (pipeline_init(&pipeline_instance, &config, loaded_plugins, plugin_count) != 0) {
+             LOG_ERROR("Failed to re-initialize pipeline for final shutdown. Potential resource issues.");
+             // Not exiting here, will proceed to main shutdown path
+        }
+    } else {
+         if(config.active_indexer_name) {
+            free(config.active_indexer_name);
+            config.active_indexer_name = NULL;
+         }
+    }
+
+    LOG_INFO("Shutting down final ingestion pipeline instance...");
+    pipeline_shutdown(&pipeline_instance);
 
     LOG_INFO("Unloading plugins...");
     unload_plugins(loaded_plugins, plugin_count);
     LOG_INFO("Plugins unloaded.");
 
-    LOG_INFO("Test program finished. Shutting down logger.");
+    LOG_INFO("Freeing configuration resources...");
+    free_config_resources(&config);
+    LOG_INFO("Configuration resources freed.");
+
+    LOG_INFO("--- Ingestion Pipeline Test (with TXT, CSV) Complete ---");
     spindex_log_shutdown();
-
-    printf("\n--- Ingestion Pipeline Test Complete ---\n");
-    printf("Please check 'test_pipeline_run.log' for detailed logs.\n");
-
+    printf("\n--- Test run complete. Check 'test_ingestion_pipeline.log' ---\n");
     return 0;
 }

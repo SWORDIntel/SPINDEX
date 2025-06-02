@@ -168,16 +168,26 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
     if (strcmp(extension, "json") == 0) {
         // For now, assume specific plugin names.
         strcpy(preproc_name, "JSONPreprocessor");
-        strcpy(parser_name, "JSONParser");   // Now using JSONParser
+        strcpy(parser_name, "JSONParser");
         LOG_DEBUG("File type JSON identified. Required preprocessor: '%s', parser: '%s'", preproc_name, parser_name);
     } else if (strcmp(extension, "txt") == 0) {
-        // strcpy(preproc_name, "TxtPreprocessor");
-        // strcpy(parser_name, "TxtParser");
-        LOG_WARN("Plain text file (.txt) processing not fully defined yet. Using DummyPlugin as placeholder.", extension);
-        strcpy(preproc_name, "DummyPlugin"); // Placeholder
-        strcpy(parser_name, "DummyPlugin");   // Placeholder
+        strcpy(preproc_name, "TXTPreprocessor");
+        strcpy(parser_name, "TXTParser");
+        LOG_DEBUG("File type TXT identified. Required preprocessor: '%s', parser: '%s'", preproc_name, parser_name);
+    } else if (strcmp(extension, "csv") == 0) {
+        strcpy(preproc_name, "CSVPreprocessor");
+        strcpy(parser_name, "CSVParser");
+        LOG_DEBUG("File type CSV identified. Required preprocessor: '%s', parser: '%s'", preproc_name, parser_name);
     } else {
-        LOG_ERROR("Unsupported file extension: .%s for file %s", extension, file_path);
+        LOG_ERROR("Unsupported file extension: .%s for file %s. No specific preprocessor or parser will be used.", extension, file_path);
+        // Keep preproc_name and parser_name empty.
+        // This will result in no preprocessor/parser being found, and the original_chunk
+        // might be passed to the indexer if one is active, or returned by the pipeline.
+        // Or, return NULL here if unsupported types should not proceed.
+        // For now, let it proceed to indexer with raw data if indexer is active.
+        // If no indexer, raw data will be returned.
+        // A better approach might be to return NULL immediately.
+        // For this iteration, let's return NULL for unsupported types to stop processing.
         return NULL;
     }
 
