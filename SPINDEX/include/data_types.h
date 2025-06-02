@@ -10,11 +10,31 @@
  * parts of the system, for example, from a core processing unit
  * to a plugin.
  */
+typedef enum {
+    CHUNK_TYPE_UNKNOWN = 0,
+    CHUNK_TYPE_RAW_BYTES,
+    CHUNK_TYPE_UTF8_TEXT,
+    CHUNK_TYPE_PREPROCESSED_TEXT, // e.g. after whitespace/comment stripping
+    CHUNK_TYPE_PARSED_JSON_PLACEHOLDER, // Placeholder for parsed structure
+    CHUNK_TYPE_STRUCTURED_DATA // Representing actual parsed data in future
+} ChunkDataType;
+
 typedef struct {
     void *data;         // Pointer to the processed data
     size_t length;      // Length of the data in bytes
     char *source_id;    // Optional: Identifier for the source of this data
+    ChunkDataType data_type; // Type of data in the chunk
 } ProcessedDataChunk;
+
+// Enum defining different types of plugins
+typedef enum {
+    SPINDEX_PLUGIN_TYPE_UNKNOWN = 0,
+    SPINDEX_PLUGIN_TYPE_PREPROCESSOR,
+    SPINDEX_PLUGIN_TYPE_PARSER,
+    SPINDEX_PLUGIN_TYPE_INDEXER,
+    SPINDEX_PLUGIN_TYPE_DATA_SOURCE,
+    SPINDEX_PLUGIN_TYPE_OTHER
+} SpindexPluginType;
 
 /**
  * @brief Holds information about a plugin.
@@ -25,11 +45,10 @@ typedef struct {
 typedef struct {
     char name[256];         // Plugin name
     char version[50];       // Plugin version (e.g., "1.0.2")
-    // Potentially add function pointers here later for plugin callbacks
-    // void (*init_plugin)();
-    // ProcessedDataChunk* (*process_data)(const ProcessedDataChunk* input);
-    // void (*shutdown_plugin)();
+    SpindexPluginType type; // Type of the plugin
+    char description[512];  // Short description of the plugin's function
 } PluginInfo;
+
 
 // Example of a more complex data structure that might be needed later
 /**

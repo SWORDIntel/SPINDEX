@@ -1,0 +1,81 @@
+[2025-06-02 05:52:43] [INFO] [core/utils.c:42] Logging system initialized. Log level: DEBUG.
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:14] Test program started. Logger initialized.
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:22] Configuration prepared. Plugin directory for test: /app/SPINDEX/build/plugins_for_test
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:27] Loading plugins from: /app/SPINDEX/build/plugins_for_test
+[2025-06-02 05:52:43] [INFO] [plugins/preprocessors/json_preprocessor.c:36] [JSONPreprocessor v0.2.0] Initializing...
+[2025-06-02 05:52:43] [INFO] [plugins/preprocessors/json_preprocessor.c:38] [JSONPreprocessor v0.2.0] Initialization complete.
+[2025-06-02 05:52:43] [INFO] [plugins/parsers/json_parser.c:38] [JSONParser v0.1.0] Initializing...
+[2025-06-02 05:52:43] [INFO] [plugins/parsers/json_parser.c:41] [JSONParser v0.1.0] Initialization complete.
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:39] 3 plugin(s) loaded successfully.
+[2025-06-02 05:52:43] [DEBUG] [./core/test_ingestion_pipeline.c:41] Loaded Plugin 1: Name=JSONPreprocessor, Version=0.2.0
+[2025-06-02 05:52:43] [DEBUG] [./core/test_ingestion_pipeline.c:41] Loaded Plugin 2: Name=DummyPlugin, Version=0.1.0
+[2025-06-02 05:52:43] [DEBUG] [./core/test_ingestion_pipeline.c:41] Loaded Plugin 3: Name=JSONParser, Version=0.1.0
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:47] Initializing ingestion pipeline...
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:112] Ingestion pipeline initialized. Aware of 3 loaded plugins.
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:113] Plugin directory from config: /app/SPINDEX/build/plugins_for_test
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:54] Ingestion pipeline initialized successfully.
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:58] Attempting to process JSON test file: /app/SPINDEX/test_data/sample_specific.json
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:124] Starting processing for file: /app/SPINDEX/test_data/sample_specific.json
+[2025-06-02 05:52:43] [DEBUG] [core/ingestion_pipeline.c:127] File extension: .json
+[2025-06-02 05:52:43] [DEBUG] [core/ingestion_pipeline.c:141] File type JSON identified. Required preprocessor: 'JSONPreprocessor', parser: 'JSONParser'
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:159] Found preprocessor: JSONPreprocessor (Version: 0.2.0, Type: 0)
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:168] Found parser: JSONParser (Version: 0.1.0, Type: 2)
+[2025-06-02 05:52:43] [DEBUG] [core/ingestion_pipeline.c:84] Successfully read file '/app/SPINDEX/test_data/sample_specific.json' into chunk, size 310 bytes, type 2.
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:180] Invoking preprocessor 'JSONPreprocessor' for file /app/SPINDEX/test_data/sample_specific.json
+[2025-06-02 05:52:43] [INFO] [plugins/preprocessors/json_preprocessor.c:51] [JSONPreprocessor v0.2.0] Processing data...
+[2025-06-02 05:52:43] [DEBUG] [plugins/preprocessors/json_preprocessor.c:57] [JSONPreprocessor] Received input data (first 50 bytes): {\
+  "record_id": "json_test_001",\
+  "description
+[2025-06-02 05:52:43] [DEBUG] [plugins/preprocessors/json_preprocessor.c:156] [JSONPreprocessor] plugin_internal_preprocess_json: Starting with raw content.
+[2025-06-02 05:52:43] [DEBUG] [plugins/preprocessors/json_preprocessor.c:208] [JSONPreprocessor] Content appears to start with valid JSON char.
+[2025-06-02 05:52:43] [DEBUG] [plugins/preprocessors/json_preprocessor.c:211] [JSONPreprocessor] plugin_internal_preprocess_json: Finished.
+[2025-06-02 05:52:43] [INFO] [plugins/preprocessors/json_preprocessor.c:91] [JSONPreprocessor] Preprocessing complete. Output length: 309
+[2025-06-02 05:52:43] [DEBUG] [plugins/preprocessors/json_preprocessor.c:92] [JSONPreprocessor] Processed data (first 50 bytes): {\
+  "record_id": "json_test_001",\
+  "description
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:187] Preprocessor 'JSONPreprocessor' completed. Output chunk (type 3) length: 309
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:200] Invoking parser 'JSONParser'
+[2025-06-02 05:52:43] [INFO] [plugins/parsers/json_parser.c:57] [JSONParser v0.1.0] Processing data...
+[2025-06-02 05:52:43] [DEBUG] [plugins/parsers/json_parser.c:64] [JSONParser] Received input data (length 309, source_id '/app/SPINDEX/test_data/sample_specific.json_preprocessed_by_JSONPreprocessor'): {\
+  "record_id": "json_test_001",\
+  "description": "A specific JSON file for testing the SPINDEX i
+[2025-06-02 05:52:43] [INFO] [plugins/parsers/json_parser.c:108] [JSONParser] Data processing complete. Output length: 317
+[2025-06-02 05:52:43] [DEBUG] [plugins/parsers/json_parser.c:109] [JSONParser] Output data (first 100 bytes): Parsed: {\
+  "record_id": "json_test_001",\
+  "description": "A specific JSON file for testing the S
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:207] Parser 'JSONParser' completed. Output chunk (type 4) length: 317
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:220] File /app/SPINDEX/test_data/sample_specific.json successfully processed. Final data (type 4) length: 317. Source ID: /app/SPINDEX/test_data/sample_specific.json_preprocessed_by_JSONPreprocessor_parsed_by_JSONParser
+[2025-06-02 05:52:43] [DEBUG] [core/ingestion_pipeline.c:223] Final data from parser (first 50 bytes): Parsed: {\
+  "record_id": "json_test_001",\
+  "des
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:226] Finished processing for file: /app/SPINDEX/test_data/sample_specific.json. Returning final chunk.
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:62] Successfully processed JSON file '/app/SPINDEX/test_data/sample_specific.json'. Verifying output...
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:64] Output chunk data_type is CHUNK_TYPE_PARSED_JSON_PLACEHOLDER (Correct).
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:72] Output data starts with 'Parsed: ' (Correct).
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:81] Output source_id '/app/SPINDEX/test_data/sample_specific.json_preprocessed_by_JSONPreprocessor_parsed_by_JSONParser' contains preprocessor and parser names (Correct).
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:98] Attempting to process file: /app/SPINDEX/test_data/sample_data.txt
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:124] Starting processing for file: /app/SPINDEX/test_data/sample_data.txt
+[2025-06-02 05:52:43] [DEBUG] [core/ingestion_pipeline.c:127] File extension: .txt
+[2025-06-02 05:52:43] [WARN] [core/ingestion_pipeline.c:145] Plain text file (.txt) processing not fully defined yet. Using DummyPlugin as placeholder.
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:159] Found preprocessor: DummyPlugin (Version: 0.1.0, Type: 0)
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:168] Found parser: DummyPlugin (Version: 0.1.0, Type: 0)
+[2025-06-02 05:52:43] [DEBUG] [core/ingestion_pipeline.c:84] Successfully read file '/app/SPINDEX/test_data/sample_data.txt' into chunk, size 39 bytes, type 2.
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:180] Invoking preprocessor 'DummyPlugin' for file /app/SPINDEX/test_data/sample_data.txt
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:187] Preprocessor 'DummyPlugin' completed. Output chunk (type 735813968) length: 24
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:200] Invoking parser 'DummyPlugin'
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:207] Parser 'DummyPlugin' completed. Output chunk (type 2) length: 24
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:220] File /app/SPINDEX/test_data/sample_data.txt successfully processed. Final data (type 2) length: 24. Source ID: DummyPlugin_output
+[2025-06-02 05:52:43] [DEBUG] [core/ingestion_pipeline.c:223] Final data from parser (first 50 bytes): Processed by DummyPlugin
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:226] Finished processing for file: /app/SPINDEX/test_data/sample_data.txt. Returning final chunk.
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:101] Successfully processed file '/app/SPINDEX/test_data/sample_data.txt' through pipeline.
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:113] Shutting down ingestion pipeline...
+[2025-06-02 05:52:43] [INFO] [core/ingestion_pipeline.c:232] Ingestion pipeline shutting down.
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:115] Ingestion pipeline shut down.
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:118] Unloading plugins...
+[2025-06-02 05:52:43] [INFO] [plugins/preprocessors/json_preprocessor.c:44] [JSONPreprocessor v0.2.0] Shutting down...
+[2025-06-02 05:52:43] [INFO] [plugins/preprocessors/json_preprocessor.c:46] [JSONPreprocessor v0.2.0] Shutdown complete.
+[2025-06-02 05:52:43] [INFO] [plugins/parsers/json_parser.c:48] [JSONParser v0.1.0] Shutting down...
+[2025-06-02 05:52:43] [INFO] [plugins/parsers/json_parser.c:51] [JSONParser v0.1.0] Shutdown complete.
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:120] Plugins unloaded.
+[2025-06-02 05:52:43] [INFO] [./core/test_ingestion_pipeline.c:123] Test program finished. Shutting down logger.
+[2025-06-02 05:52:43] [INFO] [core/utils.c:46] Logging system shutting down.

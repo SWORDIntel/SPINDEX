@@ -1,0 +1,10 @@
+{\
+  "record_id": "json_test_001",\
+  "description": "A specific JSON file for testing the SPINDEX ingestion pipeline.",\
+  "details": {\
+    "value1": 12345,\
+    "value2": "Test string with spaces and symbols: !@#$%^&*()_+",\
+    "is_active": true\
+  },\
+  "tags": ["test", "json", "pipeline", "spindex"]\
+}
