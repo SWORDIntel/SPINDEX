@@ -1,0 +1,375 @@
+Okay, let's break this down into more digestible chunks for Jules. I'll group them logically, focusing on delivering functional milestones.
+
+Chunk 1: Core System & Plugin Foundation
+
+Goal: Establish the basic application structure, plugin loading, and configuration management.
+
+Task: [CORE-001] Implement main.c Entry Point
+
+Description: Create the main application entry point. Basic argument parsing (e.g., config file path).
+
+Files: core/main.c
+
+Priority: High
+
+Task: [CORE-002] Define Core Data Structures & Types
+
+Description: Define common data structures (e.g., for processed data chunks, plugin info) in data_types.h.
+
+Files: include/data_types.h
+
+Priority: High
+
+Task: [CORE-003] Define Plugin Interface (plugin_interface.h)
+
+Description: Define the C function pointer interfaces for all plugin types (parsers, preprocessors, indexers, etc.).
+
+Files: include/plugin_interface.h
+
+Priority: High
+
+Task: [CORE-004] Implement Plugin Loader (plugin_loader.c)
+
+Description: Develop the module to scan plugins/ subdirectories, dynamically load .so files, and register them.
+
+Files: core/plugin_loader.c, core/plugin_loader.h
+
+Priority: High
+
+Task: [CORE-005] Implement Configuration Manager (config_manager.c)
+
+Description: Develop the module to parse configuration files. Define config structures in config.h.
+
+Files: core/config_manager.c, core/config_manager.h, include/config.h
+
+Priority: High
+
+Task: [BUILD-001] Create Initial Makefile
+
+Description: Set up a basic Makefile to compile the core components.
+
+Files: Makefile
+
+Priority: High
+
+Task: [CORE-006] Implement Basic Logging Utility
+
+Description: A simple logging mechanism for debug, info, error messages (e.g., in utils.c).
+
+Files: core/utils.c, core/utils.h
+
+Priority: Medium
+
+Chunk 2: Basic Ingestion Pipeline & JSON Processing
+
+Goal: Get the first file type (JSON) processing through a rudimentary pipeline, leveraging the existing json_preprocessor.c.
+
+Task: [INGEST-001] Implement Ingestion Pipeline Manager (ingestion_pipeline.c)
+
+Description: Core logic to manage data flow: identify file type, call preprocessor, call parser.
+
+Files: core/ingestion_pipeline.c, core/ingestion_pipeline.h
+
+Priority: High
+
+Dependencies: [CORE-003], [CORE-004]
+
+Task: [JSON-001] Adapt json_preprocessor.c to Plugin Interface
+
+Description: Modify json_preprocessor.c to conform to plugin_interface.h. Compile as plugins/preprocessors/json_preprocessor.so.
+
+Files: plugins/preprocessors/json_preprocessor.c
+
+Priority: High
+
+Status: json_preprocessor.c exists, needs adaptation.
+
+Task: [JSON-002] Implement json_parser.c Plugin
+
+Description: Create the JSON parser plugin to parse JSON structure into a format defined in data_types.h.
+
+Files: plugins/parsers/json_parser.c
+
+Priority: High
+
+Dependencies: [CORE-002], [CORE-003]
+
+Task: [BUILD-002] Extend Makefile for JSON Plugins
+
+Description: Add rules to Makefile to compile json_preprocessor.so and json_parser.so.
+
+Files: Makefile
+
+Priority: High
+
+Task: [TEST-001] Test Core JSON Ingestion Path
+
+Description: Create a test harness or extend main.c to load a JSON file and pass it through the pipeline using JSON plugins, logging the output.
+
+Priority: High
+
+Chunk 3: Elasticsearch Integration
+
+Goal: Enable sending processed data to Elasticsearch for indexing.
+
+Task: [ES-001] Implement Elasticsearch Client (elasticsearch_client.c)
+
+Description: Module for communication with Elasticsearch (e.g., using libcurl).
+
+Files: core/elasticsearch_client.c, core/elasticsearch_client.h
+
+Priority: High
+
+Task: [ES-002] Implement Elasticsearch Indexer Plugin (elasticsearch_indexer.so)
+
+Description: Plugin that takes parsed data and sends it to Elasticsearch via elasticsearch_client.c.
+
+Files: plugins/indexers/elasticsearch_indexer.c
+
+Priority: High
+
+Dependencies: [ES-001], [CORE-002], [CORE-003]
+
+Task: [BUILD-003] Extend Makefile for Elasticsearch Indexer
+
+Description: Add rules to Makefile to compile elasticsearch_indexer.so.
+
+Files: Makefile
+
+Priority: High
+
+Task: [TEST-002] End-to-End JSON Indexing Test
+
+Description: Test indexing a JSON file into a local Elasticsearch instance. Verify data in Elasticsearch/Kibana.
+
+Priority: High
+
+Chunk 4: Adding Text & CSV Parsers/Preprocessors
+
+Goal: Expand file type support with common text-based formats.
+
+Task: [TXT-001] Implement txt_preprocessor.c & txt_parser.c
+
+Description: Create preprocessor and parser plugins for TXT files.
+
+Files: plugins/preprocessors/txt_preprocessor.c, plugins/parsers/txt_parser.c
+
+Priority: Medium
+
+Task: [CSV-001] Implement csv_preprocessor.c & csv_parser.c
+
+Description: Create preprocessor and parser plugins for CSV files.
+
+Files: plugins/preprocessors/csv_preprocessor.c, plugins/parsers/csv_parser.c
+
+Priority: Medium
+
+Task: [BUILD-004A] Extend Makefile for TXT & CSV Plugins
+
+Description: Add rules to compile TXT and CSV plugins. (Note: Makefile updates will be ongoing, denoted as A, B, C etc. for this phase)
+
+Files: Makefile
+
+Priority: Medium
+
+Chunk 5: Adding SQL, XML, YML, HTML Parsers/Preprocessors
+
+Goal: Further expand support for structured and semi-structured text formats.
+
+Task: [SQL-001] Implement sql_preprocessor.c & sql_parser.c
+
+Files: plugins/preprocessors/sql_preprocessor.c, plugins/parsers/sql_parser.c
+
+Priority: Medium
+
+Task: [XML-001] Implement xml_preprocessor.c & xml_parser.c (Consider libxml2)
+
+Files: plugins/preprocessors/xml_preprocessor.c, plugins/parsers/xml_parser.c
+
+Priority: Medium
+
+Task: [YML-001] Implement yml_preprocessor.c & yml_parser.c (Consider libyaml)
+
+Files: plugins/preprocessors/yml_preprocessor.c, plugins/parsers/yml_parser.c
+
+Priority: Medium
+
+Task: [HTML-001] Implement html_preprocessor.c & html_parser.c (Consider libxml2 HTML mode)
+
+Files: plugins/preprocessors/html_preprocessor.c, plugins/parsers/html_parser.c
+
+Priority: Medium
+
+Task: [BUILD-004B] Extend Makefile for SQL, XML, YML, HTML Plugins
+
+Files: Makefile
+
+Priority: Medium
+
+Chunk 6: Decompressor Plugins
+
+Goal: Add support for handling compressed files.
+
+Task: [DECOMP-001] Implement zip_decompressor.c (e.g., libzip or miniz)
+
+Files: plugins/decompressors/zip_decompressor.c
+
+Priority: Medium
+
+Task: [DECOMP-002] Implement gzip_decompressor.c (e.g., zlib)
+
+Files: plugins/decompressors/gzip_decompressor.c
+
+Priority: Medium
+
+Task: [DECOMP-003] Implement zstd_decompressor.c (e.g., libzstd)
+
+Files: plugins/decompressors/zstd_decompressor.c (Note: folder structure suggests .so for this, so zstd_decompressor.so)
+
+Priority: Medium
+
+Task: [INGEST-002] Integrate Decompressors into Ingestion Pipeline
+
+Description: Modify ingestion_pipeline.c to detect and use decompressor plugins.
+
+Priority: Medium
+
+Task: [BUILD-005] Extend Makefile for Decompressors
+
+Files: Makefile
+
+Priority: Medium
+
+Chunk 7: Advanced Document & Specialized Format Parsers (Initial Research & Stubs)
+
+Goal: Begin tackling more complex formats. Initial focus might be on research, library selection, and creating stubs.
+
+Task: [DOC-001] Research & Stub doc_parser.c & doc_preprocessor.c (Identify libraries like libdoc, or tools like antiword/pandoc)
+
+Task: [XLS-001] Research & Stub xls_parser.c & xls_preprocessor.c (Identify libraries like libxls, or tools)
+
+Task: [PDF-001] Research & Stub pdf_parser.c & pdf_preprocessor.c (Identify libraries like poppler, or tools like pdftotext)
+
+Task: [RTF-001] Research & Stub rtf_parser.c & rtf_preprocessor.c (Identify libraries like librtf, or tools)
+
+Task: [DIC-001] Research & Stub dic_parser.c & dic_preprocessor.c (For DICOM, e.g., dcmtk)
+
+Task: [SQLITE-001] Research & Stub sqlite_parser.c & sqlite_preprocessor.c (Using sqlite3 lib)
+
+Task: [BUILD-004C] Extend Makefile for New Parser/Preprocessor Stubs
+
+Files: Makefile
+
+Priority: Low to Medium (implementation detail can come later)
+
+Chunk 8: Machine Learning Integration Foundation
+
+Goal: Set up the interfaces and basic structure for ML-based classification.
+
+Task: [ML-001] Define Machine Learning Interface (ml_interface.h)
+
+Description: Specify C interfaces for loading ML models and performing inference.
+
+Files: include/ml_interface.h
+
+Priority: Medium
+
+Task: [ML-002] Implement Stub for ML Classifier Plugin (ml_classifier.so)
+
+Description: Create a basic structure for the ml_classifier.so plugin, conforming to ml_interface.h. Actual ML model loading can come later.
+
+Files: plugins/preprocessors/ml_classifier.c
+
+Priority: Medium
+
+Task: [ML-003] Implement Content Analyzer Plugin (content_analyzer.so)
+
+Description: Plugin for heuristic-based content analysis, as a supplement/fallback.
+
+Files: plugins/preprocessors/content_analyzer.c
+
+Priority: Medium
+
+Task: [INGEST-003] Plan ML Integration into Ingestion Pipeline
+
+Description: Design how ingestion_pipeline.c and preprocessors (e.g., txt_preprocessor.c) will use ML classification. Implement basic hooks.
+
+Priority: Medium
+
+Task: [BUILD-006A] Extend Makefile for ML Foundation Plugins
+
+Files: Makefile
+
+Priority: Medium
+
+Chunk 9: AVX-512 Phrase Search (Core Algorithm)
+
+Goal: Implement the specialized AVX-512 search algorithm.
+
+Task: [CORE-007] Implement Hardware Detection (hardware_detection.c)
+
+Description: Module to detect CPU capabilities (e.g., AVX-512 support using CPUID).
+
+Files: core/hardware_detection.c, core/hardware_detection.h
+
+Priority: Medium (Prerequisite for AVX work)
+
+Task: [AVX-001] Implement AVX-512 Phrase Search Plugin (avx512_phrase_search.so)
+
+Description: Develop the C-based AVX-512 optimized phrase search algorithm. This is a specialized task.
+
+Files: plugins/search_algorithms/avx512_phrase_search.c
+
+Priority: High (if core feature) / Medium
+
+Dependencies: [CORE-007]
+
+Task: [BUILD-006B] Extend Makefile for AVX Plugin
+
+Files: Makefile
+
+Priority: Medium
+
+Chunk 10: System Enhancements & Finalization
+
+Goal: Add threading, security features, and prepare for broader use.
+
+Task: [CORE-008] Implement Threading Model (threading.c)
+
+Description: Implement multi-threading for parallel processing in the ingestion pipeline.
+
+Files: core/threading.c, core/threading.h
+
+Priority: Medium
+
+Task: [ES-003] Integrate AVX-512 Search with Elasticsearch Queries (Design & Stubs)
+
+Description: Plan how SPINDEX's AVX-512 search interacts with or enhances Elasticsearch vector search.
+
+Priority: Medium
+
+Task: [SEC-001] Implement Stubs for Security Analysis Plugins (security/)
+
+Description: Create basic structures for plugins like hash_separator.so, password_analyzer.so.
+
+Priority: Low / Medium
+
+Task: [OPT-001] Plan for General Hardware Optimization Plugins (optimizations/)
+
+Description: Identify areas for further SIMD optimizations beyond the main phrase search.
+
+Priority: Low
+
+Task: [DOCS-001] Write README.md and Basic Usage Documentation
+
+Files: README.md, docs/
+
+Priority: Medium (ongoing)
+
+Task: [TEST-003] Comprehensive System & Performance Testing Plan
+
+Description: Outline strategy for testing with large datasets and various file types.
+
+Priority: Medium
+
+This breakdown should provide smaller, more manageable sets of tasks for Jules. Each chunk aims for a tangible step forward. You can tackle these chunks sequentially or, where dependencies allow, some in parallel.
