@@ -167,20 +167,21 @@ This phase will be repeated for each file type.
     *   Priority: Medium (ongoing)
 
 **Phase 5: Decompressors**
+Status: COMPLETE
 
-1.  **Task: [DECOMP-001] Implement `zip_decompressor.c`** (e.g., using `libzip` or `miniz`)
+1.  **Task: [DECOMP-001] Implement `zip_decompressor.c`** (e.g., using `libzip` or `miniz`) - COMPLETE
     *   Files: `plugins/decompressors/zip_decompressor.c`
     *   Priority: Medium
-2.  **Task: [DECOMP-002] Implement `gzip_decompressor.c`** (e.g., using `zlib`)
+2.  **Task: [DECOMP-002] Implement `gzip_decompressor.c`** (e.g., using `zlib`) - COMPLETE
     *   Files: `plugins/decompressors/gzip_decompressor.c`
     *   Priority: Medium
-3.  **Task: [DECOMP-003] Implement `zstd_decompressor.c`** (e.g., using `libzstd`)
-    *   Files: `plugins/decompressors/zstd_decompressor.so` (as per folder structure)
+3.  **Task: [DECOMP-003] Implement `zstd_decompressor.c`** (e.g., using `libzstd`) - COMPLETE
+    *   Files: `plugins/decompressors/zstd_decompressor.c` (Corrected from .so to .c as per actual implementation)
     *   Priority: Medium
-4.  **Task: [INGEST-002] Integrate Decompressors into Ingestion Pipeline**
+4.  **Task: [INGEST-002] Integrate Decompressors into Ingestion Pipeline** - COMPLETE
     *   Description: Modify `ingestion_pipeline.c` to detect compressed files and invoke decompressor plugins before preprocessors/parsers.
     *   Priority: Medium
-5.  **Task: [BUILD-005] Extend Makefile for Decompressors**
+5.  **Task: [BUILD-005] Extend Makefile for Decompressors** - COMPLETE
     *   Priority: Medium
 
 **Phase 6: Advanced Features - AVX-512 & Machine Learning**
@@ -370,22 +371,23 @@ Status: COMPLETE
 ---
 
 **Chunk 6: Decompressor Plugins**
+Status: COMPLETE
 
 *Goal: Add support for handling compressed files.*
 
-1.  **Task: [DECOMP-001] Implement `zip_decompressor.c`** (e.g., `libzip` or `miniz`)
+1.  **Task: [DECOMP-001] Implement `zip_decompressor.c`** (e.g., `libzip` or `miniz`) - COMPLETE
     *   Files: `plugins/decompressors/zip_decompressor.c`
     *   Priority: Medium
-2.  **Task: [DECOMP-002] Implement `gzip_decompressor.c`** (e.g., `zlib`)
+2.  **Task: [DECOMP-002] Implement `gzip_decompressor.c`** (e.g., `zlib`) - COMPLETE
     *   Files: `plugins/decompressors/gzip_decompressor.c`
     *   Priority: Medium
-3.  **Task: [DECOMP-003] Implement `zstd_decompressor.c`** (e.g., `libzstd`)
-    *   Files: `plugins/decompressors/zstd_decompressor.c` (Note: folder structure suggests `.so` for this, so `zstd_decompressor.so`)
+3.  **Task: [DECOMP-003] Implement `zstd_decompressor.c`** (e.g., `libzstd`) - COMPLETE
+    *   Files: `plugins/decompressors/zstd_decompressor.c` (Corrected from .so to .c as per actual implementation)
     *   Priority: Medium
-4.  **Task: [INGEST-002] Integrate Decompressors into Ingestion Pipeline**
+4.  **Task: [INGEST-002] Integrate Decompressors into Ingestion Pipeline** - COMPLETE
     *   Description: Modify `ingestion_pipeline.c` to detect and use decompressor plugins.
     *   Priority: Medium
-5.  **Task: [BUILD-005] Extend Makefile for Decompressors**
+5.  **Task: [BUILD-005] Extend Makefile for Decompressors** - COMPLETE
     *   Files: `Makefile`
     *   Priority: Medium
 
