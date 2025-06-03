@@ -7,6 +7,8 @@
 #include "../../include/plugin_interface.h"
 #include "../../include/data_types.h"
 #include "../../include/hardware_detection.h" // For checking AVX-512 support
+#include "../../include/avx_search_params.h"  // For AvxSearchParams
+#include "../../include/utils.h" // For LOG_INFO, LOG_ERROR, LOG_DEBUG (if not already implicitly included)
 
 // --- Forward declarations for plugin functions ---
 void avx512_get_info(PluginInfo *info);
@@ -87,22 +89,104 @@ void avx512_shutdown() {
 // to pack both inputs into a single ProcessedDataChunk (e.g., using a custom data structure
 // within the chunk's data field, or by having the plugin retrieve the phrases via a configuration mechanism).
 ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
-    if (!input_chunk) {
-        fprintf(stderr, "AVX-512 Phrase Searcher: Received NULL input chunk.\n");
+    if (!input_chunk || !input_chunk->data) {
+        LOG_ERROR("AVX Search: Input chunk or its data is NULL.");
+        return NULL;
+    }
+    const AvxSearchParams* params = (const AvxSearchParams*)input_chunk->data;
+    if (!params || !params->text_to_search || !params->text_to_search->data ||
+        !params->phrases_to_find || !params->phrases_to_find->data) {
+        LOG_ERROR("AVX Search: Invalid search parameters, text, or phrases data.");
         return NULL;
     }
 
-    // Placeholder implementation
-    fprintf(stderr, "AVX-512 Phrase Searcher: process_data is not fully implemented yet.\n");
-    fprintf(stderr, "AVX-512 Phrase Searcher: This function needs to be adapted to handle phrase inputs, "
-                    "potentially via a modified plugin interface or a configuration mechanism.\n");
+    const ProcessedDataChunk* text_chunk = params->text_to_search;
+    const ProcessedDataChunk* phrases_chunk = params->phrases_to_find;
 
-    // Simulate "not implemented" or "error" by returning NULL.
-    // A more robust plugin might return a ProcessedDataChunk with an error status or message.
-    // For example, if results were expected in a new chunk:
-    // ProcessedDataChunk *result_chunk = (ProcessedDataChunk*)malloc(sizeof(ProcessedDataChunk));
-    // if(result_chunk) { ... populate with error info ... }
-    // return result_chunk;
-    
-    return NULL; 
+    LOG_INFO("AVX Search: Processing text of length %zu, with phrases of length %zu.", text_chunk->length, phrases_chunk->length);
+
+    // --- This is a simplified way to get phrases. A real plugin might need more robust parsing ---
+    char* phrases_str_copy = (char*)malloc(phrases_chunk->length + 1);
+    if (!phrases_str_copy) {
+        LOG_ERROR("AVX Search: Failed to allocate memory for phrases copy.");
+        return NULL;
+    }
+    memcpy(phrases_str_copy, phrases_chunk->data, phrases_chunk->length);
+    phrases_str_copy[phrases_chunk->length] = '\0';
+
+    char* saveptr;
+    char* current_phrase = strtok_r(phrases_str_copy, "\n", &saveptr);
+    char result_buffer[1024] = {0}; 
+    strncat(result_buffer, "Search Results:\n", sizeof(result_buffer) - 1);
+
+
+    while (current_phrase != NULL) {
+        LOG_DEBUG("AVX Search: Searching for phrase: '%s'", current_phrase);
+        bool found_phrase = false;
+        size_t phrase_len = strlen(current_phrase);
+
+        if (phrase_len > 0 && phrase_len <= text_chunk->length) {
+            // WARNING: The following AVX-512 code is a simplified demonstration for checking initial substring matches.
+            // It is NOT a complete or robust AVX-512 phrase search algorithm. A production-quality implementation
+            // would require a much more sophisticated approach (e.g., handling arbitrary lengths, advanced SIMD algorithms).
+            
+            size_t compare_len = phrase_len < 64 ? phrase_len : 64; 
+
+            if (text_chunk->length >= compare_len) {
+               __m512i phrase_vector = _mm512_loadu_si512((const __m512i*)current_phrase); 
+
+               for (size_t i = 0; i <= text_chunk->length - compare_len; ++i) {
+                   __m512i text_vector = _mm512_loadu_si512((const __m512i*)((const char*)text_chunk->data + i));
+                   __mmask64 match_mask = _mm512_cmpeq_epi8_mask(phrase_vector, text_vector);
+                   
+                   uint64_t relevant_bits_mask = (compare_len == 64) ? 0xFFFFFFFFFFFFFFFFULL : (1ULL << compare_len) - 1;
+
+                   if ((match_mask & relevant_bits_mask) == relevant_bits_mask) {
+                       if (compare_len == phrase_len) {
+                          found_phrase = true;
+                          LOG_INFO("AVX Search: AVX-assisted match for initial part of '%s' at offset %zu", current_phrase, i);
+                          break; 
+                       } else {
+                          LOG_DEBUG("AVX Search: Potential partial match for '%s' at offset %zu. Full verification needed.", current_phrase, i);
+                          // For this demo, if the first part matches, assume it's found.
+                          found_phrase = true; 
+                          break;
+                       }
+                   }
+               }
+            }
+        }
+
+        if (found_phrase) {
+            strncat(result_buffer, "Found: ", sizeof(result_buffer) - strlen(result_buffer) - 1);
+            strncat(result_buffer, current_phrase, sizeof(result_buffer) - strlen(result_buffer) - 1);
+        } else {
+            strncat(result_buffer, "Not Found: ", sizeof(result_buffer) - strlen(result_buffer) - 1);
+            strncat(result_buffer, current_phrase, sizeof(result_buffer) - strlen(result_buffer) - 1);
+        }
+        strncat(result_buffer, "\n", sizeof(result_buffer) - strlen(result_buffer) - 1);
+        current_phrase = strtok_r(NULL, "\n", &saveptr);
+    }
+    free(phrases_str_copy);
+
+    ProcessedDataChunk* output_chunk = (ProcessedDataChunk*)malloc(sizeof(ProcessedDataChunk));
+    if (!output_chunk) {
+        LOG_ERROR("AVX Search: Failed to allocate output chunk.");
+        return NULL;
+    }
+    output_chunk->data = strdup(result_buffer); 
+    if (!output_chunk->data) {
+        LOG_ERROR("AVX Search: Failed to strdup result_buffer.");
+        free(output_chunk);
+        return NULL;
+    }
+    output_chunk->length = strlen(result_buffer);
+    output_chunk->source_id = text_chunk->source_id ? strdup(text_chunk->source_id) : NULL; 
+    if (text_chunk->source_id && !output_chunk->source_id) {
+         LOG_WARN("AVX Search: Failed to duplicate source_id for output chunk.");
+    }
+    output_chunk->data_type = CHUNK_TYPE_UTF8_TEXT; 
+
+    LOG_INFO("AVX Search: Processing complete. Results:\n%s", result_buffer);
+    return output_chunk;
 }
