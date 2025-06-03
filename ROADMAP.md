@@ -193,7 +193,7 @@ These are significant undertakings.
     *   Files: `plugins/search_algorithms/avx512_phrase_search.c`
     *   Priority: High (if core feature) / Medium (if performance optimization can come later)
     *   Dependencies: [CORE-007]
-    *   Status: Structure Complete, Core Logic Pending. Makefile updated.
+    *   Status: Core logic demonstratively implemented (uses AvxSearchParams, basic AVX-512 operations for partial matching). Full algorithm pending.
 2.  **Task: [ES-003] Integrate AVX-512 Search with Elasticsearch Queries**
     *   Description: Design how SPINDEX's AVX-512 search interacts with or enhances Elasticsearch vector search. This might involve custom ES plugins or specific query formations.
     *   Priority: Medium
@@ -202,20 +202,24 @@ These are significant undertakings.
     *   Description: Specify C interfaces for loading ML models and performing inference (classification).
     *   Files: `include/ml_interface.h`
     *   Priority: Medium
+    *   Status: COMPLETE. See `include/ml_interface.h`.
 4.  **Task: [ML-002] Implement ML Classifier Plugin (`ml_classifier.so`)**
     *   Description: A plugin to load and run pre-trained ML models for content classification (e.g., distinguishing types of data within `.txt` files). May use libraries like `oneDNN` or ONNX Runtime C API.
-    *   Files: `plugins/preprocessors/ml_classifier.c`
+    *   Files: `plugins/classifiers/ml_classifier.c` (Path corrected from preprocessors)
     *   Priority: Medium
+    *   Status: Structural implementation complete (placeholders for actual ML logic). See `plugins/classifiers/ml_classifier.c`.
 5.  **Task: [ML-003] Implement Content Analyzer Plugin (`content_analyzer.so`)**
     *   Description: A plugin for heuristic-based content analysis, potentially as a fallback or supplement to ML classification.
-    *   Files: `plugins/preprocessors/content_analyzer.c`
+    *   Files: `plugins/analyzers/content_analyzer.c` (Path corrected from preprocessors)
     *   Priority: Medium
+    *   Status: Implemented with basic heuristic rules. See `plugins/analyzers/content_analyzer.c`.
 6.  **Task: [INGEST-003] Integrate ML Classification into Ingestion Pipeline**
     *   Description: Modify `ingestion_pipeline.c` and relevant preprocessors (e.g., `txt_preprocessor.c`) to use `ml_classifier.so` and `content_analyzer.so` for ambiguous data handling.
     *   Priority: Medium
+    *   Status: ML Classifier and Heuristic Analyzer integrated into `ingestion_pipeline.c`.
 7.  **Task: [BUILD-006] Extend Makefile for AVX & ML Plugins**
     *   Priority: Medium
-    *   Status: AVX plugin build rules complete. ML plugin rules pending.
+    *   Status: COMPLETE. Build rules for AVX, ML Classifier, and Content Analyzer plugins are implemented.
 
 **Phase 7: Optimizations, Security, and Final Touches**
 
@@ -420,20 +424,25 @@ Status: COMPLETE
     *   Description: Specify C interfaces for loading ML models and performing inference.
     *   Files: `include/ml_interface.h`
     *   Priority: Medium
+    *   Status: COMPLETE. See `include/ml_interface.h`.
 2.  **Task: [ML-002] Implement Stub for ML Classifier Plugin (`ml_classifier.so`)**
     *   Description: Create a basic structure for the `ml_classifier.so` plugin, conforming to `ml_interface.h`. Actual ML model loading can come later.
-    *   Files: `plugins/preprocessors/ml_classifier.c`
+    *   Files: `plugins/classifiers/ml_classifier.c` (Path corrected)
     *   Priority: Medium
+    *   Status: Structural implementation complete (placeholders for actual ML logic). See `plugins/classifiers/ml_classifier.c`.
 3.  **Task: [ML-003] Implement Content Analyzer Plugin (`content_analyzer.so`)**
     *   Description: Plugin for heuristic-based content analysis, as a supplement/fallback.
-    *   Files: `plugins/preprocessors/content_analyzer.c`
+    *   Files: `plugins/analyzers/content_analyzer.c` (Path corrected)
     *   Priority: Medium
+    *   Status: Implemented with basic heuristic rules. See `plugins/analyzers/content_analyzer.c`.
 4.  **Task: [INGEST-003] Plan ML Integration into Ingestion Pipeline**
     *   Description: Design how `ingestion_pipeline.c` and preprocessors (e.g., `txt_preprocessor.c`) will use ML classification. Implement basic hooks.
     *   Priority: Medium
+    *   Status: ML Classifier and Heuristic Analyzer integrated into `ingestion_pipeline.c`. (Reflects actual integration)
 5.  **Task: [BUILD-006A] Extend Makefile for ML Foundation Plugins**
     *   Files: `Makefile`
     *   Priority: Medium
+    *   Status: COMPLETE (as part of overall Makefile updates for ML/Analyzer plugins)
 
 ---
 
@@ -450,7 +459,7 @@ Status: COMPLETE
     *   Files: `plugins/search_algorithms/avx512_phrase_search.c`
     *   Priority: High (if core feature) / Medium
     *   Dependencies: [CORE-007]
-    *   Status: Structure Complete, Core Logic Pending. Makefile updated.
+    *   Status: Core logic demonstratively implemented (uses AvxSearchParams, basic AVX-512 operations for partial matching). Full algorithm pending.
 3.  **Task: [BUILD-006B] Extend Makefile for AVX Plugin**
     *   Files: `Makefile`
     *   Priority: Medium

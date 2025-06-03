@@ -142,6 +142,18 @@ AVX512_PLUGIN_SRC = $(SEARCH_ALGORITHMS_PLUGIN_SRC_DIR)/avx512_phrase_search.c
 AVX512_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/search_algorithms/avx512_phrase_search.o
 AVX512_PLUGIN_SO = $(PLUGIN_LIB_DIR)/avx512_phrase_search.so
 
+# ML Classifier Plugin
+ML_CLASSIFIER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/classifiers
+ML_CLASSIFIER_PLUGIN_SRC = $(ML_CLASSIFIER_PLUGIN_SRC_DIR)/ml_classifier.c
+ML_CLASSIFIER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/classifiers/ml_classifier.o
+ML_CLASSIFIER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/ml_classifier.so
+
+# Content Analyzer Plugin
+CONTENT_ANALYZER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/analyzers
+CONTENT_ANALYZER_PLUGIN_SRC = $(CONTENT_ANALYZER_PLUGIN_SRC_DIR)/content_analyzer.c
+CONTENT_ANALYZER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/analyzers/content_analyzer.o
+CONTENT_ANALYZER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/content_analyzer.so
+
 # Phony targets
 .PHONY: all clean plugins tests
 
@@ -190,6 +202,8 @@ $(TEST_ES_INDEXING_TARGET): $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS
 	cp $(PLUGIN_LIB_DIR)/gzip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/zstd_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/avx512_phrase_search.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/ml_classifier.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/content_analyzer.so $(TEST_PLUGINS_STAGING_DIR)/
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS) -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
 	@echo "Staged plugins for test in $(TEST_PLUGINS_STAGING_DIR)"
@@ -215,6 +229,8 @@ $(TEST_PIPELINE_TARGET): $(TEST_PIPELINE_SRC) $(TEST_PIPELINE_DEPS)
 	cp $(PLUGIN_LIB_DIR)/gzip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/zstd_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/avx512_phrase_search.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/ml_classifier.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/content_analyzer.so $(TEST_PLUGINS_STAGING_DIR)/
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_PIPELINE_SRC) \
 		$(filter %.o,$^) -o $@ $(LDFLAGS) # Link only .o files from DEPS, not .so
 	@echo "Built test program: $@"
@@ -240,7 +256,7 @@ $(TEST_PLUGIN_LOADER_TARGET): $(TEST_PLUGIN_LOADER_SRC) $(TEST_PLUGIN_LOADER_DEP
 plugins: $(DUMMY_PLUGIN_SO) $(JSON_PREPROCESSOR_PLUGIN_SO) $(JSON_PARSER_PLUGIN_SO) $(ELASTICSEARCH_INDEXER_PLUGIN_SO) \
          $(TXT_PREPROCESSOR_PLUGIN_SO) $(TXT_PARSER_PLUGIN_SO) $(CSV_PREPROCESSOR_PLUGIN_SO) $(CSV_PARSER_PLUGIN_SO) \
          $(ZIP_DECOMPRESSOR_PLUGIN_SO) $(GZIP_DECOMPRESSOR_PLUGIN_SO) $(ZSTD_DECOMPRESSOR_PLUGIN_SO) \
-         $(AVX512_PLUGIN_SO)
+         $(AVX512_PLUGIN_SO) $(ML_CLASSIFIER_PLUGIN_SO) $(CONTENT_ANALYZER_PLUGIN_SO)
 	@echo "All specified plugins built."
 
 # Rule for dummy_plugin object file
@@ -317,6 +333,18 @@ $(AVX512_PLUGIN_OBJ): $(AVX512_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(I
 	$(CC) $(CFLAGS) $(AVX_CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
 	@echo "Compiled AVX-512 plugin object: $@"
 
+# Rule for ml_classifier object file
+$(ML_CLASSIFIER_PLUGIN_OBJ): $(ML_CLASSIFIER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/ml_interface.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for content_analyzer object file
+$(CONTENT_ANALYZER_PLUGIN_OBJ): $(CONTENT_ANALYZER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
 # Rule to build dummy_plugin.so from its object file
 $(DUMMY_PLUGIN_SO): $(DUMMY_PLUGIN_OBJ)
 	@mkdir -p $(@D)
@@ -389,6 +417,19 @@ $(AVX512_PLUGIN_SO): $(AVX512_PLUGIN_OBJ)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(AVX_CFLAGS) -shared $^ -o $@ $(LDFLAGS)
 	@echo "Built AVX-512 plugin: $@"
+
+# Rule to build ml_classifier.so from its object file
+$(ML_CLASSIFIER_PLUGIN_SO): $(ML_CLASSIFIER_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	# Future: May need to add specific ML library linking flags to LDFLAGS or here (e.g., -lonnxruntime, -ltensorflowlite_c)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build content_analyzer.so from its object file
+$(CONTENT_ANALYZER_PLUGIN_SO): $(CONTENT_ANALYZER_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
 
 # A more generic rule for plugins (if structure is consistent)
 # For example, if each plugin is in its own dir under $(PLUGIN_DIR)
