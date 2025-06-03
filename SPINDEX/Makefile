@@ -134,6 +134,14 @@ ZSTD_DECOMPRESSOR_PLUGIN_SRC = $(DECOMPRESSORS_PLUGIN_SRC_DIR)/zstd_decompressor
 ZSTD_DECOMPRESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/decompressors/zstd_decompressor.o
 ZSTD_DECOMPRESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/zstd_decompressor.so
 
+# Search Algorithm Plugin Base Directory
+SEARCH_ALGORITHMS_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/search_algorithms
+
+# AVX-512 Phrase Search Plugin
+AVX512_PLUGIN_SRC = $(SEARCH_ALGORITHMS_PLUGIN_SRC_DIR)/avx512_phrase_search.c
+AVX512_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/search_algorithms/avx512_phrase_search.o
+AVX512_PLUGIN_SO = $(PLUGIN_LIB_DIR)/avx512_phrase_search.so
+
 # Phony targets
 .PHONY: all clean plugins tests
 
@@ -181,6 +189,7 @@ $(TEST_ES_INDEXING_TARGET): $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS
 	cp $(PLUGIN_LIB_DIR)/zip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/gzip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/zstd_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/avx512_phrase_search.so $(TEST_PLUGINS_STAGING_DIR)/
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS) -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
 	@echo "Staged plugins for test in $(TEST_PLUGINS_STAGING_DIR)"
@@ -205,6 +214,7 @@ $(TEST_PIPELINE_TARGET): $(TEST_PIPELINE_SRC) $(TEST_PIPELINE_DEPS)
 	cp $(PLUGIN_LIB_DIR)/zip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/gzip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/zstd_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/
+	cp $(PLUGIN_LIB_DIR)/avx512_phrase_search.so $(TEST_PLUGINS_STAGING_DIR)/
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_PIPELINE_SRC) \
 		$(filter %.o,$^) -o $@ $(LDFLAGS) # Link only .o files from DEPS, not .so
 	@echo "Built test program: $@"
@@ -229,7 +239,8 @@ $(TEST_PLUGIN_LOADER_TARGET): $(TEST_PLUGIN_LOADER_SRC) $(TEST_PLUGIN_LOADER_DEP
 # --- Plugin Rules ---
 plugins: $(DUMMY_PLUGIN_SO) $(JSON_PREPROCESSOR_PLUGIN_SO) $(JSON_PARSER_PLUGIN_SO) $(ELASTICSEARCH_INDEXER_PLUGIN_SO) \
          $(TXT_PREPROCESSOR_PLUGIN_SO) $(TXT_PARSER_PLUGIN_SO) $(CSV_PREPROCESSOR_PLUGIN_SO) $(CSV_PARSER_PLUGIN_SO) \
-         $(ZIP_DECOMPRESSOR_PLUGIN_SO) $(GZIP_DECOMPRESSOR_PLUGIN_SO) $(ZSTD_DECOMPRESSOR_PLUGIN_SO)
+         $(ZIP_DECOMPRESSOR_PLUGIN_SO) $(GZIP_DECOMPRESSOR_PLUGIN_SO) $(ZSTD_DECOMPRESSOR_PLUGIN_SO) \
+         $(AVX512_PLUGIN_SO)
 	@echo "All specified plugins built."
 
 # Rule for dummy_plugin object file
@@ -298,6 +309,14 @@ $(ZSTD_DECOMPRESSOR_PLUGIN_OBJ): $(ZSTD_DECOMPRESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
 	@echo "Compiled plugin object: $@"
 
+# Rule for avx512_phrase_search object file
+# Requires specific CFLAGS for AVX-512
+AVX_CFLAGS = -mavx512f -mavx512bw # Add other AVX-512 flags if needed by the C code
+$(AVX512_PLUGIN_OBJ): $(AVX512_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/hardware_detection.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(AVX_CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled AVX-512 plugin object: $@"
+
 # Rule to build dummy_plugin.so from its object file
 $(DUMMY_PLUGIN_SO): $(DUMMY_PLUGIN_OBJ)
 	@mkdir -p $(@D)
@@ -364,6 +383,12 @@ $(ZSTD_DECOMPRESSOR_PLUGIN_SO): $(ZSTD_DECOMPRESSOR_PLUGIN_OBJ)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS) -lzstd
 	@echo "Built plugin (linked with -lzstd): $@"
+
+# Rule to build avx512_phrase_search.so from its object file
+$(AVX512_PLUGIN_SO): $(AVX512_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(AVX_CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built AVX-512 plugin: $@"
 
 # A more generic rule for plugins (if structure is consistent)
 # For example, if each plugin is in its own dir under $(PLUGIN_DIR)

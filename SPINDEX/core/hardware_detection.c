@@ -30,6 +30,10 @@ void init_cpu_features(CpuFeatures *features) {
     features->has_sse2 = false;
     features->has_avx = false;
     features->has_avx2 = false;
+    features->has_avx512f = false;
+    features->has_avx512dq = false;
+    features->has_avx512bw = false;
+    features->has_avx512vl = false;
     features->flags_line[0] = '\0';
 }
 
@@ -85,6 +89,10 @@ int detect_cpu_features(CpuFeatures *features) {
                 features->has_sse2 = check_flag(features->flags_line, "sse2");
                 features->has_avx = check_flag(features->flags_line, "avx");
                 features->has_avx2 = check_flag(features->flags_line, "avx2");
+                features->has_avx512f = check_flag(features->flags_line, "avx512f");
+                features->has_avx512dq = check_flag(features->flags_line, "avx512dq");
+                features->has_avx512bw = check_flag(features->flags_line, "avx512bw");
+                features->has_avx512vl = check_flag(features->flags_line, "avx512vl");
                 // Add more checks here if needed
             }
             flags_line_processed = true; // Process flags only from the first core entry
@@ -128,6 +136,10 @@ void print_cpu_features(const CpuFeatures *features) {
     printf("SSE2 Support:    %s\n", features->has_sse2 ? "Yes" : "No");
     printf("AVX Support:     %s\n", features->has_avx ? "Yes" : "No");
     printf("AVX2 Support:    %s\n", features->has_avx2 ? "Yes" : "No");
+    printf("AVX-512F Support:  %s\n", features->has_avx512f ? "Yes" : "No");
+    printf("AVX-512DQ Support: %s\n", features->has_avx512dq ? "Yes" : "No");
+    printf("AVX-512BW Support: %s\n", features->has_avx512bw ? "Yes" : "No");
+    printf("AVX-512VL Support: %s\n", features->has_avx512vl ? "Yes" : "No");
     // printf("Raw Flags Line:  %s\n", features->flags_line); // Can be very long
     printf("--------------------\n");
 }

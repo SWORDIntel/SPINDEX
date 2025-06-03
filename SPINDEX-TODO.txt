@@ -193,9 +193,11 @@ These are significant undertakings.
     *   Files: `plugins/search_algorithms/avx512_phrase_search.c`
     *   Priority: High (if core feature) / Medium (if performance optimization can come later)
     *   Dependencies: [CORE-007]
+    *   Status: Structure Complete, Core Logic Pending. Makefile updated.
 2.  **Task: [ES-003] Integrate AVX-512 Search with Elasticsearch Queries**
     *   Description: Design how SPINDEX's AVX-512 search interacts with or enhances Elasticsearch vector search. This might involve custom ES plugins or specific query formations.
     *   Priority: Medium
+    *   Status: Design Complete. See `docs/avx_elasticsearch_integration_design.md`.
 3.  **Task: [ML-001] Define Machine Learning Interface (`ml_interface.h`)**
     *   Description: Specify C interfaces for loading ML models and performing inference (classification).
     *   Files: `include/ml_interface.h`
@@ -213,6 +215,7 @@ These are significant undertakings.
     *   Priority: Medium
 7.  **Task: [BUILD-006] Extend Makefile for AVX & ML Plugins**
     *   Priority: Medium
+    *   Status: AVX plugin build rules complete. ML plugin rules pending.
 
 **Phase 7: Optimizations, Security, and Final Touches**
 
@@ -447,9 +450,11 @@ Status: COMPLETE
     *   Files: `plugins/search_algorithms/avx512_phrase_search.c`
     *   Priority: High (if core feature) / Medium
     *   Dependencies: [CORE-007]
+    *   Status: Structure Complete, Core Logic Pending. Makefile updated.
 3.  **Task: [BUILD-006B] Extend Makefile for AVX Plugin**
     *   Files: `Makefile`
     *   Priority: Medium
+    *   Status: COMPLETE (as part of overall Makefile updates for AVX plugin)
 
 ---
 
@@ -464,6 +469,7 @@ Status: COMPLETE
 2.  **Task: [ES-003] Integrate AVX-512 Search with Elasticsearch Queries (Design & Stubs)**
     *   Description: Plan how SPINDEX's AVX-512 search interacts with or enhances Elasticsearch vector search.
     *   Priority: Medium
+    *   Status: Design Complete. See `docs/avx_elasticsearch_integration_design.md`. (Note: This is a duplicate of Phase 6 ES-003, status updated here too)
 3.  **Task: [SEC-001] Implement Stubs for Security Analysis Plugins (`security/`)**
     *   Description: Create basic structures for plugins like `hash_separator.so`, `password_analyzer.so`.
     *   Priority: Low / Medium
