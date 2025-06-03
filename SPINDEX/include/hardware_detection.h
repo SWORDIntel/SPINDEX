@@ -14,6 +14,10 @@ typedef struct {
     bool has_sse2;
     bool has_avx;
     bool has_avx2;
+    bool has_avx512f;    // AVX-512 Foundation
+    bool has_avx512dq;   // AVX-512 Doubleword and Quadword Instructions
+    bool has_avx512bw;   // AVX-512 Byte and Word Instructions
+    bool has_avx512vl;   // AVX-512 Vector Length Extensions
     // Add more features as needed, e.g.:
     // bool has_neon; // For ARM
     // bool has_aes_ni;
