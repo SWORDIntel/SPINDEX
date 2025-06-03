@@ -257,12 +257,11 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
     // --- End of Decompression Logic ---
     // current_chunk now holds either original_chunk (if no compression/decompressor) or decompressed_chunk
 
-    // --- Start of ML Classifier Invocation ---
+        // --- Start of ML Classifier Invocation ---
     SpindexPlugin *ml_classifier = find_plugin_by_name("ML Content Classifier", pipeline->all_loaded_plugins, pipeline->num_all_plugins);
     if (ml_classifier && ml_classifier->process_data && current_chunk) {
         LOG_INFO("Invoking ML Content Classifier for file %s", file_path);
         ProcessedDataChunk *chunk_after_ml_classification = ml_classifier->process_data(current_chunk);
-
         if (chunk_after_ml_classification) {
             LOG_INFO("ML Content Classifier completed. Output chunk (type %d) length: %zu",
                      chunk_after_ml_classification->data_type, chunk_after_ml_classification->length);
@@ -279,29 +278,10 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
     }
     // --- End of ML Classifier Invocation ---
     // current_chunk now holds output from ML Classifier, or data from before it.
-
     // --- Start of Heuristic Content Analyzer Invocation ---
     SpindexPlugin *heuristic_analyzer = find_plugin_by_name("Heuristic Content Analyzer", pipeline->all_loaded_plugins, pipeline->num_all_plugins);
-    if (heuristic_analyzer && heuristic_analyzer->process_data && current_chunk) {
-        LOG_INFO("Invoking Heuristic Content Analyzer for file %s", file_path);
-        ProcessedDataChunk *chunk_after_heuristic_analysis = heuristic_analyzer->process_data(current_chunk);
-
-        if (chunk_after_heuristic_analysis) {
-            LOG_INFO("Heuristic Content Analyzer completed. Output chunk (type %d) length: %zu",
-                     chunk_after_heuristic_analysis->data_type, chunk_after_heuristic_analysis->length);
-            if (current_chunk != chunk_after_heuristic_analysis) {
-                free_processed_data_chunk(current_chunk);
-            }
-            current_chunk = chunk_after_heuristic_analysis;
-        } else {
-            LOG_WARN("Heuristic Content Analyzer plugin failed or returned NULL for %s. Proceeding with previous data.", file_path);
-            // current_chunk remains as it was before this plugin
-        }
-    } else if (current_chunk) { // Only log if current_chunk is valid but plugin not found/run
-        LOG_DEBUG("Heuristic Content Analyzer plugin not found or not configured to run.");
-    }
-    // --- End of Heuristic Content Analyzer Invocation ---
-    // current_chunk now holds output from Heuristic Analyzer, or data from before it.
+    if (heuristic_analyzer*
+
 
     // Re-check logic for unsupported extension *after* potential decompression
     // The preproc_name and parser_name are determined by the original extension.
