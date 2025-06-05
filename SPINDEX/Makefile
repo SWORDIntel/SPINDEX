@@ -154,6 +154,78 @@ CONTENT_ANALYZER_PLUGIN_SRC = $(CONTENT_ANALYZER_PLUGIN_SRC_DIR)/content_analyze
 CONTENT_ANALYZER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/analyzers/content_analyzer.o
 CONTENT_ANALYZER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/content_analyzer.so
 
+# DOC Parser Plugin
+DOC_PARSER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/parsers
+DOC_PARSER_PLUGIN_SRC = $(DOC_PARSER_PLUGIN_SRC_DIR)/doc_parser.c
+DOC_PARSER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/parsers/doc_parser.o
+DOC_PARSER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/doc_parser.so
+
+# DOC Preprocessor Plugin
+DOC_PREPROCESSOR_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/preprocessors
+DOC_PREPROCESSOR_PLUGIN_SRC = $(DOC_PREPROCESSOR_PLUGIN_SRC_DIR)/doc_preprocessor.c
+DOC_PREPROCESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/preprocessors/doc_preprocessor.o
+DOC_PREPROCESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/doc_preprocessor.so
+
+# XLS Parser Plugin
+XLS_PARSER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/parsers
+XLS_PARSER_PLUGIN_SRC = $(XLS_PARSER_PLUGIN_SRC_DIR)/xls_parser.c
+XLS_PARSER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/parsers/xls_parser.o
+XLS_PARSER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/xls_parser.so
+
+# XLS Preprocessor Plugin
+XLS_PREPROCESSOR_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/preprocessors
+XLS_PREPROCESSOR_PLUGIN_SRC = $(XLS_PREPROCESSOR_PLUGIN_SRC_DIR)/xls_preprocessor.c
+XLS_PREPROCESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/preprocessors/xls_preprocessor.o
+XLS_PREPROCESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/xls_preprocessor.so
+
+# PDF Parser Plugin
+PDF_PARSER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/parsers
+PDF_PARSER_PLUGIN_SRC = $(PDF_PARSER_PLUGIN_SRC_DIR)/pdf_parser.c
+PDF_PARSER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/parsers/pdf_parser.o
+PDF_PARSER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/pdf_parser.so
+
+# PDF Preprocessor Plugin
+PDF_PREPROCESSOR_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/preprocessors
+PDF_PREPROCESSOR_PLUGIN_SRC = $(PDF_PREPROCESSOR_PLUGIN_SRC_DIR)/pdf_preprocessor.c
+PDF_PREPROCESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/preprocessors/pdf_preprocessor.o
+PDF_PREPROCESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/pdf_preprocessor.so
+
+# RTF Parser Plugin
+RTF_PARSER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/parsers
+RTF_PARSER_PLUGIN_SRC = $(RTF_PARSER_PLUGIN_SRC_DIR)/rtf_parser.c
+RTF_PARSER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/parsers/rtf_parser.o
+RTF_PARSER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/rtf_parser.so
+
+# RTF Preprocessor Plugin
+RTF_PREPROCESSOR_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/preprocessors
+RTF_PREPROCESSOR_PLUGIN_SRC = $(RTF_PREPROCESSOR_PLUGIN_SRC_DIR)/rtf_preprocessor.c
+RTF_PREPROCESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/preprocessors/rtf_preprocessor.o
+RTF_PREPROCESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/rtf_preprocessor.so
+
+# DICOM Parser Plugin
+DIC_PARSER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/parsers
+DIC_PARSER_PLUGIN_SRC = $(DIC_PARSER_PLUGIN_SRC_DIR)/dic_parser.c
+DIC_PARSER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/parsers/dic_parser.o
+DIC_PARSER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/dic_parser.so
+
+# DICOM Preprocessor Plugin
+DIC_PREPROCESSOR_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/preprocessors
+DIC_PREPROCESSOR_PLUGIN_SRC = $(DIC_PREPROCESSOR_PLUGIN_SRC_DIR)/dic_preprocessor.c
+DIC_PREPROCESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/preprocessors/dic_preprocessor.o
+DIC_PREPROCESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/dic_preprocessor.so
+
+# SQLite Parser Plugin
+SQLITE_PARSER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/parsers
+SQLITE_PARSER_PLUGIN_SRC = $(SQLITE_PARSER_PLUGIN_SRC_DIR)/sqlite_parser.c
+SQLITE_PARSER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/parsers/sqlite_parser.o
+SQLITE_PARSER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/sqlite_parser.so
+
+# SQLite Preprocessor Plugin
+SQLITE_PREPROCESSOR_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/preprocessors
+SQLITE_PREPROCESSOR_PLUGIN_SRC = $(SQLITE_PREPROCESSOR_PLUGIN_SRC_DIR)/sqlite_preprocessor.c
+SQLITE_PREPROCESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/preprocessors/sqlite_preprocessor.o
+SQLITE_PREPROCESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so
+
 # Phony targets
 .PHONY: all clean plugins tests
 
@@ -204,6 +276,48 @@ $(TEST_ES_INDEXING_TARGET): $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS
 	cp $(PLUGIN_LIB_DIR)/avx512_phrase_search.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/ml_classifier.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/content_analyzer.so $(TEST_PLUGINS_STAGING_DIR)/
+	# Add new DOC plugins to staging if they exist
+	if [ -f $(PLUGIN_LIB_DIR)/doc_parser.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/doc_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	if [ -f $(PLUGIN_LIB_DIR)/doc_preprocessor.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/doc_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	# Add new XLS plugins to staging if they exist
+	if [ -f $(PLUGIN_LIB_DIR)/xls_parser.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/xls_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	if [ -f $(PLUGIN_LIB_DIR)/xls_preprocessor.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/xls_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	# Add new PDF plugins to staging if they exist
+	if [ -f $(PLUGIN_LIB_DIR)/pdf_parser.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/pdf_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	if [ -f $(PLUGIN_LIB_DIR)/pdf_preprocessor.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/pdf_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	# Add new RTF plugins to staging if they exist
+	if [ -f $(PLUGIN_LIB_DIR)/rtf_parser.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/rtf_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	if [ -f $(PLUGIN_LIB_DIR)/rtf_preprocessor.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/rtf_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	# Add new DIC plugins to staging if they exist
+	if [ -f $(PLUGIN_LIB_DIR)/dic_parser.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/dic_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	if [ -f $(PLUGIN_LIB_DIR)/dic_preprocessor.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/dic_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	# Add new SQLITE plugins to staging if they exist
+	if [ -f $(PLUGIN_LIB_DIR)/sqlite_parser.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/sqlite_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	if [ -f $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS) -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
 	@echo "Staged plugins for test in $(TEST_PLUGINS_STAGING_DIR)"
@@ -231,6 +345,48 @@ $(TEST_PIPELINE_TARGET): $(TEST_PIPELINE_SRC) $(TEST_PIPELINE_DEPS)
 	cp $(PLUGIN_LIB_DIR)/avx512_phrase_search.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/ml_classifier.so $(TEST_PLUGINS_STAGING_DIR)/
 	cp $(PLUGIN_LIB_DIR)/content_analyzer.so $(TEST_PLUGINS_STAGING_DIR)/
+	# Add new DOC plugins to staging if they exist
+	if [ -f $(PLUGIN_LIB_DIR)/doc_parser.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/doc_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	if [ -f $(PLUGIN_LIB_DIR)/doc_preprocessor.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/doc_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	# Add new XLS plugins to staging if they exist
+	if [ -f $(PLUGIN_LIB_DIR)/xls_parser.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/xls_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	if [ -f $(PLUGIN_LIB_DIR)/xls_preprocessor.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/xls_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	# Add new PDF plugins to staging if they exist
+	if [ -f $(PLUGIN_LIB_DIR)/pdf_parser.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/pdf_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	if [ -f $(PLUGIN_LIB_DIR)/pdf_preprocessor.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/pdf_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	# Add new RTF plugins to staging if they exist
+	if [ -f $(PLUGIN_LIB_DIR)/rtf_parser.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/rtf_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	if [ -f $(PLUGIN_LIB_DIR)/rtf_preprocessor.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/rtf_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	# Add new DIC plugins to staging if they exist
+	if [ -f $(PLUGIN_LIB_DIR)/dic_parser.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/dic_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	if [ -f $(PLUGIN_LIB_DIR)/dic_preprocessor.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/dic_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	# Add new SQLITE plugins to staging if they exist
+	if [ -f $(PLUGIN_LIB_DIR)/sqlite_parser.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/sqlite_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
+	if [ -f $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so ]; then \
+		cp $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; \
+	fi
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_PIPELINE_SRC) \
 		$(filter %.o,$^) -o $@ $(LDFLAGS) # Link only .o files from DEPS, not .so
 	@echo "Built test program: $@"
@@ -255,8 +411,13 @@ $(TEST_PLUGIN_LOADER_TARGET): $(TEST_PLUGIN_LOADER_SRC) $(TEST_PLUGIN_LOADER_DEP
 # --- Plugin Rules ---
 plugins: $(DUMMY_PLUGIN_SO) $(JSON_PREPROCESSOR_PLUGIN_SO) $(JSON_PARSER_PLUGIN_SO) $(ELASTICSEARCH_INDEXER_PLUGIN_SO) \
          $(TXT_PREPROCESSOR_PLUGIN_SO) $(TXT_PARSER_PLUGIN_SO) $(CSV_PREPROCESSOR_PLUGIN_SO) $(CSV_PARSER_PLUGIN_SO) \
-         $(ZIP_DECOMPRESSOR_PLUGIN_SO) $(GZIP_DECOMPRESSOR_PLUGIN_SO) $(ZSTD_DECOMPRESSOR_PLUGIN_SO) \
-         $(AVX512_PLUGIN_SO) $(ML_CLASSIFIER_PLUGIN_SO) $(CONTENT_ANALYZER_PLUGIN_SO)
+         $(CONTENT_ANALYZER_PLUGIN_SO) \
+         $(DOC_PARSER_PLUGIN_SO) $(DOC_PREPROCESSOR_PLUGIN_SO) \
+         $(XLS_PARSER_PLUGIN_SO) $(XLS_PREPROCESSOR_PLUGIN_SO) \
+         $(PDF_PARSER_PLUGIN_SO) $(PDF_PREPROCESSOR_PLUGIN_SO) \
+         $(RTF_PARSER_PLUGIN_SO) $(RTF_PREPROCESSOR_PLUGIN_SO) \
+         $(DIC_PARSER_PLUGIN_SO) $(DIC_PREPROCESSOR_PLUGIN_SO) \
+         $(SQLITE_PARSER_PLUGIN_SO) $(SQLITE_PREPROCESSOR_PLUGIN_SO)
 	@echo "All specified plugins built."
 
 # Rule for dummy_plugin object file
@@ -345,6 +506,78 @@ $(CONTENT_ANALYZER_PLUGIN_OBJ): $(CONTENT_ANALYZER_PLUGIN_SRC) $(INCLUDE_DIR)/pl
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
 	@echo "Compiled plugin object: $@"
 
+# Rule for doc_parser object file
+$(DOC_PARSER_PLUGIN_OBJ): $(DOC_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for doc_preprocessor object file
+$(DOC_PREPROCESSOR_PLUGIN_OBJ): $(DOC_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for xls_parser object file
+$(XLS_PARSER_PLUGIN_OBJ): $(XLS_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for xls_preprocessor object file
+$(XLS_PREPROCESSOR_PLUGIN_OBJ): $(XLS_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for pdf_parser object file
+$(PDF_PARSER_PLUGIN_OBJ): $(PDF_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for pdf_preprocessor object file
+$(PDF_PREPROCESSOR_PLUGIN_OBJ): $(PDF_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for rtf_parser object file
+$(RTF_PARSER_PLUGIN_OBJ): $(RTF_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for rtf_preprocessor object file
+$(RTF_PREPROCESSOR_PLUGIN_OBJ): $(RTF_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for dic_parser object file
+$(DIC_PARSER_PLUGIN_OBJ): $(DIC_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for dic_preprocessor object file
+$(DIC_PREPROCESSOR_PLUGIN_OBJ): $(DIC_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for sqlite_parser object file
+$(SQLITE_PARSER_PLUGIN_OBJ): $(SQLITE_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
+# Rule for sqlite_preprocessor object file
+$(SQLITE_PREPROCESSOR_PLUGIN_OBJ): $(SQLITE_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+
 # Rule to build dummy_plugin.so from its object file
 $(DUMMY_PLUGIN_SO): $(DUMMY_PLUGIN_OBJ)
 	@mkdir -p $(@D)
@@ -427,6 +660,78 @@ $(ML_CLASSIFIER_PLUGIN_SO): $(ML_CLASSIFIER_PLUGIN_OBJ)
 
 # Rule to build content_analyzer.so from its object file
 $(CONTENT_ANALYZER_PLUGIN_SO): $(CONTENT_ANALYZER_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build doc_parser.so from its object file
+$(DOC_PARSER_PLUGIN_SO): $(DOC_PARSER_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build doc_preprocessor.so from its object file
+$(DOC_PREPROCESSOR_PLUGIN_SO): $(DOC_PREPROCESSOR_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build xls_parser.so from its object file
+$(XLS_PARSER_PLUGIN_SO): $(XLS_PARSER_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build xls_preprocessor.so from its object file
+$(XLS_PREPROCESSOR_PLUGIN_SO): $(XLS_PREPROCESSOR_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build pdf_parser.so from its object file
+$(PDF_PARSER_PLUGIN_SO): $(PDF_PARSER_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build pdf_preprocessor.so from its object file
+$(PDF_PREPROCESSOR_PLUGIN_SO): $(PDF_PREPROCESSOR_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build rtf_parser.so from its object file
+$(RTF_PARSER_PLUGIN_SO): $(RTF_PARSER_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build rtf_preprocessor.so from its object file
+$(RTF_PREPROCESSOR_PLUGIN_SO): $(RTF_PREPROCESSOR_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build dic_parser.so from its object file
+$(DIC_PARSER_PLUGIN_SO): $(DIC_PARSER_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build dic_preprocessor.so from its object file
+$(DIC_PREPROCESSOR_PLUGIN_SO): $(DIC_PREPROCESSOR_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build sqlite_parser.so from its object file
+$(SQLITE_PARSER_PLUGIN_SO): $(SQLITE_PARSER_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+
+# Rule to build sqlite_preprocessor.so from its object file
+$(SQLITE_PREPROCESSOR_PLUGIN_SO): $(SQLITE_PREPROCESSOR_PLUGIN_OBJ)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
 	@echo "Built plugin: $@"
