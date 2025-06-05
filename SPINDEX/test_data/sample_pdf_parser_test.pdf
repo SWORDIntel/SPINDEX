@@ -1,0 +1,3 @@
+This is a plain text file named .pdf for testing pdftotext error handling.
+It is not a valid PDF document.
+pdftotext should ideally report an error for this file.

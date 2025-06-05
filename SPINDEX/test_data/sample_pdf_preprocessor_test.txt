@@ -1,0 +1,3 @@
+pdf text with   extra spaces
+  another line with tabs		too
+ending line.

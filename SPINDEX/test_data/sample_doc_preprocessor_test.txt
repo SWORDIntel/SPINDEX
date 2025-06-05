@@ -1,0 +1,3 @@
+leading and trailing spaces
+  multiple   spaces  between  words
+  end.
