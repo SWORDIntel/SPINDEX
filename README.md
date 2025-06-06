@@ -1,6 +1,3 @@
-Apologies for the oversight. Here's the updated project brief with all document types reflected in the processing modules, including `json_preprocessor.c` and other preprocessor modules for the various file types.
-
----
 
 # Project Brief: SPINDEX - High-Performance Modular Data Indexing Tool in C with Advanced Data Ingestion and Machine Learning Integration
 
