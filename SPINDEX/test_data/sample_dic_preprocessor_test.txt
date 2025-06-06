@@ -1,0 +1,2 @@
+dicom output with   irregular  spacing
+  another medical line		END

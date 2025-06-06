@@ -1,0 +1,3 @@
+rtf text with   extra spaces
+  another line with tabs		too
+final rtf line.

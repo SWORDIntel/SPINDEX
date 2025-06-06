@@ -1,15 +1,19 @@
-#define _GNU_SOURCE
+#define _GNU_SOURCE // For strdup, mkstemp
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
 
-#include "dic_parser.h" // Corresponds to the filename
+#include "dic_parser.h"
 #include "../../include/utils.h"
-#include "../../include/data_types.h" // For CHUNK_TYPE_RAW_BYTES
+#include "../../include/data_types.h" // For CHUNK_TYPE_TEXT_PARSED
 
-static const char* G_PLUGIN_NAME = "DICOMParser"; // Using DICOM for clarity
-static const char* G_PLUGIN_VERSION = "0.1.0-stub";
-static const char* G_PLUGIN_DESCRIPTION = "Parses DICOM files. (Stub Implementation)";
+static const char* G_PLUGIN_NAME = "DICOMParser";
+static const char* G_PLUGIN_VERSION = "0.2.0";
+static const char* G_PLUGIN_DESCRIPTION = "Parses DICOM files using external tool (dcm2txt).";
 
 void spindex_plugin_get_info(PluginInfo *info) {
     if (info) {
@@ -24,53 +28,142 @@ void spindex_plugin_get_info(PluginInfo *info) {
 }
 
 int spindex_plugin_init() {
-    LOG_INFO("[%s v%s] Initializing (stub)...", G_PLUGIN_NAME, G_PLUGIN_VERSION);
+    LOG_INFO("[%s v%s] Initializing...", G_PLUGIN_NAME, G_PLUGIN_VERSION);
     return 0;
 }
 
 void spindex_plugin_shutdown() {
-    LOG_INFO("[%s v%s] Shutting down (stub)...", G_PLUGIN_NAME, G_PLUGIN_VERSION);
+    LOG_INFO("[%s v%s] Shutting down...", G_PLUGIN_NAME, G_PLUGIN_VERSION);
 }
 
 ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk *input_chunk) {
-    LOG_INFO("[%s v%s] Processing data (stub)...", G_PLUGIN_NAME, G_PLUGIN_VERSION);
-    if (!input_chunk) {
-        LOG_ERROR("[%s] Input chunk is NULL.", G_PLUGIN_NAME);
+    LOG_INFO("[%s v%s] Processing data...", G_PLUGIN_NAME, G_PLUGIN_VERSION);
+    if (!input_chunk || !input_chunk->data || input_chunk->length == 0) {
+        LOG_ERROR("[%s] Input chunk is NULL, has no data, or length is zero.", G_PLUGIN_NAME);
         return NULL;
     }
-    LOG_INFO("[%s] Data is present, but this is a stub. No actual parsing will occur.", G_PLUGIN_NAME);
 
-    ProcessedDataChunk *output_chunk = (ProcessedDataChunk*)malloc(sizeof(ProcessedDataChunk));
+    char actual_input_path[] = "/tmp/spindex_dicom_in_XXXXXX"; // dcmtk tools often don't need .dcm suffix
+    char actual_output_path[] = "/tmp/spindex_dicom_out_XXXXXX";
+
+    int fd_input = -1;
+    FILE *fp_output_read = NULL;
+    ProcessedDataChunk *output_chunk = NULL;
+    char *output_buffer = NULL;
+    long output_buffer_size = 0;
+
+    fd_input = mkstemp(actual_input_path);
+    if (fd_input == -1) {
+        LOG_ERROR("[%s] Failed to create temporary input file '%s': %s", G_PLUGIN_NAME, actual_input_path, strerror(errno));
+        goto cleanup;
+    }
+    LOG_INFO("[%s] Created temporary input file: %s", G_PLUGIN_NAME, actual_input_path);
+
+    ssize_t bytes_written = write(fd_input, input_chunk->data, input_chunk->length);
+    close(fd_input);
+    fd_input = -1;
+
+    if (bytes_written != (ssize_t)input_chunk->length) {
+        LOG_ERROR("[%s] Failed to write all data to temporary input file '%s'. Expected %zu, wrote %zd", G_PLUGIN_NAME, actual_input_path, input_chunk->length, bytes_written);
+        goto cleanup;
+    }
+
+    int fd_out_dummy = mkstemp(actual_output_path);
+    if (fd_out_dummy == -1) {
+        LOG_ERROR("[%s] Failed to create temporary output file name with template '%s': %s", G_PLUGIN_NAME, actual_output_path, strerror(errno));
+        goto cleanup;
+    }
+    close(fd_out_dummy);
+    // No unlink here, dcm2txt will write to this path.
+
+    char command[1024];
+    // dcm2txt <dcmfile-in> <textfile-out>
+    snprintf(command, sizeof(command), "dcm2txt %s %s", actual_input_path, actual_output_path);
+
+    LOG_INFO("[%s] Executing command: %s", G_PLUGIN_NAME, command);
+    int ret = system(command);
+    if (ret != 0) {
+        // dcm2txt returns 0 on success, non-zero on error.
+        LOG_ERROR("[%s] Command execution failed with status %d. Command: %s", G_PLUGIN_NAME, ret, command);
+        goto cleanup;
+    }
+
+    fp_output_read = fopen(actual_output_path, "rb");
+    if (!fp_output_read) {
+        LOG_ERROR("[%s] Failed to open temporary output file for reading: '%s': %s", G_PLUGIN_NAME, actual_output_path, strerror(errno));
+        goto cleanup;
+    }
+
+    fseek(fp_output_read, 0, SEEK_END);
+    output_buffer_size = ftell(fp_output_read);
+     if (output_buffer_size < 0) {
+        LOG_ERROR("[%s] Failed to determine size of output file or file is empty: '%s'", G_PLUGIN_NAME, actual_output_path);
+        goto cleanup;
+    }
+    fseek(fp_output_read, 0, SEEK_SET);
+
+    if (output_buffer_size == 0) {
+        LOG_WARN("[%s] Output file is empty: %s", G_PLUGIN_NAME, actual_output_path);
+        output_buffer = NULL;
+    } else {
+        output_buffer = (char*)malloc(output_buffer_size + 1);
+        if (!output_buffer) {
+            LOG_ERROR("[%s] Failed to allocate memory for output buffer (%ld bytes).", G_PLUGIN_NAME, output_buffer_size);
+            goto cleanup;
+        }
+        size_t bytes_read_output = fread(output_buffer, 1, output_buffer_size, fp_output_read);
+        if (bytes_read_output != (size_t)output_buffer_size) {
+            LOG_ERROR("[%s] Failed to read all data from temporary output file. Expected %ld, read %zu", G_PLUGIN_NAME, output_buffer_size, bytes_read_output);
+            free(output_buffer);
+            output_buffer = NULL;
+            goto cleanup;
+        }
+        output_buffer[output_buffer_size] = '\0';
+    }
+
+    output_chunk = (ProcessedDataChunk*)malloc(sizeof(ProcessedDataChunk));
     if (!output_chunk) {
         LOG_ERROR("[%s] Failed to allocate memory for output chunk.", G_PLUGIN_NAME);
-        return NULL;
+        goto cleanup;
     }
-    memcpy(output_chunk, input_chunk, sizeof(ProcessedDataChunk));
+    memset(output_chunk, 0, sizeof(ProcessedDataChunk));
 
-    if (input_chunk->data && input_chunk->length > 0) {
-        output_chunk->data = malloc(input_chunk->length);
-        if (!output_chunk->data) {
-            LOG_ERROR("[%s] Failed to allocate memory for output data.", G_PLUGIN_NAME);
-            free(output_chunk);
-            return NULL;
-        }
-        memcpy(output_chunk->data, input_chunk->data, input_chunk->length);
-    } else {
-        output_chunk->data = NULL;
-    }
+    output_chunk->data = (unsigned char*)output_buffer;
+    output_chunk->length = output_buffer_size;
+    output_chunk->data_type = CHUNK_TYPE_TEXT_PARSED;
 
-    char source_buf[512];
+    char source_id_buf[512];
     if (input_chunk->source_id) {
-        snprintf(source_buf, sizeof(source_buf), "%s_stubbed_by_%s", input_chunk->source_id, G_PLUGIN_NAME);
+        snprintf(source_id_buf, sizeof(source_id_buf), "%s_parsed_dicom", input_chunk->source_id);
     } else {
-        snprintf(source_buf, sizeof(source_buf), "unknown_stubbed_by_%s", G_PLUGIN_NAME);
+        snprintf(source_id_buf, sizeof(source_id_buf), "unknown_parsed_dicom_by_%s", G_PLUGIN_NAME);
     }
-    output_chunk->source_id = strdup(source_buf);
-     if (!output_chunk->source_id) {
-         LOG_WARN("[%s] Failed to allocate memory for output source_id string.", G_PLUGIN_NAME);
-     }
+    output_chunk->source_id = strdup(source_id_buf);
+    if (!output_chunk->source_id) {
+        LOG_WARN("[%s] Failed to allocate memory for output source_id string.", G_PLUGIN_NAME);
+    }
 
-    output_chunk->data_type = CHUNK_TYPE_RAW_BYTES;
-    LOG_INFO("[%s] Returning a copy of the input chunk (stub behavior).", G_PLUGIN_NAME);
+    LOG_INFO("[%s] Successfully parsed DICOM data. Output size: %ld bytes.", G_PLUGIN_NAME, output_buffer_size);
+    output_buffer = NULL;
+
+cleanup:
+    if (fd_input != -1) close(fd_input);
+    if (fp_output_read) fclose(fp_output_read);
+
+    if (actual_input_path[0] != '\0' && access(actual_input_path, F_OK) != -1) {
+        LOG_INFO("[%s] Deleting temporary input file: %s", G_PLUGIN_NAME, actual_input_path);
+        unlink(actual_input_path);
+    }
+    if (actual_output_path[0] != '\0' && access(actual_output_path, F_OK) != -1) {
+        LOG_INFO("[%s] Deleting temporary output file: %s", G_PLUGIN_NAME, actual_output_path);
+        unlink(actual_output_path);
+    }
+    if (output_buffer) {
+        free(output_buffer);
+    }
+
+    if (!output_chunk) {
+        LOG_ERROR("[%s] Processing failed, returning NULL.", G_PLUGIN_NAME);
+    }
     return output_chunk;
 }
