@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h> // For uint64_t
 #include <immintrin.h> // For AVX-512 intrinsics (though not used in process_data yet)
 
 // Adjust paths as necessary
