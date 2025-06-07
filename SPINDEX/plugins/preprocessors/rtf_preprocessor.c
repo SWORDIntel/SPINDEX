@@ -1,15 +1,17 @@
-#define _GNU_SOURCE
+#define _GNU_SOURCE // For strdup if used in future
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <ctype.h> // For isspace
 
 #include "rtf_preprocessor.h"
 #include "../../include/utils.h"
-#include "../../include/data_types.h" // For CHUNK_TYPE_RAW_BYTES
+#include "../../include/data_types.h"
 
 static const char* G_PLUGIN_NAME = "RTFPreprocessor";
-static const char* G_PLUGIN_VERSION = "0.1.0-stub";
-static const char* G_PLUGIN_DESCRIPTION = "Preprocesses RTF files. (Stub Implementation)";
+static const char* G_PLUGIN_VERSION = "0.2.0";
+static const char* G_PLUGIN_DESCRIPTION = "Preprocesses text extracted from RTF files.";
 
 void spindex_plugin_get_info(PluginInfo *info) {
     if (info) {
@@ -24,12 +26,12 @@ void spindex_plugin_get_info(PluginInfo *info) {
 }
 
 int spindex_plugin_init() {
-    LOG_INFO("[%s v%s] Initializing (stub)...", G_PLUGIN_NAME, G_PLUGIN_VERSION);
+    LOG_INFO("[%s v%s] Initializing...", G_PLUGIN_NAME, G_PLUGIN_VERSION);
     return 0;
 }
 
 void spindex_plugin_shutdown() {
-    LOG_INFO("[%s v%s] Shutting down (stub)...", G_PLUGIN_NAME, G_PLUGIN_VERSION);
+    LOG_INFO("[%s v%s] Shutting down...", G_PLUGIN_NAME, G_PLUGIN_VERSION);
 }
 
 ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk *input_chunk) {
@@ -38,39 +40,90 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk *input_
         LOG_ERROR("[%s] Input chunk is NULL.", G_PLUGIN_NAME);
         return NULL;
     }
-    LOG_INFO("[%s] Data is present, but this is a stub. No actual preprocessing will occur.", G_PLUGIN_NAME);
+
+    if (!input_chunk || !input_chunk->data || input_chunk->length == 0) {
+        LOG_ERROR("[%s] Input chunk is NULL, has no data, or length is zero.", G_PLUGIN_NAME);
+        return NULL;
+    }
+
+    if (input_chunk->data_type != CHUNK_TYPE_TEXT_PARSED) {
+        LOG_ERROR("[%s] Expected CHUNK_TYPE_TEXT_PARSED, but received type %d.", G_PLUGIN_NAME, input_chunk->data_type);
+        return NULL;
+    }
+
+    char *original_text = (char*)input_chunk->data;
+    size_t original_length = input_chunk->length;
+
+    char *cleaned_text = (char*)malloc(original_length + 1);
+    if (!cleaned_text) {
+        LOG_ERROR("[%s] Failed to allocate memory for cleaned text.", G_PLUGIN_NAME);
+        return NULL;
+    }
+
+    size_t current_cleaned_idx = 0;
+    int in_whitespace_sequence = 0;
+
+    size_t start_idx = 0;
+    while (start_idx < original_length && isspace((unsigned char)original_text[start_idx])) {
+        start_idx++;
+    }
+
+    for (size_t i = start_idx; i < original_length; ++i) {
+        if (original_text[i] == '\n') {
+            if (current_cleaned_idx > 0 && cleaned_text[current_cleaned_idx - 1] == ' ') {
+                 current_cleaned_idx--;
+            }
+            cleaned_text[current_cleaned_idx++] = '\n';
+            in_whitespace_sequence = 1;
+        } else if (isspace((unsigned char)original_text[i])) {
+            if (!in_whitespace_sequence) {
+                cleaned_text[current_cleaned_idx++] = ' ';
+                in_whitespace_sequence = 1;
+            }
+        } else {
+            cleaned_text[current_cleaned_idx++] = original_text[i];
+            in_whitespace_sequence = 0;
+        }
+    }
+
+    while (current_cleaned_idx > 0) {
+        if (cleaned_text[current_cleaned_idx - 1] == ' ') {
+            current_cleaned_idx--;
+        } else if (cleaned_text[current_cleaned_idx - 1] == '\n') {
+            break;
+        } else {
+            break;
+        }
+    }
+    if (current_cleaned_idx > 0 && cleaned_text[current_cleaned_idx - 1] == '\n') {
+        current_cleaned_idx--;
+    }
+
+    cleaned_text[current_cleaned_idx] = '\0';
 
     ProcessedDataChunk *output_chunk = (ProcessedDataChunk*)malloc(sizeof(ProcessedDataChunk));
     if (!output_chunk) {
         LOG_ERROR("[%s] Failed to allocate memory for output chunk.", G_PLUGIN_NAME);
+        free(cleaned_text);
         return NULL;
     }
-    memcpy(output_chunk, input_chunk, sizeof(ProcessedDataChunk));
+    memset(output_chunk, 0, sizeof(ProcessedDataChunk));
 
-    if (input_chunk->data && input_chunk->length > 0) {
-        output_chunk->data = malloc(input_chunk->length);
-        if (!output_chunk->data) {
-            LOG_ERROR("[%s] Failed to allocate memory for output data.", G_PLUGIN_NAME);
-            free(output_chunk);
-            return NULL;
-        }
-        memcpy(output_chunk->data, input_chunk->data, input_chunk->length);
-    } else {
-        output_chunk->data = NULL;
-    }
+    output_chunk->data = (unsigned char*)cleaned_text;
+    output_chunk->length = current_cleaned_idx;
+    output_chunk->data_type = CHUNK_TYPE_TEXT_PARSED;
 
-    char source_buf[512];
+    char source_id_buf[512];
     if (input_chunk->source_id) {
-        snprintf(source_buf, sizeof(source_buf), "%s_stubbed_by_%s", input_chunk->source_id, G_PLUGIN_NAME);
+        snprintf(source_id_buf, sizeof(source_id_buf), "%s_preprocessed_rtf", input_chunk->source_id);
     } else {
-        snprintf(source_buf, sizeof(source_buf), "unknown_stubbed_by_%s", G_PLUGIN_NAME);
+        snprintf(source_id_buf, sizeof(source_id_buf), "unknown_preprocessed_rtf_by_%s", G_PLUGIN_NAME);
     }
-    output_chunk->source_id = strdup(source_buf);
+    output_chunk->source_id = strdup(source_id_buf);
     if (!output_chunk->source_id) {
-         LOG_WARN("[%s] Failed to allocate memory for output source_id string.", G_PLUGIN_NAME);
+        LOG_WARN("[%s] Failed to allocate memory for output source_id string. Continuing without it.", G_PLUGIN_NAME);
     }
 
-    output_chunk->data_type = CHUNK_TYPE_RAW_BYTES;
-    LOG_INFO("[%s] Returning a copy of the input chunk (stub behavior).", G_PLUGIN_NAME);
+    LOG_INFO("[%s] Successfully preprocessed text. Original length: %zu, Cleaned length: %zu", G_PLUGIN_NAME, original_length, output_chunk->length);
     return output_chunk;
 }

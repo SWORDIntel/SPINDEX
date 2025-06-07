@@ -1,0 +1,4 @@
+Plain text for DICOM parser test. This is not a real DICOM file.
+(0008,0060) CS [CT]
+(0010,0010) PN [Patient Name]
+dcm2txt should report an error or produce minimal output.
