@@ -10,6 +10,81 @@ INCLUDE_DIRS = -I./include -I./core
 # LDFLAGS for linking
 LDFLAGS = -ldl -rdynamic -lcurl -lpthread # For dlopen, dlsym, plugins, libcurl, and pthreads
 
+# Attempt to find OpenVINO
+OPENVINO_DIR ?= $(INTEL_OPENVINO_DIR)
+ifeq ($(OPENVINO_DIR),)
+  # Try a common default path if INTEL_OPENVINO_DIR is not set
+  OPENVINO_DIR_DEFAULT := /opt/intel/openvino_2023 # Or another common path
+  ifeq ($(wildcard $(OPENVINO_DIR_DEFAULT)/setupvars.sh),)
+    OPENVINO_DIR_DEFAULT2 := /opt/intel/openvino
+    ifeq ($(wildcard $(OPENVINO_DIR_DEFAULT2)/setupvars.sh),)
+      $(warning OpenVINO directory not found via INTEL_OPENVINO_DIR or default paths. OpenVINO plugin may fail to build.)
+      OPENVINO_FOUND := 0
+    else
+      OPENVINO_DIR := $(OPENVINO_DIR_DEFAULT2)
+      OPENVINO_FOUND := 1
+    endif
+  else
+    OPENVINO_DIR := $(OPENVINO_DIR_DEFAULT)
+    OPENVINO_FOUND := 1
+  endif
+else
+  OPENVINO_FOUND := 1
+endif
+
+OPENVINO_INCLUDES :=
+OPENVINO_LIBS :=
+OPENVINO_RPATH :=
+
+ifeq ($(OPENVINO_FOUND),1)
+  # Adjust these paths based on actual OpenVINO structure
+  # Common path for OpenVINO 2022.1+ for runtime includes
+  OPENVINO_INCLUDE_PATH_RUNTIME := $(OPENVINO_DIR)/runtime/include
+  # Fallback for older OpenVINO versions or different structures for dev tools
+  OPENVINO_INCLUDE_PATH_DEV := $(OPENVINO_DIR)/development_tools/inference_engine/include
+
+  ifeq ($(wildcard $(OPENVINO_INCLUDE_PATH_RUNTIME)/openvino/c/openvino.h),)
+    ifeq ($(wildcard $(OPENVINO_INCLUDE_PATH_DEV)/openvino/c/openvino.h),) # Check for older C API path
+        ifeq ($(wildcard $(OPENVINO_INCLUDE_PATH_DEV)/inference_engine.hpp),) # Check for older C++ API path as a proxy
+            $(warning Could not find OpenVINO headers in expected locations: $(OPENVINO_INCLUDE_PATH_RUNTIME) or $(OPENVINO_INCLUDE_PATH_DEV))
+        else
+            OPENVINO_INCLUDES := -I$(OPENVINO_INCLUDE_PATH_DEV)
+        endif
+    else # Found C API in dev path
+        OPENVINO_INCLUDES := -I$(OPENVINO_INCLUDE_PATH_DEV)
+    endif
+  else # Found C API in runtime path
+    OPENVINO_INCLUDES := -I$(OPENVINO_INCLUDE_PATH_RUNTIME)
+  endif
+
+  # Common path for OpenVINO 2022.1+ for runtime libraries (adjust intel64 as needed)
+  OPENVINO_LIB_PATH_RUNTIME := $(OPENVINO_DIR)/runtime/lib/intel64
+  # Fallback for older OpenVINO versions
+  OPENVINO_LIB_PATH_DEV := $(OPENVINO_DIR)/deployment_tools/inference_engine/lib/intel64
+
+  # Check for actual library files to be more robust
+  OPENVINO_LIB_PATH_ACTUAL :=
+  ifeq ($(wildcard $(OPENVINO_LIB_PATH_RUNTIME)/libopenvino_c.so),) # Or .dylib on macOS
+    ifeq ($(wildcard $(OPENVINO_LIB_PATH_DEV)/libopenvino_c.so),)
+        $(warning Could not find OpenVINO libraries in expected locations: $(OPENVINO_LIB_PATH_RUNTIME) or $(OPENVINO_LIB_PATH_DEV))
+    else
+        OPENVINO_LIB_PATH_ACTUAL := $(OPENVINO_LIB_PATH_DEV)
+    endif
+  else
+    OPENVINO_LIB_PATH_ACTUAL := $(OPENVINO_LIB_PATH_RUNTIME)
+  endif
+
+  ifneq ($(OPENVINO_LIB_PATH_ACTUAL),)
+    OPENVINO_LIBS := -L$(OPENVINO_LIB_PATH_ACTUAL) -lopenvino_c -lopenvino
+    # Ensure rpath is set if necessary, or that LD_LIBRARY_PATH is used at runtime
+    OPENVINO_RPATH := -Wl,-rpath,$(OPENVINO_LIB_PATH_ACTUAL)
+  endif
+
+  # Add to general CFLAGS and LDFLAGS
+  CFLAGS += $(OPENVINO_INCLUDES)
+  LDFLAGS += $(OPENVINO_LIBS) $(OPENVINO_RPATH)
+endif
+
 # Directories
 CORE_DIR = ./core
 INCLUDE_DIR = ./include
@@ -230,6 +305,11 @@ SQLITE_PREPROCESSOR_PLUGIN_SRC = $(SQLITE_PREPROCESSOR_PLUGIN_SRC_DIR)/sqlite_pr
 SQLITE_PREPROCESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/preprocessors/sqlite_preprocessor.o
 SQLITE_PREPROCESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so
 
+OPENVINO_CLASSIFIER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/classifiers
+OPENVINO_CLASSIFIER_PLUGIN_SRC = $(OPENVINO_CLASSIFIER_PLUGIN_SRC_DIR)/openvino_classifier.c
+OPENVINO_CLASSIFIER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/classifiers/openvino_classifier.o
+OPENVINO_CLASSIFIER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/openvino_classifier.so
+
 # Disabled Plugin Definitions
 DECOMPRESSORS_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/decompressors
 # ZIP_DECOMPRESSOR_PLUGIN_SRC = $(DECOMPRESSORS_PLUGIN_SRC_DIR)/zip_decompressor.c
@@ -372,6 +452,7 @@ $(TEST_ES_INDEXING_TARGET): $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS
 	if [ -f $(PLUGIN_LIB_DIR)/dic_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/dic_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
 	if [ -f $(PLUGIN_LIB_DIR)/sqlite_parser.so ]; then cp $(PLUGIN_LIB_DIR)/sqlite_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
 	if [ -f $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
+	if [ -f $(PLUGIN_LIB_DIR)/openvino_classifier.so ]; then cp $(PLUGIN_LIB_DIR)/openvino_classifier.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS) -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
 	@echo "Staged plugins for test in $(TEST_PLUGINS_STAGING_DIR)"
@@ -410,6 +491,7 @@ $(TEST_PIPELINE_TARGET): $(TEST_PIPELINE_SRC) $(TEST_PIPELINE_DEPS)
 	if [ -f $(PLUGIN_LIB_DIR)/dic_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/dic_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
 	if [ -f $(PLUGIN_LIB_DIR)/sqlite_parser.so ]; then cp $(PLUGIN_LIB_DIR)/sqlite_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
 	if [ -f $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
+	if [ -f $(PLUGIN_LIB_DIR)/openvino_classifier.so ]; then cp $(PLUGIN_LIB_DIR)/openvino_classifier.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_PIPELINE_SRC) \
 		$(filter %.o,$^) -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
@@ -442,7 +524,8 @@ plugins: $(DUMMY_PLUGIN_SO) \
          $(PDF_PARSER_PLUGIN_SO) $(PDF_PREPROCESSOR_PLUGIN_SO) \
          $(RTF_PARSER_PLUGIN_SO) $(RTF_PREPROCESSOR_PLUGIN_SO) \
          $(DIC_PARSER_PLUGIN_SO) $(DIC_PREPROCESSOR_PLUGIN_SO) \
-         $(SQLITE_PARSER_PLUGIN_SO) $(SQLITE_PREPROCESSOR_PLUGIN_SO)
+         $(SQLITE_PARSER_PLUGIN_SO) $(SQLITE_PREPROCESSOR_PLUGIN_SO) \
+         $(OPENVINO_CLASSIFIER_PLUGIN_SO)
 	@echo "All specified plugins built."
 
 # Plugin Object File Rules
@@ -529,6 +612,10 @@ $(SQLITE_PARSER_PLUGIN_OBJ): $(SQLITE_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_i
 $(SQLITE_PREPROCESSOR_PLUGIN_OBJ): $(SQLITE_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled plugin object: $@"
+$(OPENVINO_CLASSIFIER_PLUGIN_OBJ): $(OPENVINO_CLASSIFIER_PLUGIN_SRC) $(PLUGIN_DIR)/classifiers/openvino_classifier.h $(INCLUDE_DIR)/ml_interface.h $(INCLUDE_DIR)/data_types.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@ # OPENVINO_INCLUDES is already in CFLAGS
 	@echo "Compiled plugin object: $@"
 
 # Disabled Plugin Object File Rules
@@ -622,6 +709,10 @@ $(SQLITE_PARSER_PLUGIN_SO): $(SQLITE_PARSER_PLUGIN_OBJ)
 $(SQLITE_PREPROCESSOR_PLUGIN_SO): $(SQLITE_PREPROCESSOR_PLUGIN_OBJ)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
+	@echo "Built plugin: $@"
+$(OPENVINO_CLASSIFIER_PLUGIN_SO): $(OPENVINO_CLASSIFIER_PLUGIN_OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS) # OPENVINO_LIBS and RPATH are already in LDFLAGS
 	@echo "Built plugin: $@"
 
 # Disabled Plugin .so Rules
