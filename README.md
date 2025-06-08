@@ -25,7 +25,7 @@ The architecture is designed with a plugin-based framework that allows for **aut
 
 - **Ambiguous Data Handling**: The system is designed to handle **ambiguous datasets**, where a single file type (e.g., `.txt`) may contain various formats or data types, such as lists of processes, user/password combinations, or configuration files.
 
-- **Machine Learning Integration**: Incorporates **machine learning models** for data classification and processing during ingestion. This allows the system to **automatically detect and categorize** different types of data within ambiguous files, ensuring appropriate handling and indexing.
+- **Machine Learning Integration**: Incorporates **machine learning models** for data classification and processing during ingestion. This allows the system to **automatically detect and categorize** different types of data within ambiguous files, ensuring appropriate handling and indexing. SPINDEX leverages **OpenVINO** for optimized model inference, supporting **FP16 precision models** to enhance performance on specialized hardware like NPUs and integrated GPUs.
 
 - **Customizable Processing Chains**: Users can define processing chains for different data types, enabling the system to apply a series of transformations or analyses based on the content detected within a file.
 
@@ -219,6 +219,7 @@ All functionalities are encapsulated within C modules, allowing for automatic in
 - **Machine Learning Classification**:
   - **Trained Models**: Utilizes machine learning models trained on various data types to classify content accurately.
   - **Real-Time Classification**: Performs classification during ingestion, enabling the system to process data appropriately without manual intervention.
+  - **OpenVINO Integration**: Leverages Intel's OpenVINO toolkit via the `openvino_classifier.c` plugin to execute inference tasks, enabling hardware acceleration on CPUs, integrated GPUs, and NPUs. This includes support for FP16 precision models, optimizing performance for content classification and other ML-driven analyses.
 
 - **Flexible Data Processing**:
   - **Adaptive Parsing**: Selects parsing strategies based on content classification, ensuring that data is correctly interpreted and indexed.
@@ -256,7 +257,7 @@ SPINDEX/
 │   │   ├── dic_parser.so
 │   │   ├── sqlite_parser.so
 │   │   ├── custom_parser.so
-│   ├── preprocessors/            # Pre-processing plugins for data classification
+│   ├── preprocessors/            # Pre-processing plugins for data normalization, etc.
 │   │   ├── txt_preprocessor.so
 │   │   ├── json_preprocessor.so
 │   │   ├── csv_preprocessor.so
@@ -270,8 +271,10 @@ SPINDEX/
 │   │   ├── rtf_preprocessor.so
 │   │   ├── dic_preprocessor.so
 │   │   ├── sqlite_preprocessor.so
-│   │   ├── ml_classifier.so      # Machine learning classification module
-│   │   ├── content_analyzer.so
+│   │   ├── content_analyzer.so   # General content analysis before classification
+│   ├── classifiers/              # Machine Learning classifier plugins
+│   │   ├── ml_classifier.so      # General ML classification module
+│   │   ├── openvino_classifier.so # OpenVINO-based classification module
 │   ├── decompressors/            # Decompression modules for compressed files
 │   │   ├── zip_decompressor.so
 │   │   ├── gzip_decompressor.so
@@ -316,18 +319,21 @@ SPINDEX/
   - Manages plugin execution order based on configurations.
 
 - **Pre-Processing Plugins (`preprocessors/`)**:
-  - **File-Type Specific Preprocessors**: Each file type has its own preprocessor module (e.g., `json_preprocessor.c`), handling initial processing tasks specific to that format.
-  - **Machine Learning Classifier (`ml_classifier.so`)**: Classifies data content using machine learning models.
-  - **Content Analyzer (`content_analyzer.so`)**: Performs heuristic analysis to assist in content classification.
+  - **File-Type Specific Preprocessors**: Each file type can have its own preprocessor module (e.g., `json_preprocessor.c`), handling initial processing tasks like normalization or data extraction specific to that format before classification.
+  - **Content Analyzer (`content_analyzer.so`)**: Performs heuristic analysis to assist in understanding content structure before detailed classification.
+
+- **Classifier Plugins (`classifiers/`)**:
+  - **Machine Learning Classifier (`ml_classifier.so`)**: A general module that classifies data content using various machine learning models.
+  - **OpenVINO Classifier (`openvino_classifier.so`)**: A specialized module that utilizes OpenVINO for high-performance inference, supporting FP16 models and hardware acceleration for classification tasks.
 
 - **Processing Plugins (`parsers/`)**:
-  - **Dynamic Selection**: The appropriate parser is selected based on the classification results.
-  - **Custom Plugins**: Users can add custom parsers to handle specific data types.
+  - **Dynamic Selection**: The appropriate parser is selected based on the results from the classifier plugins.
+  - **Custom Plugins**: Users can add custom parsers to handle specific data types identified by the classifiers.
 
 ### Machine Learning Integration
 
 - **ML Models in C**:
-  - Machine learning models are integrated as C modules, possibly using optimized libraries like Intel oneAPI Deep Neural Network Library (oneDNN) or custom implementations.
+  - Machine learning models are integrated as C modules. SPINDEX supports various backends for optimized inference; for instance, the `openvino_classifier.so` plugin leverages the OpenVINO toolkit, while other classifiers might use general libraries like oneDNN or custom C implementations.
 
 - **Model Updates and Training**:
   - Supports updating models by replacing plugin files.
