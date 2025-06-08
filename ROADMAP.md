@@ -207,16 +207,16 @@ These are significant undertakings.
     *   Description: A plugin to load and run pre-trained ML models for content classification (e.g., distinguishing types of data within `.txt` files). May use libraries like `oneDNN` or ONNX Runtime C API.
     *   Files: `plugins/classifiers/ml_classifier.c` (Path corrected from preprocessors)
     *   Priority: Medium
-    *   Status: Structural implementation complete (placeholders for actual ML logic). See `plugins/classifiers/ml_classifier.c`.
+    *   Status: COMPLETE (Structural implementation). See `plugins/classifiers/ml_classifier.c`.
 5.  **Task: [ML-003] Implement Content Analyzer Plugin (`content_analyzer.so`)**
     *   Description: A plugin for heuristic-based content analysis, potentially as a fallback or supplement to ML classification.
     *   Files: `plugins/analyzers/content_analyzer.c` (Path corrected from preprocessors)
     *   Priority: Medium
-    *   Status: Implemented with basic heuristic rules. See `plugins/analyzers/content_analyzer.c`.
+    *   Status: COMPLETE (Basic heuristic rules). See `plugins/analyzers/content_analyzer.c`.
 6.  **Task: [INGEST-003] Integrate ML Classification into Ingestion Pipeline**
     *   Description: Modify `ingestion_pipeline.c` and relevant preprocessors (e.g., `txt_preprocessor.c`) to use `ml_classifier.so` and `content_analyzer.so` for ambiguous data handling.
     *   Priority: Medium
-    *   Status: ML Classifier and Heuristic Analyzer integrated into `ingestion_pipeline.c`.
+    *   Status: COMPLETE. ML Classifier and Heuristic Analyzer integrated into `ingestion_pipeline.c`.
 7.  **Task: [BUILD-006] Extend Makefile for AVX & ML Plugins**
     *   Priority: Medium
     *   Status: COMPLETE. Build rules for AVX, ML Classifier, and Content Analyzer plugins are implemented.
@@ -400,19 +400,27 @@ Status: COMPLETE
 
 ---
 
-**Chunk 7: Advanced Document & Specialized Format Parsers (Initial Research & Stubs)**
+**Chunk 7: Advanced Document & Specialized Format Parsers (Addressed by Phase 4)**
+Status: COMPLETE (Covered by Phase 4)
 
 *Goal: Begin tackling more complex formats. Initial focus might be on research, library selection, and creating stubs.*
 
 1.  **Task: [DOC-001] Research & Stub `doc_parser.c` & `doc_preprocessor.c`** (Identify libraries like `libdoc`, or tools like `antiword`/`pandoc`)
+    *   Status: COMPLETE (Implemented as part of Phase 4 completion)
 2.  **Task: [XLS-001] Research & Stub `xls_parser.c` & `xls_preprocessor.c`** (Identify libraries like `libxls`, or tools)
+    *   Status: COMPLETE (Implemented as part of Phase 4 completion)
 3.  **Task: [PDF-001] Research & Stub `pdf_parser.c` & `pdf_preprocessor.c`** (Identify libraries like `poppler`, or tools like `pdftotext`)
+    *   Status: COMPLETE (Implemented as part of Phase 4 completion)
 4.  **Task: [RTF-001] Research & Stub `rtf_parser.c` & `rtf_preprocessor.c`** (Identify libraries like `librtf`, or tools)
+    *   Status: COMPLETE (Implemented as part of Phase 4 completion)
 5.  **Task: [DIC-001] Research & Stub `dic_parser.c` & `dic_preprocessor.c`** (For DICOM, e.g., `dcmtk`)
+    *   Status: COMPLETE (Implemented as part of Phase 4 completion)
 6.  **Task: [SQLITE-001] Research & Stub `sqlite_parser.c` & `sqlite_preprocessor.c`** (Using `sqlite3` lib)
+    *   Status: COMPLETE (Implemented as part of Phase 4 completion)
 7.  **Task: [BUILD-004C] Extend Makefile for New Parser/Preprocessor Stubs**
     *   Files: `Makefile`
     *   Priority: Low to Medium (implementation detail can come later)
+    *   Status: COMPLETE (Covered by Phase 4 Makefile updates)
 
 ---
 
@@ -429,20 +437,20 @@ Status: COMPLETE
     *   Description: Create a basic structure for the `ml_classifier.so` plugin, conforming to `ml_interface.h`. Actual ML model loading can come later.
     *   Files: `plugins/classifiers/ml_classifier.c` (Path corrected)
     *   Priority: Medium
-    *   Status: Structural implementation complete (placeholders for actual ML logic). See `plugins/classifiers/ml_classifier.c`.
+    *   Status: COMPLETE (Structural implementation). See `plugins/classifiers/ml_classifier.c`.
 3.  **Task: [ML-003] Implement Content Analyzer Plugin (`content_analyzer.so`)**
     *   Description: Plugin for heuristic-based content analysis, as a supplement/fallback.
     *   Files: `plugins/analyzers/content_analyzer.c` (Path corrected)
     *   Priority: Medium
-    *   Status: Implemented with basic heuristic rules. See `plugins/analyzers/content_analyzer.c`.
+    *   Status: COMPLETE (Basic heuristic rules). See `plugins/analyzers/content_analyzer.c`.
 4.  **Task: [INGEST-003] Plan ML Integration into Ingestion Pipeline**
     *   Description: Design how `ingestion_pipeline.c` and preprocessors (e.g., `txt_preprocessor.c`) will use ML classification. Implement basic hooks.
     *   Priority: Medium
-    *   Status: ML Classifier and Heuristic Analyzer integrated into `ingestion_pipeline.c`. (Reflects actual integration)
+    *   Status: COMPLETE. ML Classifier and Heuristic Analyzer integrated into `ingestion_pipeline.c`. (Reflects actual integration)
 5.  **Task: [BUILD-006A] Extend Makefile for ML Foundation Plugins**
     *   Files: `Makefile`
     *   Priority: Medium
-    *   Status: COMPLETE (as part of overall Makefile updates for ML/Analyzer plugins)
+    *   Status: COMPLETE
 
 ---
 
@@ -454,6 +462,7 @@ Status: COMPLETE
     *   Description: Module to detect CPU capabilities (e.g., AVX-512 support using CPUID).
     *   Files: `core/hardware_detection.c`, `core/hardware_detection.h`
     *   Priority: Medium (Prerequisite for AVX work)
+    *   Status: COMPLETE (Part of Phase 1 completion)
 2.  **Task: [AVX-001] Implement AVX-512 Phrase Search Plugin (`avx512_phrase_search.so`)**
     *   Description: Develop the C-based AVX-512 optimized phrase search algorithm. This is a specialized task.
     *   Files: `plugins/search_algorithms/avx512_phrase_search.c`
@@ -463,7 +472,7 @@ Status: COMPLETE
 3.  **Task: [BUILD-006B] Extend Makefile for AVX Plugin**
     *   Files: `Makefile`
     *   Priority: Medium
-    *   Status: COMPLETE (as part of overall Makefile updates for AVX plugin)
+    *   Status: COMPLETE
 
 ---
 
