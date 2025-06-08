@@ -8,7 +8,7 @@
 ## SPINDEX - Jules Task List (Starting from `json_preprocessor.c`)
 
 **Phase 1: Core System & Plugin Infrastructure**
-Status: COMPLETE
+Status: **DONE ✅**
 
 This phase focuses on getting the absolute basics running: the core application, plugin loading, and configuration.
 
@@ -46,7 +46,7 @@ This phase focuses on getting the absolute basics running: the core application,
     *   Priority: Medium
 
 **Phase 2: Basic Ingestion Pipeline & First Parser/Preprocessor Pair**
-Status: COMPLETE
+Status: **DONE ✅**
 
 Focus on getting a single file type processed end-to-end (conceptually, actual indexing comes later). We'll leverage the existing `json_preprocessor.c`.
 
@@ -73,7 +73,7 @@ Focus on getting a single file type processed end-to-end (conceptually, actual i
     *   Priority: High
 
 **Phase 3: Elasticsearch Integration & Indexing**
-Status: COMPLETE
+Status: **DONE ✅**
 
 1.  **Task: [ES-001] Implement Elasticsearch Client (`elasticsearch_client.c`)**
     *   Description: Module to handle communication with Elasticsearch (HTTP requests, connection management, sending bulk data). Likely using `libcurl`.
@@ -93,7 +93,7 @@ Status: COMPLETE
     *   Priority: High
 
 **Phase 4: Expanding Parsers & Preprocessors (Iterative)**
-Status: COMPLETE
+Status: **DONE ✅**
 
 This phase will be repeated for each file type.
 
@@ -148,7 +148,7 @@ This phase will be repeated for each file type.
         *   Priority: Medium
 
 *   **Document Files (DOC/DOCX, XLS/XLSX, PDF, RTF)** - These are more complex and may require external libraries or command-line tools initially.
-    1.  **Task: [DOC-001] Research & Implement `doc_parser.c` & `doc_preprocessor.c`** (e.g., using `libdo`c, `antiword`, or shelling out to `pandoc`/`libreoffice`)
+    1.  **Task: [DOC-001] Research & Implement `doc_parser.c` & `doc_preprocessor.c`** (e.g., using `libdoc`, `antiword`, or shelling out to `pandoc`/`libreoffice`)
     2.  **Task: [XLS-001] Research & Implement `xls_parser.c` & `xls_preprocessor.c`** (e.g., using `libxls`, `libxlsxwriter`, or shelling out)
     3.  **Task: [PDF-001] Research & Implement `pdf_parser.c` & `pdf_preprocessor.c`** (e.g., using `poppler`, `mupdf`, or shelling out to `pdftotext`)
     4.  **Task: [RTF-001] Research & Implement `rtf_parser.c` & `rtf_preprocessor.c`** (e.g., `librtf` or shelling out)
@@ -164,22 +164,33 @@ This phase will be repeated for each file type.
     *   Description: Iteratively update Makefile as new plugins are added.
     *   Priority: Medium (ongoing)
 
-**Phase 5: Decompressors**
-Status: COMPLETE
+*   **General Enhancement: File Encoding Support**
+    1.  **Task: [ENC-001] Research and Implement Encoding Detection**
+        *   Description: Investigate and integrate a robust library or method for detecting file encodings (e.g., UTF-8, UTF-16, ISO-8859-1, etc.). This might involve updating `ingestion_pipeline.c` or individual preprocessors.
+        *   Priority: Medium
+    2.  **Task: [ENC-002] Update Parsers/Preprocessors for Encoding Handling**
+        *   Description: Modify existing and future text-based parsers and preprocessors to utilize detected encoding information, ensuring correct character processing. This includes `txt_parser/preprocessor`, `csv_parser/preprocessor`, `json_parser/preprocessor`, `xml_parser/preprocessor`, etc.
+        *   Priority: Medium (ongoing as new parsers are developed)
+    3.  **Task: [ENC-003] Test Encoding Support**
+        *   Description: Create test cases with files using various common encodings to verify proper handling.
+        *   Priority: Medium
 
-1.  **Task: [DECOMP-001] Implement `zip_decompressor.c`** (e.g., using `libzip` or `miniz`) - COMPLETE
+**Phase 5: Decompressors**
+Status: **DONE ✅**
+
+1.  **Task: [DECOMP-001] Implement `zip_decompressor.c`** (e.g., using `libzip` or `miniz`) - **DONE ✅**
     *   Files: `plugins/decompressors/zip_decompressor.c`
     *   Priority: Medium
-2.  **Task: [DECOMP-002] Implement `gzip_decompressor.c`** (e.g., using `zlib`) - COMPLETE
+2.  **Task: [DECOMP-002] Implement `gzip_decompressor.c`** (e.g., using `zlib`) - **DONE ✅**
     *   Files: `plugins/decompressors/gzip_decompressor.c`
     *   Priority: Medium
-3.  **Task: [DECOMP-003] Implement `zstd_decompressor.c`** (e.g., using `libzstd`) - COMPLETE
+3.  **Task: [DECOMP-003] Implement `zstd_decompressor.c`** (e.g., using `libzstd`) - **DONE ✅**
     *   Files: `plugins/decompressors/zstd_decompressor.c` (Corrected from .so to .c as per actual implementation)
     *   Priority: Medium
-4.  **Task: [INGEST-002] Integrate Decompressors into Ingestion Pipeline** - COMPLETE
+4.  **Task: [INGEST-002] Integrate Decompressors into Ingestion Pipeline** - **DONE ✅**
     *   Description: Modify `ingestion_pipeline.c` to detect compressed files and invoke decompressor plugins before preprocessors/parsers.
     *   Priority: Medium
-5.  **Task: [BUILD-005] Extend Makefile for Decompressors** - COMPLETE
+5.  **Task: [BUILD-005] Extend Makefile for Decompressors** - **DONE ✅**
     *   Priority: Medium
 
 **Phase 6: Advanced Features - AVX-512 & Machine Learning**
@@ -200,24 +211,52 @@ These are significant undertakings.
     *   Description: Specify C interfaces for loading ML models and performing inference (classification).
     *   Files: `include/ml_interface.h`
     *   Priority: Medium
-    *   Status: COMPLETE. See `include/ml_interface.h`.
+    *   Status: **DONE ✅**
 4.  **Task: [ML-002] Implement ML Classifier Plugin (`ml_classifier.so`)**
     *   Description: A plugin to load and run pre-trained ML models for content classification (e.g., distinguishing types of data within `.txt` files). May use libraries like `oneDNN` or ONNX Runtime C API.
     *   Files: `plugins/classifiers/ml_classifier.c` (Path corrected from preprocessors)
     *   Priority: Medium
-    *   Status: COMPLETE (Structural implementation). See `plugins/classifiers/ml_classifier.c`.
+    *   Status: **DONE ✅**
 5.  **Task: [ML-003] Implement Content Analyzer Plugin (`content_analyzer.so`)**
     *   Description: A plugin for heuristic-based content analysis, potentially as a fallback or supplement to ML classification.
     *   Files: `plugins/analyzers/content_analyzer.c` (Path corrected from preprocessors)
     *   Priority: Medium
-    *   Status: COMPLETE (Basic heuristic rules). See `plugins/analyzers/content_analyzer.c`.
+    *   Status: **DONE ✅**
 6.  **Task: [INGEST-003] Integrate ML Classification into Ingestion Pipeline**
     *   Description: Modify `ingestion_pipeline.c` and relevant preprocessors (e.g., `txt_preprocessor.c`) to use `ml_classifier.so` and `content_analyzer.so` for ambiguous data handling.
     *   Priority: Medium
-    *   Status: COMPLETE. ML Classifier and Heuristic Analyzer integrated into `ingestion_pipeline.c`.
+    *   Status: **DONE ✅**
 7.  **Task: [BUILD-006] Extend Makefile for AVX & ML Plugins**
     *   Priority: Medium
-    *   Status: COMPLETE. Build rules for AVX, ML Classifier, and Content Analyzer plugins are implemented.
+    *   Status: **DONE ✅**
+
+*   **Sub-Phase: ML Inference Acceleration with OpenVINO**
+    *   Description: Enhance the ML capabilities by integrating Intel's OpenVINO toolkit for optimized inference, initially targeting FP16 models on compatible hardware like Meteor Lake 165h.
+    *   Priority: Medium-High (Strategic Feature)
+    *   Note: Successful deployment and testing of these tasks will be dependent on the availability of target hardware (e.g., Intel Meteor Lake 165h) and corresponding OpenVINO SDK, drivers, and toolchains.
+
+    1.  **Task: [ML-OV-001] Research OpenVINO Integration for SPINDEX**
+        *   Description: Investigate the OpenVINO toolkit, its C/C++ APIs for inference, and best practices for integrating it into the SPINDEX plugin architecture. Identify any necessary changes to `ml_interface.h` or the plugin loading mechanism to support OpenVINO-accelerated models alongside other ML backends.
+        *   Files: Potentially `include/ml_interface.h`, design documents.
+        *   Priority: Medium-High
+    2.  **Task: [ML-OV-002] Implement OpenVINO-enabled ML Classifier Plugin**
+        *   Description: Develop a new ML classifier plugin (e.g., `openvino_classifier.c`) or significantly refactor `ml_classifier.c` to support loading and executing models (especially FP16 quantized models) using the OpenVINO Inference Engine. This includes model loading, input preprocessing specific to OpenVINO, and output postprocessing.
+        *   Files: `plugins/classifiers/openvino_classifier.c`, `plugins/classifiers/openvino_classifier.h` (if new), or modifications to existing ML plugin files.
+        *   Priority: Medium-High
+        *   Dependencies: [ML-OV-001], [ML-001]
+    3.  **Task: [ML-OV-003] Add Build System Support for OpenVINO**
+        *   Description: Update the Makefile or build system to correctly detect OpenVINO installations, link against necessary OpenVINO libraries, and compile the OpenVINO-enabled plugin.
+        *   Files: `Makefile`, build scripts.
+        *   Priority: Medium
+    4.  **Task: [ML-OV-004] Implement FP16 Model Handling and Meteor Lake 165h Optimizations**
+        *   Description: Ensure the OpenVINO plugin can correctly load and utilize FP16 precision models. Investigate and implement any specific optimizations or configurations available through OpenVINO for Intel Meteor Lake 165h processors, potentially including NPU offloading if supported and exposed via the OpenVINO C/C++ API.
+        *   Files: OpenVINO plugin implementation.
+        *   Priority: Medium
+        *   Dependencies: [ML-OV-002]
+    5.  **Task: [ML-OV-005] Test OpenVINO FP16 Inference on Meteor Lake 165h**
+        *   Description: Conduct thorough testing of the OpenVINO-enabled plugin with suitable FP16 models on a system equipped with an Intel Meteor Lake 165h processor. Verify functional correctness, performance gains, and stability. Compare against non-accelerated inference if possible.
+        *   Priority: Medium
+        *   Dependencies: [ML-OV-004], Access to target hardware.
 
 **Phase 7: Optimizations, Security, and Final Touches**
 
@@ -243,7 +282,7 @@ Okay, let's break this down into more digestible chunks for Jules. I'll group th
 ---
 
 **Chunk 1: Core System & Plugin Foundation**
-Status: COMPLETE
+Status: **DONE ✅**
 
 *Goal: Establish the basic application structure, plugin loading, and configuration management.*
 
@@ -279,7 +318,7 @@ Status: COMPLETE
 ---
 
 **Chunk 2: Basic Ingestion Pipeline & JSON Processing**
-Status: COMPLETE
+Status: **DONE ✅**
 
 *Goal: Get the first file type (JSON) processing through a rudimentary pipeline, leveraging the existing `json_preprocessor.c`.*
 
@@ -309,7 +348,7 @@ Status: COMPLETE
 ---
 
 **Chunk 3: Elasticsearch Integration**
-Status: COMPLETE
+Status: **DONE ✅**
 
 *Goal: Enable sending processed data to Elasticsearch for indexing.*
 
@@ -333,7 +372,7 @@ Status: COMPLETE
 ---
 
 **Chunk 4: Adding Text & CSV Parsers/Preprocessors**
-Status: COMPLETE
+Status: **DONE ✅**
 
 *Goal: Expand file type support with common text-based formats.*
 
@@ -353,7 +392,7 @@ Status: COMPLETE
 ---
 
 **Chunk 5: Adding SQL, XML, YML, HTML Parsers/Preprocessors**
-Status: COMPLETE
+Status: **DONE ✅**
 
 *Goal: Further expand support for structured and semi-structured text formats.*
 
@@ -376,49 +415,49 @@ Status: COMPLETE
 ---
 
 **Chunk 6: Decompressor Plugins**
-Status: COMPLETE
+Status: **DONE ✅**
 
 *Goal: Add support for handling compressed files.*
 
-1.  **Task: [DECOMP-001] Implement `zip_decompressor.c`** (e.g., `libzip` or `miniz`) - COMPLETE
+1.  **Task: [DECOMP-001] Implement `zip_decompressor.c`** (e.g., `libzip` or `miniz`) - **DONE ✅**
     *   Files: `plugins/decompressors/zip_decompressor.c`
     *   Priority: Medium
-2.  **Task: [DECOMP-002] Implement `gzip_decompressor.c`** (e.g., `zlib`) - COMPLETE
+2.  **Task: [DECOMP-002] Implement `gzip_decompressor.c`** (e.g., `zlib`) - **DONE ✅**
     *   Files: `plugins/decompressors/gzip_decompressor.c`
     *   Priority: Medium
-3.  **Task: [DECOMP-003] Implement `zstd_decompressor.c`** (e.g., `libzstd`) - COMPLETE
+3.  **Task: [DECOMP-003] Implement `zstd_decompressor.c`** (e.g., `libzstd`) - **DONE ✅**
     *   Files: `plugins/decompressors/zstd_decompressor.c` (Corrected from .so to .c as per actual implementation)
     *   Priority: Medium
-4.  **Task: [INGEST-002] Integrate Decompressors into Ingestion Pipeline** - COMPLETE
+4.  **Task: [INGEST-002] Integrate Decompressors into Ingestion Pipeline** - **DONE ✅**
     *   Description: Modify `ingestion_pipeline.c` to detect and use decompressor plugins.
     *   Priority: Medium
-5.  **Task: [BUILD-005] Extend Makefile for Decompressors** - COMPLETE
+5.  **Task: [BUILD-005] Extend Makefile for Decompressors** - **DONE ✅**
     *   Files: `Makefile`
     *   Priority: Medium
 
 ---
 
 **Chunk 7: Advanced Document & Specialized Format Parsers (Addressed by Phase 4)**
-Status: COMPLETE (Covered by Phase 4)
+Status: **DONE ✅**
 
 *Goal: Begin tackling more complex formats. Initial focus might be on research, library selection, and creating stubs.*
 
-1.  **Task: [DOC-001] Research & Stub `doc_parser.c` & `doc_preprocessor.c`** (Identify libraries like `libdoc`, or tools like `antiword`/`pandoc`)
-    *   Status: COMPLETE (Implemented as part of Phase 4 completion)
-2.  **Task: [XLS-001] Research & Stub `xls_parser.c` & `xls_preprocessor.c`** (Identify libraries like `libxls`, or tools)
-    *   Status: COMPLETE (Implemented as part of Phase 4 completion)
-3.  **Task: [PDF-001] Research & Stub `pdf_parser.c` & `pdf_preprocessor.c`** (Identify libraries like `poppler`, or tools like `pdftotext`)
-    *   Status: COMPLETE (Implemented as part of Phase 4 completion)
-4.  **Task: [RTF-001] Research & Stub `rtf_parser.c` & `rtf_preprocessor.c`** (Identify libraries like `librtf`, or tools)
-    *   Status: COMPLETE (Implemented as part of Phase 4 completion)
-5.  **Task: [DIC-001] Research & Stub `dic_parser.c` & `dic_preprocessor.c`** (For DICOM, e.g., `dcmtk`)
-    *   Status: COMPLETE (Implemented as part of Phase 4 completion)
-6.  **Task: [SQLITE-001] Research & Stub `sqlite_parser.c` & `sqlite_preprocessor.c`** (Using `sqlite3` lib)
-    *   Status: COMPLETE (Implemented as part of Phase 4 completion)
+1.  **Task: [DOC-001] Research & Implement `doc_parser.c` & `doc_preprocessor.c`** (Identify libraries like `libdoc`, or tools like `antiword`/`pandoc`)
+    *   Status: **DONE ✅**
+2.  **Task: [XLS-001] Research & Implement `xls_parser.c` & `xls_preprocessor.c`** (Identify libraries like `libxls`, or tools)
+    *   Status: **DONE ✅**
+3.  **Task: [PDF-001] Research & Implement `pdf_parser.c` & `pdf_preprocessor.c`** (Identify libraries like `poppler`, or tools like `pdftotext`)
+    *   Status: **DONE ✅**
+4.  **Task: [RTF-001] Research & Implement `rtf_parser.c` & `rtf_preprocessor.c`** (Identify libraries like `librtf`, or tools)
+    *   Status: **DONE ✅**
+5.  **Task: [DIC-001] Research & Implement `dic_parser.c` & `dic_preprocessor.c`** (For DICOM, e.g., `dcmtk`)
+    *   Status: **DONE ✅**
+6.  **Task: [SQLITE-001] Research & Implement `sqlite_parser.c` & `sqlite_preprocessor.c`** (Using `sqlite3` lib)
+    *   Status: **DONE ✅**
 7.  **Task: [BUILD-004C] Extend Makefile for New Parser/Preprocessor Stubs**
     *   Files: `Makefile`
     *   Priority: Low to Medium (implementation detail can come later)
-    *   Status: COMPLETE (Covered by Phase 4 Makefile updates)
+    *   Status: **DONE ✅**
 
 ---
 
@@ -430,25 +469,25 @@ Status: COMPLETE (Covered by Phase 4)
     *   Description: Specify C interfaces for loading ML models and performing inference.
     *   Files: `include/ml_interface.h`
     *   Priority: Medium
-    *   Status: COMPLETE. See `include/ml_interface.h`.
+    *   Status: **DONE ✅**
 2.  **Task: [ML-002] Implement Stub for ML Classifier Plugin (`ml_classifier.so`)**
     *   Description: Create a basic structure for the `ml_classifier.so` plugin, conforming to `ml_interface.h`. Actual ML model loading can come later.
     *   Files: `plugins/classifiers/ml_classifier.c` (Path corrected)
     *   Priority: Medium
-    *   Status: COMPLETE (Structural implementation). See `plugins/classifiers/ml_classifier.c`.
+    *   Status: **DONE ✅**
 3.  **Task: [ML-003] Implement Content Analyzer Plugin (`content_analyzer.so`)**
     *   Description: Plugin for heuristic-based content analysis, as a supplement/fallback.
     *   Files: `plugins/analyzers/content_analyzer.c` (Path corrected)
     *   Priority: Medium
-    *   Status: COMPLETE (Basic heuristic rules). See `plugins/analyzers/content_analyzer.c`.
+    *   Status: **DONE ✅**
 4.  **Task: [INGEST-003] Plan ML Integration into Ingestion Pipeline**
     *   Description: Design how `ingestion_pipeline.c` and preprocessors (e.g., `txt_preprocessor.c`) will use ML classification. Implement basic hooks.
     *   Priority: Medium
-    *   Status: COMPLETE. ML Classifier and Heuristic Analyzer integrated into `ingestion_pipeline.c`. (Reflects actual integration)
+    *   Status: **DONE ✅**
 5.  **Task: [BUILD-006A] Extend Makefile for ML Foundation Plugins**
     *   Files: `Makefile`
     *   Priority: Medium
-    *   Status: COMPLETE
+    *   Status: **DONE ✅**
 
 ---
 
@@ -460,7 +499,7 @@ Status: COMPLETE (Covered by Phase 4)
     *   Description: Module to detect CPU capabilities (e.g., AVX-512 support using CPUID).
     *   Files: `core/hardware_detection.c`, `core/hardware_detection.h`
     *   Priority: Medium (Prerequisite for AVX work)
-    *   Status: COMPLETE (Part of Phase 1 completion)
+    *   Status: **DONE ✅**
 2.  **Task: [AVX-001] Implement AVX-512 Phrase Search Plugin (`avx512_phrase_search.so`)**
     *   Description: Develop the C-based AVX-512 optimized phrase search algorithm. This is a specialized task.
     *   Files: `plugins/search_algorithms/avx512_phrase_search.c`
@@ -470,7 +509,7 @@ Status: COMPLETE (Covered by Phase 4)
 3.  **Task: [BUILD-006B] Extend Makefile for AVX Plugin**
     *   Files: `Makefile`
     *   Priority: Medium
-    *   Status: COMPLETE
+    *   Status: **DONE ✅**
 
 ---
 
