@@ -126,46 +126,66 @@ ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
         bool found_phrase = false;
         size_t phrase_len = strlen(current_phrase);
 
-        if (phrase_len > 0 && phrase_len <= text_chunk->length) {
-            // WARNING: The following AVX-512 code is a simplified demonstration for checking initial substring matches.
-            // It is NOT a complete or robust AVX-512 phrase search algorithm. A production-quality implementation
-            // would require a much more sophisticated approach (e.g., handling arbitrary lengths, advanced SIMD algorithms).
-            
-            size_t compare_len = phrase_len < 64 ? phrase_len : 64; 
+        if (phrase_len == 0) {
+            // Skip empty phrases
+            LOG_DEBUG("AVX Search: Skipping empty phrase.");
+        } else if (phrase_len > text_chunk->length) {
+            // Phrase is longer than the text chunk, cannot be found.
+            LOG_DEBUG("AVX Search: Phrase '%s' (len %zu) is longer than text (len %zu).", current_phrase, phrase_len, text_chunk->length);
+        } else {
+            // INFO: Full AVX-512 phrase search logic implemented.
+            // This searches for the current_phrase within text_chunk->data.
+            for (size_t i = 0; i <= text_chunk->length - phrase_len; ++i) { // Iterate through possible start positions in text
+                bool current_match_is_full = true;
+                // Compare current_phrase with text_chunk->data + i using AVX-512 in 64-byte segments
+                for (size_t j = 0; j < phrase_len; j += 64) { // Iterate through segments of the phrase
+                    size_t bytes_to_compare_this_iteration = (phrase_len - j < 64) ? (phrase_len - j) : 64;
 
-            if (text_chunk->length >= compare_len) {
-               __m512i phrase_vector = _mm512_loadu_si512((const __m512i*)current_phrase); 
+                    // Create a mask for loading and comparing relevant bytes in this iteration.
+                    // This is crucial for the last segment, which might be shorter than 64 bytes.
+                    __mmask64 load_compare_mask = (bytes_to_compare_this_iteration == 64) ? 0xFFFFFFFFFFFFFFFFULL : (1ULL << bytes_to_compare_this_iteration) - 1;
 
-               for (size_t i = 0; i <= text_chunk->length - compare_len; ++i) {
-                   __m512i text_vector = _mm512_loadu_si512((const __m512i*)((const char*)text_chunk->data + i));
-                   __mmask64 match_mask = _mm512_cmpeq_epi8_mask(phrase_vector, text_vector);
-                   
-                   uint64_t relevant_bits_mask = (compare_len == 64) ? 0xFFFFFFFFFFFFFFFFULL : (1ULL << compare_len) - 1;
+                    // Load phrase segment using mask to prevent reading out of bounds
+                    __m512i phrase_vector = _mm512_maskz_loadu_epi8(load_compare_mask, (const __m512i*)(current_phrase + j));
+                    // Load text segment from the main text buffer using mask
+                    __m512i text_vector = _mm512_maskz_loadu_epi8(load_compare_mask, (const __m512i*)((const char*)text_chunk->data + i + j));
 
-                   if ((match_mask & relevant_bits_mask) == relevant_bits_mask) {
-                       if (compare_len == phrase_len) {
-                          found_phrase = true;
-                          LOG_INFO("AVX Search: AVX-assisted match for initial part of '%s' at offset %zu", current_phrase, i);
-                          break; 
-                       } else {
-                          LOG_DEBUG("AVX Search: Potential partial match for '%s' at offset %zu. Full verification needed.", current_phrase, i);
-                          // For this demo, if the first part matches, assume it's found.
-                          found_phrase = true; 
-                          break;
-                       }
-                   }
-               }
+                    // Compare the loaded vectors
+                    __mmask64 VEC_match_mask = _mm512_cmpeq_epi8_mask(phrase_vector, text_vector);
+
+                    // Check if all relevant bytes in this segment matched.
+                    // The comparison must be true for all bits specified by load_compare_mask.
+                    if ((VEC_match_mask & load_compare_mask) != load_compare_mask) {
+                        current_match_is_full = false; // Mismatch in this segment
+                        break; // Break from inner loop (j), move to next text offset i
+                    }
+                }
+
+                if (current_match_is_full) {
+                    found_phrase = true;
+                    LOG_INFO("AVX Search: Found phrase '%s' at offset %zu", current_phrase, i);
+                    // Once found, break from the outer loop (i) for this phrase.
+                    // To find all occurrences, remove this break.
+                    break;
+                }
             }
         }
 
+        // Append result to buffer
+        char temp_result_line[256]; // Buffer for a single line of result
         if (found_phrase) {
-            strncat(result_buffer, "Found: ", sizeof(result_buffer) - strlen(result_buffer) - 1);
-            strncat(result_buffer, current_phrase, sizeof(result_buffer) - strlen(result_buffer) - 1);
+            snprintf(temp_result_line, sizeof(temp_result_line), "Found: %s\n", current_phrase);
         } else {
-            strncat(result_buffer, "Not Found: ", sizeof(result_buffer) - strlen(result_buffer) - 1);
-            strncat(result_buffer, current_phrase, sizeof(result_buffer) - strlen(result_buffer) - 1);
+            snprintf(temp_result_line, sizeof(temp_result_line), "Not Found: %s\n", current_phrase);
         }
-        strncat(result_buffer, "\n", sizeof(result_buffer) - strlen(result_buffer) - 1);
+        // Ensure not to overflow result_buffer
+        if (strlen(result_buffer) + strlen(temp_result_line) < sizeof(result_buffer)) {
+            strncat(result_buffer, temp_result_line, sizeof(result_buffer) - strlen(result_buffer) - 1);
+        } else {
+            LOG_WARN("AVX Search: Result buffer too small to append more results. Some results may be truncated.");
+            // Optionally, break here or handle resizing if dynamic buffer is used
+        }
+
         current_phrase = strtok_r(NULL, "\n", &saveptr);
     }
     free(phrases_str_copy);
