@@ -3,11 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../include/config_manager.h"
-#include "../include/ingestion_pipeline.h" // Also brings in plugin_interface.h, data_types.h
-#include "../include/plugin_loader.h"      // For unload_plugins (though pipeline_shutdown should handle its plugins)
-#include "../include/elasticsearch_client.h" // For direct ES health check
-#include "../include/utils.h"
+// Corrected include paths: compiler uses -I./include and -I./core
+#include "config_manager.h"
+#include "threading.h" // Must be before ingestion_pipeline.h for ThreadPool definition
+#include "ingestion_pipeline.h"
+#include "plugin_loader.h"
+#include "elasticsearch_client.h"
+#include "utils.h"
 
 int main() {
     spindex_log_init("test_elasticsearch_indexing.log", LOG_LEVEL_DEBUG);

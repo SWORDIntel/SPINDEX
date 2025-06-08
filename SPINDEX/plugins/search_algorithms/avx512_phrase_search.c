@@ -10,6 +10,19 @@
 #include "../../include/hardware_detection.h" // For checking AVX-512 support
 #include "../../include/avx_search_params.h"  // For AvxSearchParams
 #include "../../include/utils.h" // For LOG_INFO, LOG_ERROR, LOG_DEBUG (if not already implicitly included)
+#include <stdbool.h>   // For bool type
+#include <ctype.h>     // For tolower (optional, can use custom)
+
+#define RESULT_BUFFER_SIZE 8192 // Increased buffer size for JSON output
+#define AVX_BLOCK_SIZE 64  // AVX-512 processes 64 bytes at a time (already defined in example, ensure consistency if it was different)
+
+// Helper function for lowercasing a character
+static inline char tolower_char(char c) {
+    if (c >= 'A' && c <= 'Z') {
+        return c + ('a' - 'A');
+    }
+    return c;
+}
 
 // --- Forward declarations for plugin functions ---
 void avx512_get_info(PluginInfo *info);
@@ -104,7 +117,12 @@ ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
     const ProcessedDataChunk* text_chunk = params->text_to_search;
     const ProcessedDataChunk* phrases_chunk = params->phrases_to_find;
 
-    LOG_INFO("AVX Search: Processing text of length %zu, with phrases of length %zu.", text_chunk->length, phrases_chunk->length);
+    // Read parameters from AvxSearchParams
+    bool case_sensitive = params->case_sensitive;
+    bool find_all_occurrences = params->find_all_occurrences;
+
+    LOG_INFO("AVX Search: Processing text of length %zu, with phrases of length %zu. Case sensitive: %s, Find all: %s",
+             text_chunk->length, phrases_chunk->length, case_sensitive ? "true" : "false", find_all_occurrences ? "true" : "false");
 
     // --- This is a simplified way to get phrases. A real plugin might need more robust parsing ---
     char* phrases_str_copy = (char*)malloc(phrases_chunk->length + 1);
@@ -116,92 +134,142 @@ ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
     phrases_str_copy[phrases_chunk->length] = '\0';
 
     char* saveptr;
-    char* current_phrase = strtok_r(phrases_str_copy, "\n", &saveptr);
-    char result_buffer[1024] = {0}; 
-    strncat(result_buffer, "Search Results:\n", sizeof(result_buffer) - 1);
+    char* current_phrase_str = strtok_r(phrases_str_copy, "\n", &saveptr);
 
+    char result_buffer[RESULT_BUFFER_SIZE] = {0};
+    int current_buffer_pos = 0;
+    current_buffer_pos += snprintf(result_buffer, RESULT_BUFFER_SIZE, "{\"search_results\": [");
+    bool first_phrase_in_json = true;
 
-    while (current_phrase != NULL) {
-        LOG_DEBUG("AVX Search: Searching for phrase: '%s'", current_phrase);
-        bool found_phrase = false;
-        size_t phrase_len = strlen(current_phrase);
+    while (current_phrase_str != NULL) {
+        LOG_DEBUG("AVX Search: Searching for phrase: '%s'", current_phrase_str);
+        size_t phrase_len = strlen(current_phrase_str);
+        bool phrase_had_occurrences = false;
+
+        if (!first_phrase_in_json) {
+            // Add comma if not the first phrase object
+            if (current_buffer_pos < RESULT_BUFFER_SIZE - 1) {
+                result_buffer[current_buffer_pos++] = ',';
+            } else { LOG_WARN("AVX Search: Buffer full before adding comma for phrase object."); }
+        }
+        first_phrase_in_json = false;
+
+        // Start phrase object: {"phrase": "...", "offsets": [
+        // TODO: Proper JSON escaping for current_phrase_str if it can contain quotes or backslashes.
+        // For now, direct insertion.
+        int pre_phrase_len = current_buffer_pos;
+        current_buffer_pos += snprintf(result_buffer + current_buffer_pos, RESULT_BUFFER_SIZE - current_buffer_pos,
+                                       "{\"phrase\": \"%s\", \"offsets\": [", current_phrase_str);
+        if (current_buffer_pos >= RESULT_BUFFER_SIZE -1) {
+             LOG_WARN("AVX Search: Result buffer truncated while writing phrase header.");
+             result_buffer[pre_phrase_len] = '\0'; // Attempt to backtrack to keep JSON valid-ish
+             current_buffer_pos = pre_phrase_len;
+             goto finalize_json; // Early exit if buffer is full
+        }
+        bool first_offset_for_this_phrase = true;
 
         if (phrase_len == 0) {
-            // Skip empty phrases
             LOG_DEBUG("AVX Search: Skipping empty phrase.");
         } else if (phrase_len > text_chunk->length) {
-            // Phrase is longer than the text chunk, cannot be found.
             LOG_DEBUG("AVX Search: Phrase '%s' (len %zu) is longer than text (len %zu).", current_phrase, phrase_len, text_chunk->length);
         } else {
-            // INFO: Full AVX-512 phrase search logic implemented.
-            // This searches for the current_phrase within text_chunk->data.
-            for (size_t i = 0; i <= text_chunk->length - phrase_len; ++i) { // Iterate through possible start positions in text
+            for (size_t i = 0; i <= text_chunk->length - phrase_len; ++i) {
                 bool current_match_is_full = true;
-                // Compare current_phrase with text_chunk->data + i using AVX-512 in 64-byte segments
-                for (size_t j = 0; j < phrase_len; j += 64) { // Iterate through segments of the phrase
-                    size_t bytes_to_compare_this_iteration = (phrase_len - j < 64) ? (phrase_len - j) : 64;
+                for (size_t j = 0; j < phrase_len; j += AVX_BLOCK_SIZE) {
+                    size_t bytes_to_compare_this_iteration = (phrase_len - j < AVX_BLOCK_SIZE) ? (phrase_len - j) : AVX_BLOCK_SIZE;
+                    __mmask64 load_compare_mask = (bytes_to_compare_this_iteration == AVX_BLOCK_SIZE) ? 0xFFFFFFFFFFFFFFFFULL : (1ULL << bytes_to_compare_this_iteration) - 1;
 
-                    // Create a mask for loading and comparing relevant bytes in this iteration.
-                    // This is crucial for the last segment, which might be shorter than 64 bytes.
-                    __mmask64 load_compare_mask = (bytes_to_compare_this_iteration == 64) ? 0xFFFFFFFFFFFFFFFFULL : (1ULL << bytes_to_compare_this_iteration) - 1;
+                    __m512i phrase_vector;
+                    __m512i text_vector;
 
-                    // Load phrase segment using mask to prevent reading out of bounds
-                    __m512i phrase_vector = _mm512_maskz_loadu_epi8(load_compare_mask, (const __m512i*)(current_phrase + j));
-                    // Load text segment from the main text buffer using mask
-                    __m512i text_vector = _mm512_maskz_loadu_epi8(load_compare_mask, (const __m512i*)((const char*)text_chunk->data + i + j));
+                    if (!case_sensitive) {
+                        char temp_phrase_segment[AVX_BLOCK_SIZE];
+                        char temp_text_segment[AVX_BLOCK_SIZE];
+                        for (size_t seg_idx = 0; seg_idx < bytes_to_compare_this_iteration; ++seg_idx) {
+                            temp_phrase_segment[seg_idx] = tolower_char(current_phrase_str[j + seg_idx]);
+                            temp_text_segment[seg_idx] = tolower_char(((const char*)text_chunk->data)[i + j + seg_idx]);
+                        }
+                        phrase_vector = _mm512_maskz_loadu_epi8(load_compare_mask, temp_phrase_segment);
+                        text_vector = _mm512_maskz_loadu_epi8(load_compare_mask, temp_text_segment);
+                    } else {
+                        phrase_vector = _mm512_maskz_loadu_epi8(load_compare_mask, (const void*)(current_phrase_str + j));
+                        text_vector = _mm512_maskz_loadu_epi8(load_compare_mask, (const void*)((const char*)text_chunk->data + i + j));
+                    }
 
-                    // Compare the loaded vectors
                     __mmask64 VEC_match_mask = _mm512_cmpeq_epi8_mask(phrase_vector, text_vector);
-
-                    // Check if all relevant bytes in this segment matched.
-                    // The comparison must be true for all bits specified by load_compare_mask.
                     if ((VEC_match_mask & load_compare_mask) != load_compare_mask) {
-                        current_match_is_full = false; // Mismatch in this segment
-                        break; // Break from inner loop (j), move to next text offset i
+                        current_match_is_full = false;
+                        break;
                     }
                 }
 
                 if (current_match_is_full) {
-                    found_phrase = true;
-                    LOG_INFO("AVX Search: Found phrase '%s' at offset %zu", current_phrase, i);
-                    // Once found, break from the outer loop (i) for this phrase.
-                    // To find all occurrences, remove this break.
-                    break;
+                    phrase_had_occurrences = true;
+                    if (!first_offset_for_this_phrase) {
+                        if (current_buffer_pos < RESULT_BUFFER_SIZE - 1) {
+                            result_buffer[current_buffer_pos++] = ',';
+                        } else { LOG_WARN("AVX Search: Buffer full before adding comma for offset."); goto finalize_json_phrase; }
+                    }
+                    first_offset_for_this_phrase = false;
+
+                    int pre_offset_len = current_buffer_pos;
+                    current_buffer_pos += snprintf(result_buffer + current_buffer_pos, RESULT_BUFFER_SIZE - current_buffer_pos, "%zu", i);
+                    if (current_buffer_pos >= RESULT_BUFFER_SIZE -1) {
+                        LOG_WARN("AVX Search: Result buffer truncated while writing offset.");
+                        result_buffer[pre_offset_len] = '\0'; // backtrack
+                        current_buffer_pos = pre_offset_len;
+                        goto finalize_json_phrase; // Early exit for this phrase's offsets
+                    }
+                    LOG_INFO("AVX Search: Found phrase '%s' at offset %zu (case_sensitive: %s)", current_phrase_str, i, case_sensitive ? "true" : "false");
+
+                    if (!find_all_occurrences) {
+                        break;
+                    }
                 }
             }
         }
 
-        // Append result to buffer
-        char temp_result_line[256]; // Buffer for a single line of result
-        if (found_phrase) {
-            snprintf(temp_result_line, sizeof(temp_result_line), "Found: %s\n", current_phrase);
+finalize_json_phrase:
+        // Close offsets array and phrase object: ]}
+        if (current_buffer_pos < RESULT_BUFFER_SIZE - 2) {
+            result_buffer[current_buffer_pos++] = ']';
+            result_buffer[current_buffer_pos++] = '}';
         } else {
-            snprintf(temp_result_line, sizeof(temp_result_line), "Not Found: %s\n", current_phrase);
+             LOG_WARN("AVX Search: Buffer full before closing phrase object.");
+             if (current_buffer_pos < RESULT_BUFFER_SIZE -1) result_buffer[current_buffer_pos++] = ']'; // try to close array at least
+             if (current_buffer_pos < RESULT_BUFFER_SIZE -1) result_buffer[current_buffer_pos++] = '}';
+             result_buffer[RESULT_BUFFER_SIZE - 1] = '\0'; // Ensure null termination
+             current_buffer_pos = RESULT_BUFFER_SIZE - 1;
+             goto finalize_json; // Critical buffer full, finalize JSON now
         }
-        // Ensure not to overflow result_buffer
-        if (strlen(result_buffer) + strlen(temp_result_line) < sizeof(result_buffer)) {
-            strncat(result_buffer, temp_result_line, sizeof(result_buffer) - strlen(result_buffer) - 1);
-        } else {
-            LOG_WARN("AVX Search: Result buffer too small to append more results. Some results may be truncated.");
-            // Optionally, break here or handle resizing if dynamic buffer is used
-        }
-
-        current_phrase = strtok_r(NULL, "\n", &saveptr);
+        current_phrase_str = strtok_r(NULL, "\n", &saveptr);
     }
     free(phrases_str_copy);
+
+finalize_json:
+    // Close JSON array
+    if (current_buffer_pos < RESULT_BUFFER_SIZE - 2) {
+        current_buffer_pos += snprintf(result_buffer + current_buffer_pos, RESULT_BUFFER_SIZE - current_buffer_pos, "]}");
+    } else {
+        // Buffer potentially full, ensure null termination if we were right at the edge
+        result_buffer[RESULT_BUFFER_SIZE - 1] = '\0';
+        current_buffer_pos = RESULT_BUFFER_SIZE - 1;
+        LOG_WARN("AVX Search: Result buffer truncated while finalizing JSON.");
+    }
+
 
     ProcessedDataChunk* output_chunk = (ProcessedDataChunk*)malloc(sizeof(ProcessedDataChunk));
     if (!output_chunk) {
         LOG_ERROR("AVX Search: Failed to allocate output chunk.");
         return NULL;
     }
-    output_chunk->data = strdup(result_buffer); 
+    output_chunk->data = strdup(result_buffer); // strdup allocates new memory
     if (!output_chunk->data) {
         LOG_ERROR("AVX Search: Failed to strdup result_buffer.");
         free(output_chunk);
         return NULL;
     }
-    output_chunk->length = strlen(result_buffer);
+    output_chunk->length = current_buffer_pos; // Use current_buffer_pos for accurate length
     output_chunk->source_id = text_chunk->source_id ? strdup(text_chunk->source_id) : NULL; 
     if (text_chunk->source_id && !output_chunk->source_id) {
          LOG_WARN("AVX Search: Failed to duplicate source_id for output chunk.");

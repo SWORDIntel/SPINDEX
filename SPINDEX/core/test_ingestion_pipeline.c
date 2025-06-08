@@ -2,6 +2,7 @@
 #include "utils.h"
 #include "config_manager.h"
 #include "plugin_loader.h"
+#include "threading.h" // Must be before ingestion_pipeline.h if it uses ThreadPool type
 #include "ingestion_pipeline.h"
 #include <stdio.h>
 #include <stdlib.h>

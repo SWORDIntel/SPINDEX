@@ -8,7 +8,7 @@ CFLAGS = -Wall -Wextra -g -std=c11 -fPIC
 # Include directories
 INCLUDE_DIRS = -I./include -I./core
 # LDFLAGS for linking
-LDFLAGS = -ldl -rdynamic -lcurl # For dlopen, dlsym, plugins, and libcurl
+LDFLAGS = -ldl -rdynamic -lcurl -lpthread # For dlopen, dlsym, plugins, libcurl, and pthreads
 
 # Directories
 CORE_DIR = ./core
@@ -42,7 +42,7 @@ TEST_HW_DETECT_TARGET = $(BUILD_DIR)/test_hardware_detection
 TEST_PIPELINE_SRC = $(CORE_DIR)/test_ingestion_pipeline.c
 TEST_PIPELINE_DEPS = $(BUILD_DIR)/core/ingestion_pipeline.o $(BUILD_DIR)/core/plugin_loader.o \
                      $(BUILD_DIR)/core/config_manager.o $(BUILD_DIR)/core/utils.o $(BUILD_DIR)/core/hardware_detection.o \
-                     plugins
+                     $(BUILD_DIR)/core/threading.o plugins
 TEST_PIPELINE_TARGET = $(BUILD_DIR)/test_ingestion_pipeline
 
 TEST_ES_CLIENT_SRC = $(CORE_DIR)/test_elasticsearch_client.c
@@ -56,6 +56,7 @@ TEST_ES_INDEXING_DEPS = \
     $(BUILD_DIR)/core/plugin_loader.o \
     $(BUILD_DIR)/core/utils.o \
     $(BUILD_DIR)/core/elasticsearch_client.o \
+    $(BUILD_DIR)/core/threading.o \
     plugins
 TEST_ES_INDEXING_TARGET = $(BUILD_DIR)/test_elasticsearch_indexing
 TEST_ES_INDEXING_LINK_OBJS = $(filter %.o,$(TEST_ES_INDEXING_DEPS))
@@ -258,9 +259,9 @@ SEARCH_ALGORITHMS_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/search_algorithms
 all: $(TARGET_APP) plugins tests
 
 # Rule to build the main application
-$(TARGET_APP): $(CORE_OBJS) $(CORE_DIR)/main.c
+$(TARGET_APP): $(CORE_OBJS)
 	@mkdir -p $(@D)
-	$(LD) $(CFLAGS) $(INCLUDE_DIRS) $(CORE_DIR)/main.c $(CORE_OBJS) -o $@ $(LDFLAGS)
+	$(LD) $(CFLAGS) $(INCLUDE_DIRS) $(CORE_OBJS) -o $@ $(LDFLAGS)
 	@echo "Built main application: $@"
 
 # Rule to compile core C files to object files

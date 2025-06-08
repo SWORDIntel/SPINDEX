@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L // For strdup and other POSIX functions
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -164,9 +165,9 @@ SearchResults* search_orchestrator_execute_query(
                 ProcessedDataChunk wrapper_chunk_for_avx;
                 wrapper_chunk_for_avx.data = (unsigned char*)&avx_params;
                 wrapper_chunk_for_avx.length = sizeof(AvxSearchParams);
-                // Using CHUNK_TYPE_RAW_DATA as a placeholder for CHUNK_TYPE_OPAQUE_PARAMS
-                // Ensure data_types.h has a suitable type or add one.
-                wrapper_chunk_for_avx.data_type = CHUNK_TYPE_RAW_DATA;
+                // Using CHUNK_TYPE_RAW_BYTES as it's suitable for opaque parameter data
+                // Ensure data_types.h has a suitable type or add one if more specific type needed later.
+                wrapper_chunk_for_avx.data_type = CHUNK_TYPE_RAW_BYTES;
                 char source_id_buf[64];
                 snprintf(source_id_buf, sizeof(source_id_buf), "avx_req_for_%s", simulated_doc_ids[i]);
                 wrapper_chunk_for_avx.source_id = strdup(source_id_buf);
