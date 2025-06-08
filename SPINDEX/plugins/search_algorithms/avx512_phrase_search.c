@@ -13,6 +13,84 @@
 #include <stdbool.h>   // For bool type
 #include <ctype.h>     // For tolower (optional, can use custom)
 
+// Helper function to escape a string for JSON output
+static size_t escape_json_string(const char *input, char *output, size_t out_size) {
+    if (!input || !output || out_size == 0) {
+        if (output && out_size > 0) output[0] = '\0';
+        return 0;
+    }
+
+    size_t written = 0;
+    const char *p = input;
+    char *q = output;
+
+    while (*p && written < out_size - 1) { // -1 for null terminator
+        switch (*p) {
+            case '\\':
+            case '"':
+                if (written + 2 > out_size - 1) goto end; // Need space for '\' and char
+                *q++ = '\\';
+                *q++ = *p;
+                written += 2;
+                break;
+            case '\n':
+                if (written + 2 > out_size - 1) goto end;
+                *q++ = '\\';
+                *q++ = 'n';
+                written += 2;
+                break;
+            case '\r':
+                if (written + 2 > out_size - 1) goto end;
+                *q++ = '\\';
+                *q++ = 'r';
+                written += 2;
+                break;
+            case '\t':
+                if (written + 2 > out_size - 1) goto end;
+                *q++ = '\\';
+                *q++ = 't';
+                written += 2;
+                break;
+            case '\b': // Backspace
+                if (written + 2 > out_size - 1) goto end;
+                *q++ = '\\';
+                *q++ = 'b';
+                written += 2;
+                break;
+            case '\f': // Form feed
+                if (written + 2 > out_size - 1) goto end;
+                *q++ = '\\';
+                *q++ = 'f';
+                written += 2;
+                break;
+            default:
+                // For other control characters (0x00-0x1F), you might want to use \uXXXX
+                // but for this implementation, we'll pass them through if printable,
+                // or skip if not (though most common ones are handled above).
+                // This basic version focuses on the most common JSON escapes.
+                if (*p >= 0x20 && *p <= 0x7E) { // Printable ASCII
+                    *q++ = *p;
+                    written++;
+                } else {
+                    // Potentially skip or replace non-printable characters not explicitly handled
+                    // For simplicity, we'll skip them here.
+                    // A more robust solution might use \uXXXX escaping.
+                }
+                break;
+        }
+        p++;
+    }
+
+end:
+    if (written < out_size) {
+        *q = '\0'; // Null-terminate the output string
+    } else if (out_size > 0) {
+        output[out_size - 1] = '\0'; // Ensure null termination if buffer is full
+    }
+    return written;
+}
+
+
 #define RESULT_BUFFER_SIZE 8192 // Increased buffer size for JSON output
 #define AVX_BLOCK_SIZE 64  // AVX-512 processes 64 bytes at a time (already defined in example, ensure consistency if it was different)
 
@@ -155,11 +233,13 @@ ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
         first_phrase_in_json = false;
 
         // Start phrase object: {"phrase": "...", "offsets": [
-        // TODO: Proper JSON escaping for current_phrase_str if it can contain quotes or backslashes.
-        // For now, direct insertion.
+        // Proper JSON escaping for current_phrase_str
+        char escaped_phrase_buffer[2 * strlen(current_phrase_str) + 1]; // Max 2 chars per input char + null
+        escape_json_string(current_phrase_str, escaped_phrase_buffer, sizeof(escaped_phrase_buffer));
+
         int pre_phrase_len = current_buffer_pos;
         current_buffer_pos += snprintf(result_buffer + current_buffer_pos, RESULT_BUFFER_SIZE - current_buffer_pos,
-                                       "{\"phrase\": \"%s\", \"offsets\": [", current_phrase_str);
+                                       "{\"phrase\": \"%s\", \"offsets\": [", escaped_phrase_buffer);
         if (current_buffer_pos >= RESULT_BUFFER_SIZE -1) {
              LOG_WARN("AVX Search: Result buffer truncated while writing phrase header.");
              result_buffer[pre_phrase_len] = '\0'; // Attempt to backtrack to keep JSON valid-ish
