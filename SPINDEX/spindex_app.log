@@ -1,0 +1,4 @@
+[2025-06-08 06:41:04] [INFO] [core/utils.c:42] Logging system initialized. Log level: INFO.
+[2025-06-08 06:41:04] [INFO] [core/main.c:21] Spindex Application Starting...
+[2025-06-08 06:41:04] [INFO] [core/main.c:29] Configuration file specified: test_spindex.conf
+[2025-06-08 06:41:04] [ERROR] [core/main.c:41] Failed to parse configuration file: test_spindex.conf. Exiting.

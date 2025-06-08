@@ -1,0 +1,17 @@
+{
+  "name": "SampleJSON",
+  "version": "1.0",
+  "description": "A sample JSON file for testing the ingestion pipeline.",
+  "data": {
+    "key1": "value1",
+    "key2": 123,
+    "nested": {
+      "subkey": "subvalue"
+    }
+  },
+  "items": [
+    "item1",
+    "item2",
+    "item3"
+  ]
+}

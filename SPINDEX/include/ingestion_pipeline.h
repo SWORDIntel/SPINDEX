@@ -4,6 +4,8 @@
 #include "data_types.h"       // For ProcessedDataChunk
 #include "config.h"           // For SpindexConfig
 #include "plugin_interface.h" // For SpindexPlugin
+#include "threading.h"        // For ThreadPool
+#include <pthread.h>          // For pthread_mutex_t
 
 /**
  * @brief Represents the ingestion pipeline manager.
@@ -23,7 +25,8 @@ typedef struct {
 
     // Future fields might include:
     // - Caches for frequently used plugins
-    // - Thread pool for parallel processing
+    ThreadPool thread_pool;        // Thread pool for parallel processing
+    pthread_mutex_t indexer_mutex; // To protect calls to non-thread-safe indexer plugins
     // - Statistics on processed files/data
 } SpindexIngestionPipeline;
 
@@ -67,6 +70,20 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
  * @param chunk Pointer to the ProcessedDataChunk to be freed.
  */
 void free_processed_data_chunk(ProcessedDataChunk *chunk);
+
+/**
+ * @brief Submits a file for processing by the ingestion pipeline's thread pool.
+ *
+ * This function is asynchronous. It creates a task for the given file_path
+ * and submits it to the internal thread pool. The actual processing (preprocessing,
+ * parsing, indexing) will happen on a worker thread.
+ *
+ * @param pipeline Pointer to the initialized SpindexIngestionPipeline.
+ * @param file_path Path to the file to be processed.
+ * @return 0 on successful submission, -1 on failure (e.g., memory allocation error,
+ *         thread pool submission error). Errors are logged internally.
+ */
+int pipeline_submit_file_for_processing(SpindexIngestionPipeline* pipeline, const char* file_path);
 
 /**
  * @brief Shuts down the ingestion pipeline and releases its resources.

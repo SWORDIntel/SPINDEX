@@ -1,5 +1,5 @@
-#ifndef THREADING_H
-#define THREADING_H
+#ifndef SPINDEX_INCLUDE_THREADING_H
+#define SPINDEX_INCLUDE_THREADING_H
 
 #include <pthread.h>
 #include <stddef.h>
@@ -45,4 +45,4 @@ bool thread_pool_submit_task(ThreadPool* pool, void (*function)(void*), void* ar
  */
 void thread_pool_destroy(ThreadPool* pool);
 
-#endif // THREADING_H
+#endif // SPINDEX_INCLUDE_THREADING_H
