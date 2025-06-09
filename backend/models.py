@@ -41,6 +41,13 @@ class IngestionJobDB(Base):
 
     celery_task_id = Column(String, nullable=True, index=True, unique=True) # Celery task ID should be unique
 
+    geocoding_summary = Column(JSON, nullable=True) # Summary from geocoding stage
+
+    # Consider adding 'created_at' and 'updated_at' managed by SQLAlchemy/database
+    # For example:
+    # created_at = Column(DateTime, default=datetime.utcnow)
+    # updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
     def __repr__(self):
         return f"<IngestionJobDB(job_id='{self.job_id}', filename='{self.original_filename}', status='{self.processing_status}')>"
 
