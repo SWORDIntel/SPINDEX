@@ -9,364 +9,323 @@
 
 **Phase 1: Core System & Plugin Infrastructure**
 Status: **DONE ✅**
-
-This phase focuses on getting the absolute basics running: the core application, plugin loading, and configuration.
+*(No changes in this phase)*
 
 1.  **Task: [CORE-001] Implement `main.c` Entry Point**
-    *   Description: Create the main application entry point. Basic argument parsing (e.g., config file path).
-    *   Files: `core/main.c`
     *   Priority: High
 2.  **Task: [CORE-002] Define Core Data Structures & Types**
-    *   Description: Define common data structures (e.g., for processed data chunks, plugin info) in `data_types.h`.
-    *   Files: `include/data_types.h`
     *   Priority: High
 3.  **Task: [CORE-003] Define Plugin Interface (`plugin_interface.h`)**
-    *   Description: Define the C function pointer interfaces for all plugin types (parsers, preprocessors, indexers, etc.). This is crucial for modularity.
-    *   Files: `include/plugin_interface.h`
     *   Priority: High
 4.  **Task: [CORE-004] Implement Plugin Loader (`plugin_loader.c`)**
-    *   Description: Develop the module to scan `plugins/` subdirectories, dynamically load `.so` files (`dlopen`, `dlsym`), and register them based on the `plugin_interface.h`.
-    *   Files: `core/plugin_loader.c`, `core/plugin_loader.h`
     *   Priority: High
 5.  **Task: [CORE-005] Implement Configuration Manager (`config_manager.c`)**
-    *   Description: Develop the module to parse configuration files (e.g., `plugins.cfg`, `pipeline.cfg`, `elasticsearch.cfg`). Define config structures in `config.h`.
-    *   Files: `core/config_manager.c`, `core/config_manager.h`, `include/config.h`
     *   Priority: High
 6.  **Task: [BUILD-001] Create Initial Makefile**
-    *   Description: Set up a basic `Makefile` to compile the core components and link them. Add rules for compiling plugins into `.so` files later.
-    *   Files: `Makefile`
     *   Priority: High
 7.  **Task: [CORE-006] Implement Basic Logging Utility**
-    *   Description: A simple logging mechanism for debug, info, error messages. Could be part of `utils.c`.
-    *   Files: `core/utils.c`, `core/utils.h` (or dedicated logging module)
     *   Priority: Medium
 8.  **Task: [CORE-007] Implement Hardware Detection (`hardware_detection.c`)**
-    *   Description: Basic module to detect CPU capabilities (e.g., AVX-512 support using CPUID).
-    *   Files: `core/hardware_detection.c`, `core/hardware_detection.h`
     *   Priority: Medium
 
 **Phase 2: Basic Ingestion Pipeline & First Parser/Preprocessor Pair**
 Status: **DONE ✅**
-
-Focus on getting a single file type processed end-to-end (conceptually, actual indexing comes later). We'll leverage the existing `json_preprocessor.c`.
+*(No changes in this phase)*
 
 1.  **Task: [INGEST-001] Implement Ingestion Pipeline Manager (`ingestion_pipeline.c`)**
-    *   Description: Core logic to manage the data flow: identify file type (initially basic extension), call preprocessor, call parser, prepare for indexer.
-    *   Files: `core/ingestion_pipeline.c`, `core/ingestion_pipeline.h`
     *   Priority: High
 2.  **Task: [JSON-001] Adapt `json_preprocessor.c` to Plugin Interface**
-    *   Description: Modify the existing `json_preprocessor.c` to conform to `plugin_interface.h`. Compile it as `plugins/preprocessors/json_preprocessor.so`.
-    *   Files: `plugins/preprocessors/json_preprocessor.c` (and a minimal `.h` if needed for its own functions)
     *   Priority: High
-    *   *Status: `json_preprocessor.c` exists, needs adaptation.*
 3.  **Task: [JSON-002] Implement `json_parser.c`**
-    *   Description: Create the JSON parser plugin. It should take preprocessed data (if any) and parse the JSON structure into a format defined in `data_types.h`.
-    *   Files: `plugins/parsers/json_parser.c` (and a minimal `.h`)
     *   Priority: High
-    *   Dependencies: [CORE-002], [CORE-003]
 4.  **Task: [BUILD-002] Extend Makefile for JSON Plugins**
-    *   Description: Add rules to `Makefile` to compile `json_preprocessor.so` and `json_parser.so`.
-    *   Files: `Makefile`
     *   Priority: High
 5.  **Task: [TEST-001] Test Core JSON Ingestion Path**
-    *   Description: Create a test harness or extend `main.c` to load a JSON file, pass it through the `ingestion_pipeline` using the JSON preprocessor and parser plugins, and log/verify the output.
     *   Priority: High
 
 **Phase 3: Elasticsearch Integration & Indexing**
 Status: **DONE ✅**
+*(No changes in this phase)*
 
 1.  **Task: [ES-001] Implement Elasticsearch Client (`elasticsearch_client.c`)**
-    *   Description: Module to handle communication with Elasticsearch (HTTP requests, connection management, sending bulk data). Likely using `libcurl`.
-    *   Files: `core/elasticsearch_client.c`, `core/elasticsearch_client.h`
     *   Priority: High
 2.  **Task: [ES-002] Implement Elasticsearch Indexer Plugin (`elasticsearch_indexer.so`)**
-    *   Description: Plugin that takes parsed data (from `data_types.h` format) and sends it to Elasticsearch via `elasticsearch_client.c` for indexing.
-    *   Files: `plugins/indexers/elasticsearch_indexer.c`
     *   Priority: High
-    *   Dependencies: [ES-001], [CORE-002], [CORE-003]
 3.  **Task: [BUILD-003] Extend Makefile for Elasticsearch Indexer**
-    *   Description: Add rules to `Makefile` to compile `elasticsearch_indexer.so`.
-    *   Files: `Makefile`
     *   Priority: High
 4.  **Task: [TEST-002] End-to-End JSON Indexing Test**
-    *   Description: Test indexing a JSON file into a local Elasticsearch instance. Verify data in Elasticsearch/Kibana.
     *   Priority: High
 
 **Phase 4: Expanding Parsers & Preprocessors (Iterative)**
 Status: **DONE ✅**
+*(No changes in this phase)*
 
-This phase will be repeated for each file type.
-
-*   **Text-Based Files (`.txt`)**
-    1.  **Task: [TXT-001] Implement `txt_preprocessor.c`**
-        *   Description: Preprocessor for TXT files. Initially simple, later to integrate with ML classification for ambiguous content.
-        *   Files: `plugins/preprocessors/txt_preprocessor.c`
-        *   Priority: Medium
-    2.  **Task: [TXT-002] Implement `txt_parser.c`**
-        *   Description: Parser for TXT files. Strategies might vary based on (future) ML classification.
-        *   Files: `plugins/parsers/txt_parser.c`
-        *   Priority: Medium
-
-*   **CSV Files (`.csv`)**
-    1.  **Task: [CSV-001] Implement `csv_preprocessor.c`**
-        *   Files: `plugins/preprocessors/csv_preprocessor.c`
-        *   Priority: Medium
-    2.  **Task: [CSV-002] Implement `csv_parser.c`**
-        *   Files: `plugins/parsers/csv_parser.c`
-        *   Priority: Medium
-
-*   **SQL Files (`.sql`)**
-    1.  **Task: [SQL-001] Implement `sql_preprocessor.c`**
-        *   Files: `plugins/preprocessors/sql_preprocessor.c`
-        *   Priority: Medium
-    2.  **Task: [SQL-002] Implement `sql_parser.c`** (might focus on extracting DDL, DML, comments, etc.)
-        *   Files: `plugins/parsers/sql_parser.c`
-        *   Priority: Medium
-
-*   **XML Files (`.xml`)**
-    1.  **Task: [XML-001] Implement `xml_preprocessor.c`**
-        *   Files: `plugins/preprocessors/xml_preprocessor.c`
-        *   Priority: Medium
-    2.  **Task: [XML-002] Implement `xml_parser.c`** (consider using a library like `libxml2`)
-        *   Files: `plugins/parsers/xml_parser.c`
-        *   Priority: Medium
-
-*   **YAML Files (`.yml`)**
-    1.  **Task: [YML-001] Implement `yml_preprocessor.c`**
-        *   Files: `plugins/preprocessors/yml_preprocessor.c`
-        *   Priority: Medium
-    2.  **Task: [YML-002] Implement `yml_parser.c`** (consider using a library like `libyaml`)
-        *   Files: `plugins/parsers/yml_parser.c`
-        *   Priority: Medium
-
-*   **HTML Files (`.html`, `.htm`)**
-    1.  **Task: [HTML-001] Implement `html_preprocessor.c`**
-        *   Files: `plugins/preprocessors/html_preprocessor.c`
-        *   Priority: Medium
-    2.  **Task: [HTML-002] Implement `html_parser.c`** (extract text content, metadata, links; consider `libxml2` in HTML mode)
-        *   Files: `plugins/parsers/html_parser.c`
-        *   Priority: Medium
-
-*   **Document Files (DOC/DOCX, XLS/XLSX, PDF, RTF)** - These are more complex and may require external libraries or command-line tools initially.
-    1.  **Task: [DOC-001] Research & Implement `doc_parser.c` & `doc_preprocessor.c`** (e.g., using `libdoc`, `antiword`, or shelling out to `pandoc`/`libreoffice`)
-    2.  **Task: [XLS-001] Research & Implement `xls_parser.c` & `xls_preprocessor.c`** (e.g., using `libxls`, `libxlsxwriter`, or shelling out)
-    3.  **Task: [PDF-001] Research & Implement `pdf_parser.c` & `pdf_preprocessor.c`** (e.g., using `poppler`, `mupdf`, or shelling out to `pdftotext`)
-    4.  **Task: [RTF-001] Research & Implement `rtf_parser.c` & `rtf_preprocessor.c`** (e.g., `librtf` or shelling out)
-    *   Priority: Low to Medium (due to complexity/external dependencies)
-
-*   **Specialized Formats (`.dic`, `.sqlite/.db`)**
-    1.  **Task: [DIC-001] Research & Implement `dic_parser.c` & `dic_preprocessor.c`** (for DICOM; e.g., using `dcmtk` or `Grassroots DICOM (GDCM)`)
-        *   Priority: Medium (if medical data is key)
-    2.  **Task: [SQLITE-001] Implement `sqlite_parser.c` & `sqlite_preprocessor.c`** (using `sqlite3` library to read schema and data)
-        *   Priority: Medium
-
-*   **Task: [BUILD-004] Extend Makefile for All New Parsers/Preprocessors**
-    *   Description: Iteratively update Makefile as new plugins are added.
-    *   Priority: Medium (ongoing)
-
-*   **General Enhancement: File Encoding Support**
-    1.  **Task: [ENC-001] Research and Implement Encoding Detection**
-        *   Description: Investigate and integrate a robust library or method for detecting file encodings (e.g., UTF-8, UTF-16, ISO-8859-1, etc.). This might involve updating `ingestion_pipeline.c` or individual preprocessors.
-        *   Priority: Medium
-    2.  **Task: [ENC-002] Update Parsers/Preprocessors for Encoding Handling**
-        *   Description: Modify existing and future text-based parsers and preprocessors to utilize detected encoding information, ensuring correct character processing. This includes `txt_parser/preprocessor`, `csv_parser/preprocessor`, `json_parser/preprocessor`, `xml_parser/preprocessor`, etc.
-        *   Priority: Medium (ongoing as new parsers are developed)
-    3.  **Task: [ENC-003] Test Encoding Support**
-        *   Description: Create test cases with files using various common encodings to verify proper handling.
-        *   Priority: Medium
+*   Tasks [TXT-001] to [SQLITE-001], [BUILD-004], [ENC-001] to [ENC-003] remain as is with their existing priorities.
 
 **Phase 5: Decompressors**
 Status: **DONE ✅**
+*(No changes in this phase)*
 
-1.  **Task: [DECOMP-001] Implement `zip_decompressor.c`** (e.g., using `libzip` or `miniz`) - **DONE ✅**
-    *   Files: `plugins/decompressors/zip_decompressor.c`
-    *   Priority: Medium
-2.  **Task: [DECOMP-002] Implement `gzip_decompressor.c`** (e.g., using `zlib`) - **DONE ✅**
-    *   Files: `plugins/decompressors/gzip_decompressor.c`
-    *   Priority: Medium
-3.  **Task: [DECOMP-003] Implement `zstd_decompressor.c`** (e.g., using `libzstd`) - **DONE ✅**
-    *   Files: `plugins/decompressors/zstd_decompressor.c` (Corrected from .so to .c as per actual implementation)
-    *   Priority: Medium
-4.  **Task: [INGEST-002] Integrate Decompressors into Ingestion Pipeline** - **DONE ✅**
-    *   Description: Modify `ingestion_pipeline.c` to detect compressed files and invoke decompressor plugins before preprocessors/parsers.
-    *   Priority: Medium
-5.  **Task: [BUILD-005] Extend Makefile for Decompressors** - **DONE ✅**
-    *   Priority: Medium
+1.  Tasks [DECOMP-001] to [BUILD-005] remain as is with their existing priorities.
 
-**Phase 6: Advanced Features - AVX-512 & Machine Learning**
+**Phase 6: AEGIS-ECHO Data Ingestion Pipeline**
+Status: Pending
+(Based on docs/AEGIS_PIPELINE_DESIGN.md)
+
+1.  **Task: [AEGIS-001] Design and Implement Secure Upload/Reception Endpoint**
+    *   Description: Establish the API endpoint for secure file uploads, including initial validation (size, MIME type) and robust authentication/authorization.
+    *   Priority: High
+    *   Status: To Do
+2.  **Task: [AEGIS-002] Implement Staging Area for raw data**
+    *   Description: Set up a secure, isolated temporary storage location for uploaded raw data before processing.
+    *   Priority: High
+    *   Status: To Do
+3.  **Task: [AEGIS-003] Implement Ingestion Task Trigger mechanism**
+    *   Description: Integrate a message queue (e.g., RabbitMQ, Redis) to publish tasks for asynchronous processing upon successful data staging.
+    *   Priority: High
+    *   Status: To Do
+4.  **Task: [AEGIS-004] Develop Pipeline Worker Execution framework**
+    *   Description: Create the Celery worker (or similar) infrastructure capable of subscribing to the task queue and executing a sequence of processing modules.
+    *   Priority: High
+    *   Status: To Do
+5.  **Task: [AEGIS-005] Implement Format Conversion & Abstraction module (GDAL/OGR)**
+    *   Description: Develop the pipeline module to detect input vector formats and convert them to a standard interchange format like GeoJSON using GDAL/OGR.
+    *   Priority: Medium
+    *   Status: To Do
+6.  **Task: [AEGIS-006] Implement CRS Transformation module**
+    *   Description: Develop the pipeline module to auto-detect source CRS and re-project geometries to a standard internal CRS (e.g., EPSG:4326).
+    *   Priority: Medium
+    *   Status: To Do
+7.  **Task: [AEGIS-007] Implement Geocoding Service Integration module**
+    *   Description: Develop the module to identify address fields and integrate with a geocoding service to generate point geometries.
+    *   Priority: Medium
+    *   Status: To Do
+8.  **Task: [AEGIS-008] Implement Complex Geometry Handling module**
+    *   Description: Develop the module to manage datasets with mixed geometry types based on configurable strategies (split, filter, reject).
+    *   Priority: Medium
+    *   Status: To Do
+9.  **Task: [AEGIS-009] Implement Unstructured Text Parsing (NLP/NER) module**
+    *   Description: Develop the module to use NER for extracting location names from text, integrating with the geocoding module.
+    *   Priority: Medium
+    *   Status: To Do
+10. **Task: [AEGIS-010] Implement Geometric Validation module**
+    *   Description: Develop the pipeline module to check for and optionally repair invalid geometries (e.g., using Shapely).
+    *   Priority: Medium
+    *   Status: To Do
+11. **Task: [AEGIS-011] Implement Content-Level Security Scanning module**
+    *   Description: Develop the module for security scanning (e.g., XXE prevention, zip bomb detection).
+    *   Priority: Medium
+    *   Status: To Do
+12. **Task: [AEGIS-012] Implement Value-Domain & Schema Validation module**
+    *   Description: Develop the module to validate data against expected structures, attribute types, and value constraints.
+    *   Priority: Medium
+    *   Status: To Do
+13. **Task: [AEGIS-013] Implement Data Promotion logic**
+    *   Description: Develop the logic to move validated, processed data to a trusted location and update metadata status accordingly.
+    *   Priority: High
+    *   Status: To Do
+14. **Task: [AEGIS-014] Implement Data Quarantine (DLQ) logic**
+    *   Description: Develop the logic to isolate data that fails processing/validation, update metadata, and log errors.
+    *   Priority: High
+    *   Status: To Do
+15. **Task: [AEGIS-015] Implement Persistent Metadata Cataloguing**
+    *   Description: Integrate a persistent database (e.g., PostgreSQL) for storing all ingestion job metadata, replacing any in-memory solutions.
+    *   Priority: High
+    *   Status: To Do
+16. **Task: [AEGIS-016] Test AEGIS-ECHO pipeline end-to-end**
+    *   Description: Conduct comprehensive testing of the full AEGIS-ECHO pipeline with various data types, sizes, and potential error conditions.
+    *   Priority: High
+    *   Status: To Do
+
+**Phase 7: Advanced C Plugin Features - AVX-512 & Machine Learning** (Previously Phase 6)
 Status: In Progress
 
-These are significant undertakings.
-
 1.  **Task: [AVX-001] Implement full AVX-512 phrase search algorithm**
-    *   Description: Develop the C-based AVX-512 optimized phrase search algorithm as a plugin. This is a highly specialized task.
-    *   Files: `plugins/search_algorithms/avx512_phrase_search.c`
     *   Priority: High
-    *   Dependencies: [CORE-007]
     *   Status: To Do
 2.  **Task: [ES-003] Integrate AVX-512 Search with Elasticsearch Queries**
-    *   Description: Design how SPINDEX's AVX-512 search interacts with or enhances Elasticsearch vector search. This might involve custom ES plugins or specific query formations.
     *   Priority: Medium
-    *   Status: Design Complete. See `docs/avx_elasticsearch_integration_design.md`.
+    *   Status: Design Complete
 3.  **Task: [ML-001] Define Machine Learning Interface (`ml_interface.h`)**
-    *   Description: Specify C interfaces for loading ML models and performing inference (classification).
-    *   Files: `include/ml_interface.h`
     *   Priority: Medium
     *   Status: **DONE ✅**
 4.  **Task: [ML-002] Implement ML Classifier Plugin (`ml_classifier.so`)**
-    *   Description: A plugin to load and run pre-trained ML models for content classification (e.g., distinguishing types of data within `.txt` files). May use libraries like `oneDNN` or ONNX Runtime C API.
-    *   Files: `plugins/classifiers/ml_classifier.c` (Path corrected from preprocessors)
     *   Priority: Medium
     *   Status: **DONE ✅**
 5.  **Task: [ML-003] Implement Content Analyzer Plugin (`content_analyzer.so`)**
-    *   Description: A plugin for heuristic-based content analysis, potentially as a fallback or supplement to ML classification.
-    *   Files: `plugins/analyzers/content_analyzer.c` (Path corrected from preprocessors)
     *   Priority: Medium
     *   Status: **DONE ✅**
 6.  **Task: [INGEST-003] Integrate ML Classification into Ingestion Pipeline**
-    *   Description: Modify `ingestion_pipeline.c` and relevant preprocessors (e.g., `txt_preprocessor.c`) to use `ml_classifier.so` and `content_analyzer.so` for ambiguous data handling.
     *   Priority: Medium
     *   Status: **DONE ✅**
 7.  **Task: [BUILD-006] Extend Makefile for AVX & ML Plugins**
     *   Priority: Medium
     *   Status: **DONE ✅**
-
 *   **Sub-Phase: ML Inference Acceleration with OpenVINO**
-    *   Description: Enhance the ML capabilities by integrating Intel's OpenVINO toolkit for optimized inference. The primary goal is to accelerate ML classification tasks by leveraging FP16 precision models on modern hardware, including CPUs, integrated GPUs, and specialized NPUs (e.g., on Intel Meteor Lake 165h processors). The `openvino_classifier.c` plugin implements this using the OpenVINO C API. It expects models pre-converted to FP16 OpenVINO Intermediate Representation (IR) format. Device selection for inference can be automatic (`"AUTO"`) or explicitly specified (e.g., `"NPU"`), with further optimization possible via performance hints. See FP16.MD for detailed analysis and model recommendations.
-    *   Priority: Medium-High (Strategic Feature)
-    *   Note: Successful deployment and testing of these tasks will be dependent on the availability of target hardware (e.g., Intel Meteor Lake 165h) and corresponding OpenVINO SDK, drivers, and toolchains.
-
-    1.  **Task: [ML-OV-001] Research OpenVINO Integration for SPINDEX**
-        *   Description: Investigate the OpenVINO toolkit, its C/C++ APIs for inference, and best practices for integrating it into the SPINDEX plugin architecture. Identify any necessary changes to `ml_interface.h` or the plugin loading mechanism to support OpenVINO-accelerated models alongside other ML backends.
-        *   Files: Potentially `include/ml_interface.h`, design documents.
-        *   Priority: Medium-High
-        *   Status: DONE ✅
-    2.  **Task: [ML-OV-002] Implement OpenVINO-enabled ML Classifier Plugin**
-        *   Description: Develop a new ML classifier plugin (e.g., `openvino_classifier.c`) or significantly refactor `ml_classifier.c` to support loading and executing models (especially FP16 quantized models) using the OpenVINO Inference Engine. This includes model loading, input preprocessing specific to OpenVINO, and output postprocessing. (Note: Consider DistilBERT or similar efficient transformer models, fine-tuned and converted to FP16 OpenVINO IR format, as detailed in FP16.MD analysis.)
-        *   Files: `plugins/classifiers/openvino_classifier.c`, `plugins/classifiers/openvino_classifier.h` (if new), or modifications to existing ML plugin files.
-        *   Priority: Medium-High
-        *   Dependencies: [ML-OV-001], [ML-001]
-        *   Status: DONE ✅
-    3.  **Task: [ML-OV-003] Add Build System Support for OpenVINO**
-        *   Description: Update the Makefile or build system to correctly detect OpenVINO installations, link against necessary OpenVINO libraries, and compile the OpenVINO-enabled plugin.
-        *   Files: `Makefile`, build scripts.
-        *   Priority: Medium
-        *   Status: DONE ✅
-    4.  **Task: [ML-OV-004] Implement FP16 Model Handling and Meteor Lake 165h Optimizations**
-        *   Description: Ensure the OpenVINO plugin can correctly load and utilize FP16 precision models. Investigate and implement any specific optimizations or configurations available through OpenVINO for Intel Meteor Lake 165h processors, potentially including NPU offloading if supported and exposed via the OpenVINO C/C++ API.
-        *   Files: OpenVINO plugin implementation.
-        *   Priority: Medium
-        *   Dependencies: [ML-OV-002]
-        *   Status: DONE ✅ (Code complete, FP16 model usage integrated; NPU specific tuning is hardware-dependent)
+    *   Tasks [ML-OV-001] to [ML-OV-004] (DONE ✅, Medium-High priorities)
     5.  **Task: [ML-OV-005] Execute hardware-specific testing and validation for OpenVINO FP16 Inference on Meteor Lake 165h**
-        *   Description: Conduct thorough testing of the OpenVINO-enabled plugin with suitable FP16 models on a system equipped with an Intel Meteor Lake 165h processor. Verify functional correctness, performance gains, and stability. Compare against non-accelerated inference if possible.
         *   Priority: High
-        *   Dependencies: [ML-OV-004], Access to target hardware.
         *   Status: To Do
 
-**Phase 7: Backend Finalization and AEGIS Pipeline Completion**
+**Phase 8: Backend Finalization** (Previously Phase 7 - "Backend Finalization and AEGIS Pipeline Completion", AEGIS part moved to new Phase 6)
 Status: Pending
-(Based on backend/README.md and docs/AEGIS_PIPELINE_DESIGN.md)
 
-1.  **Task: [BE-001] Implement persistent storage for Metadata Catalogue (IngestionJobMetadata and IndexMetadata)**
-    *   Description: Replace current in-memory lists for `IngestionJobMetadata` and `IndexMetadata` with a persistent storage solution (e.g., SQLite, PostgreSQL).
+1.  **Task: [BE-001] Implement persistent storage for IndexMetadata** (Refined from original BE-001)
+    *   Description: Replace current in-memory list for `IndexMetadata` with a persistent storage solution.
     *   Priority: High
     *   Status: To Do
 2.  **Task: [BE-002] Implement persistent storage for Query History**
-    *   Description: Replace current in-memory list for `QueryHistory` with a persistent storage solution.
     *   Priority: High
     *   Status: To Do
-3.  **Task: [BE-003] Complete Content-Level Security Scanning module in AEGIS pipeline**
-    *   Description: Implement robust content-level security scanning (Stage 3.4 in AEGIS_PIPELINE_DESIGN.md) for various file types, including checks for XXE in XML-based formats and "zip bomb" characteristics.
-    *   Priority: High
-    *   Status: To Do
-4.  **Task: [BE-004] Complete Schema & Value-Domain Validation module in AEGIS pipeline**
-    *   Description: Implement comprehensive schema and value-domain validation (Stage 3.5 in AEGIS_PIPELINE_DESIGN.md), including checks for required attributes, data types, and coordinate value domains. Allow for user-defined schemas.
-    *   Priority: High
-    *   Status: To Do
-5.  **Task: [BE-005] Implement Unstructured Text Parsing (NLP/NER) for Location Extraction in AEGIS pipeline**
-    *   Description: Implement Stage 3.8 from AEGIS_PIPELINE_DESIGN.md, using NLP/NER (e.g., spaCy) to extract location names from text and integrate with the geocoding module.
-    *   Priority: High
-    *   Status: To Do
-6.  **Task: [BE-006] Implement robust error handling and user notification for AEGIS pipeline failures**
-    *   Description: Enhance error handling within the AEGIS pipeline, provide clearer error messages in `IngestionJobMetadata`, and establish a user notification system for failures (e.g., via GUI alerts or email).
+3.  **Task: [BE-006] Implement robust error handling and user notification for general backend operations** (Refined from original BE-006)
+    *   Description: Enhance error handling for general backend API calls, provide clearer error messages, and establish user notifications where applicable (beyond AEGIS pipeline).
     *   Priority: Medium
     *   Status: To Do
-7.  **Task: [BE-007] Testing and Refinement of Backend and AEGIS pipeline**
-    *   Description: Conduct thorough testing of all backend endpoints, Celery tasks, and AEGIS pipeline stages with diverse datasets and error conditions. Refine based on test outcomes.
+4.  **Task: [BE-007] Testing and Refinement of Backend APIs and Services** (Refined from original BE-007)
+    *   Description: Conduct thorough testing of all backend endpoints and services (excluding AEGIS pipeline which is tested in [AEGIS-016]).
     *   Priority: High
     *   Status: To Do
+    *   (Original BE-003, BE-004, BE-005 are now covered by AEGIS tasks [AEGIS-011], [AEGIS-012], [AEGIS-009] respectively)
 
-**Phase 8: GUI Development**
+**Phase 9: Comprehensive GUI Implementation** (Previously Phase 8 - "GUI Development")
 Status: Pending
 (Based on GUI_DESIGN.md and gui/GUI_MOCKUPS.md)
 
-1.  **Task: [GUI-001] Implement Dashboard View**
-    *   Description: Develop the main dashboard UI components as per `gui/GUI_MOCKUPS.md`.
-    *   Priority: Medium
-    *   Status: To Do
-2.  **Task: [GUI-002] Implement Index Management View (including wizard integration)**
-    *   Description: Develop the Index Management UI, including the table for listing indexes and integrating the "Enhanced Index Creation Wizard" modal. Backend interaction for `GET /indexes`, `DELETE /indexes/{index_id}`.
-    *   Priority: Medium
-    *   Status: To Do
-3.  **Task: [GUI-003] Implement Query Interface View**
-    *   Description: Develop the Query Interface UI, including index selection, query type selection, dynamic parameter inputs, results display, and query history. Backend interaction for `POST /query/execute`, `GET /query/history`, and `GET /indexes?status=ready`.
-    *   Priority: Medium
-    *   Status: To Do
-4.  **Task: [GUI-004] Implement Data Visualization View (basic map and layer controls)**
-    *   Description: Develop the Data Visualization UI with a map display and basic layer/style controls.
-    *   Priority: Medium
-    *   Status: To Do
-5.  **Task: [GUI-005] Implement Settings View (basic structure and user preferences)**
-    *   Description: Develop the Settings UI with initial tabs for Data Sources and User Preferences.
-    *   Priority: Medium
-    *   Status: To Do
-6.  **Task: [GUI-006] Implement Ingestion Dashboard View (file upload, job listing)**
-    *   Description: Develop the Ingestion Dashboard UI, including file upload functionality (`POST /upload/data`), and tables for Ingestion Jobs and Quarantined Jobs (`GET /metadata/ingestion_jobs`).
-    *   Priority: Medium
-    *   Status: To Do
-7.  **Task: [GUI-007] Implement Enhanced Index Creation Wizard (all steps)**
-    *   Description: Fully implement the multi-step "Enhanced Index Creation Wizard" modal, including fetching processed data (`GET /metadata/ingestion_jobs?processing_status=validation_successful_ready_for_promotion`), displaying validation summaries, collecting index parameters, and submitting for creation (`POST /indexes`).
-    *   Priority: Medium
-    *   Dependencies: [GUI-002]
-    *   Status: To Do
-8.  **Task: [GUI-008] Implement GUI Backend API Interaction (connecting UI elements to backend endpoints in `script.js`)**
-    *   Description: Ensure all JavaScript functions in `script.js` correctly call backend API endpoints, handle responses, and update the UI accordingly for all implemented views.
-    *   Priority: High
-    *   Status: To Do (Ongoing with each view)
-9.  **Task: [GUI-009] Implement UI feedback mechanisms (loading indicators, error messages, help tooltips)**
-    *   Description: Add loading spinners/messages for API calls, clear error messages for users, and helpful tooltips for complex UI elements as described in mockups.
-    *   Priority: Medium
-    *   Status: To Do (Ongoing with each view)
-10. **Task: [GUI-010] Testing and Refinement of GUI components.**
-    *   Description: Conduct usability testing, cross-browser checks, and functional testing of all GUI views and interactions. Refine based on feedback.
-    *   Priority: High
-    *   Status: To Do
+*   **Foundational & Architectural GUI Tasks:**
+    1.  **Task: [GUI-FND-001] Implement RBAC checks in UI based on user roles.**
+        *   Description: Ensure UI elements and actions are enabled/disabled based on authenticated user's role and permissions.
+        *   Priority: High
+        *   Status: To Do
+    2.  **Task: [GUI-FND-002] Ensure UI interactions with backend respect E2E encryption and authentication model.**
+        *   Description: Verify client-side handling of tokens, mTLS requirements, and secure API communication.
+        *   Priority: High
+        *   Status: To Do
+    3.  **Task: [GUI-FND-003] Design UI for Index Versioning & Integrity display.**
+        *   Description: Implement UI elements to show index versions, associated hashes, and verification status.
+        *   Priority: High
+        *   Status: To Do
 
-**Phase 9: Optimizations, Security, and Final System Touches**
+*   **User Experience (UX) Enhancements:**
+    4.  **Task: [GUI-UX-001] Implement multi-step Index Creation Wizard.**
+        *   Description: Develop the full wizard flow as per `GUI_DESIGN.md` and `gui/GUI_MOCKUPS.md`.
+        *   Priority: High
+        *   Status: To Do
+    5.  **Task: [GUI-UX-002] Add Data Preview & Validation display within the wizard.**
+        *   Description: Integrate preview of AEGIS-processed data and its validation summary in the Index Creation Wizard.
+        *   Priority: Medium
+        *   Status: To Do
+    6.  **Task: [GUI-UX-003] Implement Breadcrumb Navigation.**
+        *   Description: Add breadcrumbs for easier navigation in nested views.
+        *   Priority: Medium
+        *   Status: To Do
+    7.  **Task: [GUI-UX-004] Integrate Contextual Help & Tooltips throughout the GUI.**
+        *   Description: Add "?" icons and informative tooltips for complex UI elements.
+        *   Priority: Medium
+        *   Status: To Do
+    8.  **Task: [GUI-UX-005] Implement Progressive Disclosure in tables.**
+        *   Description: Use pagination/load-more for tables like Index Management.
+        *   Priority: Medium
+        *   Status: To Do
+    9.  **Task: [GUI-UX-006] Implement Loading States & Skeleton Screens.**
+        *   Description: Add visual feedback during data loading and asynchronous operations.
+        *   Priority: High
+        *   Status: To Do
+    10. **Task: [GUI-UX-007] Implement Query History & Favorites feature in Query Interface.**
+        *   Description: Allow users to view past queries and save favorites.
+        *   Priority: High
+        *   Status: To Do
+    11. **Task: [GUI-UX-008] Refactor Query Interface for a Unified Map (draw/results modes).**
+        *   Description: Implement the single map component that switches between geometry drawing and results display.
+        *   Priority: Medium
+        *   Status: To Do
+
+*   **Data Management GUI Tasks:**
+    12. **Task: [GUI-DMGT-001] Display Query Performance Metrics after query execution.**
+        *   Description: Show query time and result count.
+        *   Priority: High
+        *   Status: To Do
+    13. **Task: [GUI-DMGT-002] Implement Bulk Actions in Index Management.**
+        *   Description: Add support for batch delete/rebuild of indexes.
+        *   Priority: Medium
+        *   Status: To Do
+    14. **Task: [GUI-DMGT-003] Implement Saved & Sharable Queries.**
+        *   Description: Allow users to save query definitions and share them.
+        *   Priority: Medium
+        *   Status: To Do
+    15. **Task: [GUI-DMGT-004] Add Drag-and-Drop File Upload capability.**
+        *   Description: Implement drag-and-drop for relevant file inputs (e.g., query geometry files).
+        *   Priority: Medium
+        *   Status: To Do
+
+*   **Core View Implementations (incorporating above enhancements):**
+    16. **Task: [GUI-001] Implement Dashboard View.** (Priority: Medium, Status: To Do)
+    17. **Task: [GUI-002] Implement Index Management View.** (Priority: Medium, Status: To Do, Depends on [GUI-UX-001], [GUI-UX-005], [GUI-DMGT-002])
+    18. **Task: [GUI-003] Implement Query Interface View.** (Priority: Medium, Status: To Do, Depends on [GUI-UX-007], [GUI-UX-008], [GUI-DMGT-001], [GUI-DMGT-003])
+    19. **Task: [GUI-004] Implement Data Visualization View.** (Priority: Medium, Status: To Do)
+    20. **Task: [GUI-005] Implement Settings View.** (Priority: Medium, Status: To Do)
+    21. **Task: [GUI-006] Implement Ingestion Dashboard View.** (Priority: Medium, Status: To Do, Relies on AEGIS Pipeline)
+    22. **Task: [GUI-007] Refine Enhanced Index Creation Wizard (GUI Part).** (Effectively covered by [GUI-UX-001], [GUI-UX-002], this task can be considered merged or a placeholder for final wizard integration)
+        *   Priority: Medium
+        *   Status: To Do
+    23. **Task: [GUI-008] Implement GUI Backend API Interaction.** (Remains High Priority, Status: To Do - Ongoing)
+    24. **Task: [GUI-009] Refine UI feedback mechanisms.** (Effectively covered by [GUI-UX-004], [GUI-UX-006], this task can be considered merged or a placeholder for final polish)
+        *   Priority: Medium
+        *   Status: To Do
+    25. **Task: [GUI-010] Testing and Refinement of GUI components.** (Remains High Priority, Status: To Do)
+
+
+**Phase 10: System Optimizations, Security, and Final Touches** (Previously Phase 9)
 Status: Pending
 
 1.  **Task: [OPT-001] Implement general hardware optimization plugins**
-    *   Description: If specific CPU-bound tasks in parsers/preprocessors can be optimized with SIMD (beyond the dedicated AVX-512 search), create plugins for these.
-    *   Files: `plugins/optimizations/`
     *   Priority: Low
     *   Status: To Do
-2.  **Task: [SEC-001] Implement security analysis plugins (e.g., hash_separator.so, password_analyzer.so)**
-    *   Description: Develop plugins for hash separation, password analysis, etc.
-    *   Files: `plugins/security/`
+2.  **Task: [SEC-001] Implement C-level security analysis plugins (e.g., hash_separator.so, password_analyzer.so)**
     *   Priority: Low
     *   Status: To Do
 3.  **Task: [CORE-008] Implement Threading Model (`threading.c`)**
-    *   Description: Implement multi-threading for parallel processing of files or chunks within the ingestion pipeline.
-    *   Files: `core/threading.c`, `core/threading.h`
     *   Priority: Medium
     *   Status: To Do
 4.  **Task: [DOCS-001] Write `README.md` and Basic Usage Documentation**
-    *   Files: `README.md`, `docs/`
     *   Priority: Medium (ongoing)
     *   Status: In Progress
 5.  **Task: [TEST-003] Execute comprehensive system and performance testing**
-    *   Description: Test with large datasets, various file types, measure throughput, and identify bottlenecks.
+    *   Priority: Medium
+    *   Status: To Do
+
+**Phase 11: Developer Documentation**
+Status: Pending
+
+1.  **Task: [DEV-DOC-001] Document Core Architecture and Design Principles**
+    *   Description: Create a high-level overview of the SPINDEX architecture, including the core engine, plugin system, AEGIS-ECHO pipeline, backend API, and GUI. Document key design principles and decisions.
+    *   Priority: High
+    *   Status: To Do
+2.  **Task: [DEV-DOC-002] Document AEGIS-ECHO Data Ingestion Pipeline**
+    *   Description: Detail the pipeline's stages, modules, data flow, configuration options, and how to extend it with new processing or validation modules. Reference `docs/AEGIS_PIPELINE_DESIGN.md` but provide more developer-specific details.
+    *   Priority: High
+    *   Status: To Do
+3.  **Task: [DEV-DOC-003] Document Backend API**
+    *   Description: Provide detailed documentation for all backend API endpoints, including request/response schemas, authentication requirements, and usage examples. Leverage FastAPI's auto-generated OpenAPI docs and supplement as needed.
+    *   Priority: High
+    *   Status: To Do
+4.  **Task: [DEV-DOC-004] Document SPINDEX Core and Plugin Development**
+    *   Description: Explain how to develop new plugins for the SPINDEX core (parsers, preprocessors, indexers, etc.). Detail the plugin interface, build process, and testing best practices.
+    *   Priority: Medium
+    *   Status: To Do
+5.  **Task: [DEV-DOC-005] Document GUI Components and Frontend Development**
+    *   Description: Describe the GUI architecture, key components, state management, and how to interact with the backend API from the frontend. Document the build process for the frontend.
+    *   Priority: Medium
+    *   Status: To Do
+6.  **Task: [DEV-DOC-006] Create Contribution Guidelines**
+    *   Description: Outline the process for contributing to the project, including coding standards, branch management, pull request process, and testing requirements.
+    *   Priority: Medium
+    *   Status: To Do
+7.  **Task: [DEV-DOC-007] Setup and Deployment Guide**
+    *   Description: Provide instructions for setting up a development environment and deploying SPINDEX (including backend, core, and GUI components).
+    *   Priority: Medium
+    *   Status: To Do
+8.  **Task: [DEV-DOC-008] Review and Publish Developer Documentation**
+    *   Description: Collate all developer documentation into a coherent structure (e.g., a documentation website or a set of markdown files in a `/devdocs` directory). Review for clarity, accuracy, and completeness.
     *   Priority: Medium
     *   Status: To Do
 
@@ -376,47 +335,34 @@ Status: Pending
 
 This section provides a high-level view, grouping phases into larger chunks.
 
-**Chunk 1: Core System & Plugin Foundation**
-Status: **DONE ✅**
-*(Corresponds to Phase 1)*
+**Chunk 1: Core System & Plugin Foundation** (Phase 1) - Status: **DONE ✅**
+**Chunk 2: Basic Ingestion & ES Integration** (Phases 2, 3) - Status: **DONE ✅**
+**Chunk 3: Core Parsers & Decompressors** (Phases 4, 5) - Status: **DONE ✅**
 
-**Chunk 2: Basic Ingestion Pipeline & JSON Processing**
-Status: **DONE ✅**
-*(Corresponds to Phase 2)*
+**Chunk 4: AEGIS-ECHO Data Ingestion Pipeline** (Phase 6)
+Status: **Pending**
+*   Key Tasks: [AEGIS-001] Endpoint (High), [AEGIS-004] Worker Framework (High), [AEGIS-015] Metadata DB (High), [AEGIS-016] Pipeline Testing (High). Core modules ([AEGIS-005] to [AEGIS-012]) are Medium.
 
-**Chunk 3: Elasticsearch Integration**
-Status: **DONE ✅**
-*(Corresponds to Phase 3)*
-
-**Chunk 4: Expanding Parsers & Preprocessors**
-Status: **DONE ✅**
-*(Corresponds to Phase 4)*
-
-**Chunk 5: Decompressor Plugins**
-Status: **DONE ✅**
-*(Corresponds to Phase 5)*
-
-**Chunk 6: Advanced Features - AVX-512 & Machine Learning**
+**Chunk 5: Advanced C Plugin Features** (Phase 7)
 Status: **In Progress**
-*(Corresponds to Phase 6)*
-*   Key Pending Tasks: [AVX-001] Full Implementation (High), [ML-OV-005] Meteor Lake Testing (High).
+*   Key Pending Tasks: [AVX-001] Full AVX Implementation (High), [ML-OV-005] Meteor Lake Testing (High).
 
-**Chunk 7: Backend Finalization and AEGIS Pipeline Completion**
+**Chunk 6: Backend Finalization** (Phase 8)
 Status: **Pending**
-*(Corresponds to Phase 7 - New)*
-*   Key Tasks: [BE-001] Persistent Storage (High), [BE-002] Persistent Query History (High), [BE-003] Security Scanning (High), [BE-004] Schema Validation (High), [BE-005] NLP/NER Implementation (High), [BE-006] Error Handling (Medium), [BE-007] Backend Testing (High).
+*   Key Tasks: [BE-001] IndexMetadata DB (High), [BE-002] Query History DB (High), [BE-007] Backend Testing (High).
 
-**Chunk 8: GUI Development**
+**Chunk 7: Comprehensive GUI Implementation** (Phase 9)
 Status: **Pending**
-*(Corresponds to Phase 8 - New)*
-*   Key Tasks: [GUI-001] Dashboard (Medium), [GUI-002] Index Mgt (Medium), [GUI-003] Query Interface (Medium), [GUI-006] Ingestion (Medium), [GUI-007] Index Wizard (Medium), [GUI-008] API Interaction (High), [GUI-010] GUI Testing (High).
+*   Key Tasks: Foundational GUI Security/Arch ([GUI-FND-001]-[GUI-FND-003]) (High). Core UX ([GUI-UX-001] Wizard, [GUI-UX-006] Loading States, [GUI-UX-007] Query History, [GUI-DMGT-001] Perf. Metrics) (High). Other UX/DMGT/View tasks (Medium). GUI Testing ([GUI-010]) (High).
 
-**Chunk 9: System Enhancements & Finalization**
+**Chunk 8: System Optimizations & Final Touches** (Phase 10)
 Status: **Pending**
-*(Corresponds to Phase 9 - Previously Phase 7 / Chunk 10, now incorporating remaining and updated tasks)*
-*   Key Tasks: [OPT-001] Hardware Opt. Plugins (Low), [SEC-001] Security Analysis Plugins (Low), [CORE-008] Threading (Medium), [DOCS-001] Documentation (Medium), [TEST-003] System Testing (Medium).
+*   Key Tasks: [CORE-008] Threading (Medium), [TEST-003] System Testing (Medium). Optimizations ([OPT-001], [SEC-001]) (Low). Documentation ([DOCS-001]) (Medium).
+
+**Chunk 9: Developer Documentation** (Phase 11 - New)
+Status: **Pending**
+*   Key Tasks: [DEV-DOC-001] Core Arch (High), [DEV-DOC-002] AEGIS Pipeline Doc (High), [DEV-DOC-003] Backend API Doc (High). Others (Medium).
 
 ---
-
-This breakdown should provide smaller, more manageable sets of tasks for Jules. Each chunk aims for a tangible step forward. You can tackle these chunks sequentially or, where dependencies allow, some in parallel.
-(Note: Original Chunk 7-10 have been re-mapped to align with the new phase structure and updates.)
+This breakdown should provide smaller, more manageable sets of tasks for Jules. Each chunk aims for a tangible step forward.
+(Note: Phase and Chunk numbering has been significantly updated.)
