@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, APIKeyHeader
 from pydantic import BaseModel, Field as PydanticField
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 import time
 from datetime import datetime
 from celery import Celery, shared_task
@@ -9,14 +9,17 @@ from celery.result import AsyncResult
 import shutil
 import os
 import uuid
-from osgeo import ogr, osr
+from osgeo import ogr, osr # type: ignore
 import json
-from shapely.geometry import shape, Point as ShapelyPoint
+from shapely.geometry import shape, Point as ShapelyPoint # type: ignore
 from shapely.validation import is_valid, make_valid
-import requests
-from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError
+import requests # type: ignore
+from geopy.geocoders import Nominatim # type: ignore
+from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError # type: ignore
 import logging
+from collections import defaultdict
+import spacy # Added for NER
+import zipfile # Added for Zip Bomb check
 
 from sqlalchemy.orm import Session
 from backend import database, models, crud
@@ -25,11 +28,13 @@ from backend import database, models, crud
 STAGING_AREA_PATH = "staging_area"
 PROCESSED_AREA_PATH = "processed_area"
 TARGET_CRS_EPSG = 4326
+DEFAULT_NER_TEXT_PROPERTY_FIELDS: List[str] = [
+    "description", "notes", "summary", "title", "text",
+    "comments", "abstract", "message", "content", "detail" # Added more common text fields
+]
 EXPECTED_INPUT_FORMATS = [
     "ESRI Shapefile", "GeoJSON", "KML", "GML", "GPKG", "FlatGeobuf"
 ]
-
-# --- File Upload Validation Constants ---
 MAX_FILE_SIZE = 100 * 1024 * 1024
 ALLOWED_MIME_TYPES = [
     "application/geo+json", "application/json", "application/zip",
@@ -37,18 +42,14 @@ ALLOWED_MIME_TYPES = [
     "text/xml", "application/octet-stream"
 ]
 
-# --- Logging Configuration ---
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- Ensure Core Directories Exist on Startup ---
 os.makedirs(STAGING_AREA_PATH, exist_ok=True)
 os.makedirs(PROCESSED_AREA_PATH, exist_ok=True)
-logger.info(f"Ensured staging area exists: {STAGING_AREA_PATH}")
-logger.info(f"Ensured processed area exists: {PROCESSED_AREA_PATH}")
+logger.info(f"Staging area for temporary raw file storage ensured at: {STAGING_AREA_PATH}")
+logger.info(f"Processed area for intermediate and final data products ensured at: {PROCESSED_AREA_PATH}")
 
-
-# --- Celery Configuration ---
 celery_app = Celery(
     __name__,
     broker='redis://localhost:6379/0',
@@ -62,7 +63,6 @@ celery_app.conf.update(
     enable_utc=True,
 )
 
-# --- Pydantic Models ---
 class Role(BaseModel): name: str; permissions: List[str] = []
 class User(BaseModel): username: str; email: Optional[str] = None; full_name: Optional[str] = None; roles: List[Role] = []
 class IngestionJobMetadata(BaseModel):
@@ -86,6 +86,10 @@ class IngestionJobMetadata(BaseModel):
     data_hash_original: Optional[str] = None
     data_hash_processed: Optional[str] = None
     celery_task_id: Optional[str] = None
+    geocoding_summary: Optional[Dict[str, Any]] = None
+    complex_geometry_summary: Optional[Dict[str, Any]] = None
+    ner_summary: Optional[Dict[str, Any]] = None
+    content_security_summary: Optional[Dict[str, Any]] = None
     class Config: orm_mode = True; json_encoders = {datetime: lambda v: v.isoformat() if v else None}
 class IndexCreationRequest(BaseModel): promoted_data_path: str; index_name: str; index_type: str; index_parameters: Optional[Dict[str, Any]] = None
 class IndexMetadata(BaseModel):
@@ -106,7 +110,6 @@ class TaskCreationRequest(BaseModel): param_x: int; param_y: int
 class TaskCreationResponse(BaseModel): task_id: str; message: str
 class FileUploadResponse(BaseModel): job_id: str; filename: str; message: str; staged_filepath: Optional[str] = None
 
-# --- Dummy Auth Data ---
 dummy_admin_role = Role(name="Admin", permissions=["create_index", "delete_index", "query_data", "manage_users", "upload_data"])
 dummy_analyst_role = Role(name="Analyst", permissions=["create_index", "query_data", "upload_data"])
 dummy_viewer_role = Role(name="Viewer", permissions=["query_data"])
@@ -115,14 +118,26 @@ dummy_users_db = {
     "analyst": User(username="analyst", roles=[dummy_analyst_role]),
     "viewer": User(username="viewer", roles=[dummy_viewer_role]),
 }
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+X_AUTH_TOKEN_SCHEME = APIKeyHeader(name="X-Auth-Token", auto_error=False)
 app = FastAPI(title="SPINDEX Backend", version="0.1.0")
+SECURE_PLACEHOLDER_TOKEN_ADMIN = "secure-placeholder-token-admin"
+SECURE_PLACEHOLDER_TOKEN_ANALYST = "secure-placeholder-token-analyst"
+SECURE_PLACEHOLDER_TOKEN_VIEWER = "secure-placeholder-token-viewer"
+TOKEN_TO_USER_MAPPING = {
+    SECURE_PLACEHOLDER_TOKEN_ADMIN: "admin",
+    SECURE_PLACEHOLDER_TOKEN_ANALYST: "analyst",
+    SECURE_PLACEHOLDER_TOKEN_VIEWER: "viewer",
+}
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
-    user_map = {"faketoken_admin": "admin", "faketoken_analyst": "analyst", "faketoken_viewer": "viewer"}
-    username = user_map.get(token)
+async def get_current_user(token: Optional[str] = Depends(X_AUTH_TOKEN_SCHEME)) -> User:
+    if not token:
+        logger.warning("Authentication attempt failed: No X-Auth-Token header provided.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated: X-Auth-Token header is missing.", headers={"WWW-Authenticate": "Header"})
+    username = TOKEN_TO_USER_MAPPING.get(token)
     if not username or username not in dummy_users_db:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials", headers={"WWW-Authenticate": "Bearer"})
+        logger.warning(f"Authentication attempt failed: Invalid token received. User mapping not found for token ending with '...{token[-4:] if len(token) > 4 else token}'.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials.", headers={"WWW-Authenticate": "Header"})
+    logger.info(f"Authentication successful for user: {username} (token provided).")
     return dummy_users_db[username]
 
 def user_has_permission(user: User, permission_needed: str) -> bool:
@@ -131,6 +146,9 @@ def user_has_permission(user: User, permission_needed: str) -> bool:
     return False
 
 # --- AEGIS Pipeline Helper Functions ---
+# Note on XXE Prevention: GDAL/OGR is used for parsing XML-based formats (KML, GML).
+# GDAL's default XML parsers (Expat, Xerces) are generally configured to prevent XXE attacks.
+# If direct Python XML parsing is added elsewhere, use 'defusedxml' or ensure lxml is configured safely.
 def convert_to_geojson(source_filepath: str, output_dir: str, job_id: str, original_filename: str, log_prefix: str) -> Dict[str, Any]:
     logger.info(f"{log_prefix} Starting format conversion for {original_filename} (path: {source_filepath})")
     geojson_filename = f"{job_id}_converted.geojson"
@@ -252,48 +270,287 @@ def validate_geometries(source_geojson_filepath: str, job_id: str, log_prefix: s
         validation_results["errors_encountered"].append(error_msg); validation_results["validation_passed"] = False
     logger.info(f"{log_prefix} Geometric validation complete. Results: {validation_results}"); return validation_results
 
+# --- Geocoding Helper Function ---
+def geocode_features(source_geojson_filepath: str, output_dir: str, job_id: str, log_prefix: str) -> Dict[str, Any]:
+    logger.info(f"{log_prefix} Starting geocoding for {source_geojson_filepath}")
+    geolocator = Nominatim(user_agent=f"spindex_aegis_pipeline/0.1 job_id/{job_id}")
+    address_field_config = {
+        "street": ["street", "address", "addr", "street_address"], "city": ["city", "town", "municipality"],
+        "state": ["state", "province", "region"], "country": ["country", "country_code"],
+        "postalcode": ["postal_code", "zipcode", "zip_code", "postcode"],
+        "full_address": ["full_address", "address_line", "location", "beschreibung"]
+    }
+    geocoded_filename = f"{job_id}_geocoded.geojson"
+    geocoded_filepath = os.path.join(output_dir, geocoded_filename)
+    summary = {
+        "output_filepath": None, "features_processed": 0, "geocoded_successfully": 0,
+        "geocoding_failed_no_match": 0, "geocoding_service_error": 0, "skipped_no_address_fields": 0, "errors_encountered": []
+    }
+    output_features = []
+    try:
+        with open(source_geojson_filepath, 'r', encoding='utf-8') as f: geojson_data = json.load(f)
+        if not isinstance(geojson_data, dict) or geojson_data.get("type") != "FeatureCollection" or not isinstance(geojson_data.get("features"), list):
+            err_msg = "Input for geocoding is not a valid GeoJSON FeatureCollection."; logger.error(f"{log_prefix} {err_msg}")
+            summary["errors_encountered"].append(err_msg); summary["output_filepath"] = source_geojson_filepath; return summary
+        features = geojson_data["features"]; summary["features_processed"] = len(features)
+        for i, feature in enumerate(features):
+            properties = feature.get("properties", {}); query_string = None
+            if not properties: summary["skipped_no_address_fields"] += 1; output_features.append(feature); continue
+            props_lower = {k.lower(): v for k, v in properties.items()}; address_found = False
+            for field_variant in address_field_config["full_address"]:
+                if field_variant.lower() in props_lower and isinstance(props_lower[field_variant.lower()], str) and props_lower[field_variant.lower()].strip():
+                    query_string = props_lower[field_variant.lower()].strip(); address_found = True; break
+            if not address_found:
+                query_parts = {}
+                for part_key, common_names in address_field_config.items():
+                    if part_key == "full_address": continue
+                    for name_variant in common_names:
+                        if name_variant.lower() in props_lower and isinstance(props_lower[name_variant.lower()], str) and props_lower[name_variant.lower()].strip():
+                            query_parts[part_key] = props_lower[name_variant.lower()].strip(); break
+                if query_parts: query_string = ", ".join(filter(None, [query_parts.get(p) for p in ["street", "city", "postalcode", "state", "country"]]))
+            if not query_string: summary["skipped_no_address_fields"] += 1; output_features.append(feature); continue
+            logger.info(f"{log_prefix} Attempting to geocode address for feature {i}: '{query_string}'")
+            try:
+                time.sleep(1.1); location = geolocator.geocode(query_string, timeout=10)
+                if location:
+                    logger.info(f"{log_prefix} Geocoded feature {i} to: {location.address} ({location.latitude}, {location.longitude})")
+                    original_geometry = feature.get("geometry")
+                    feature["geometry"] = {"type": "Point", "coordinates": [location.longitude, location.latitude]}
+                    properties["geocoding_service"] = "Nominatim"; properties["geocoded_address"] = location.address
+                    properties["original_geometry_type"] = original_geometry.get("type") if original_geometry else "Unknown/None"
+                    feature["properties"] = properties; summary["geocoded_successfully"] += 1
+                else: logger.warning(f"{log_prefix} Geocoding failed (no match) for feature {i}, address: '{query_string}'"); summary["geocoding_failed_no_match"] += 1
+            except GeocoderTimedOut: logger.error(f"{log_prefix} Geocoding service timed out for feature {i}, address: '{query_string}'"); summary["geocoding_service_error"] += 1; summary["errors_encountered"].append(f"GeocoderTimedOut for feature {i}: {query_string}")
+            except (GeocoderUnavailable, GeocoderServiceError) as e_geo: logger.error(f"{log_prefix} Geocoding service error for feature {i}, address: '{query_string}': {str(e_geo)}"); summary["geocoding_service_error"] += 1; summary["errors_encountered"].append(f"GeocoderServiceError for feature {i} ({query_string}): {str(e_geo)}")
+            except Exception as e_gen: logger.error(f"{log_prefix} Unexpected error during geocoding feature {i}, address: '{query_string}': {str(e_gen)}", exc_info=True); summary["geocoding_service_error"] += 1; summary["errors_encountered"].append(f"Unexpected error geocoding feature {i} ({query_string}): {str(e_gen)}")
+            output_features.append(feature)
+        updated_geojson_data = {"type": "FeatureCollection", "features": output_features, "crs": geojson_data.get("crs")}
+        if not os.path.exists(output_dir): os.makedirs(output_dir)
+        with open(geocoded_filepath, 'w', encoding='utf-8') as f: json.dump(updated_geojson_data, f, ensure_ascii=False, indent=2)
+        summary["output_filepath"] = geocoded_filepath
+        logger.info(f"{log_prefix} Geocoding process complete. Output: {geocoded_filepath}. Summary: {summary}")
+    except FileNotFoundError: err_msg = f"Source GeoJSON file not found: {source_geojson_filepath}"; logger.error(f"{log_prefix} {err_msg}"); summary["errors_encountered"].append(err_msg); summary["output_filepath"] = source_geojson_filepath; summary["status"] = "error_source_not_found"
+    except json.JSONDecodeError as e_json: err_msg = f"Invalid JSON in source file {source_geojson_filepath}: {str(e_json)}"; logger.error(f"{log_prefix} {err_msg}"); summary["errors_encountered"].append(err_msg); summary["output_filepath"] = source_geojson_filepath; summary["status"] = "error_invalid_input_geojson"
+    except Exception as e_main: err_msg = f"Critical error in geocode_features: {str(e_main)}"; logger.error(f"{log_prefix} {err_msg}", exc_info=True); summary["errors_encountered"].append(err_msg); summary["output_filepath"] = source_geojson_filepath; summary["status"] = "error_critical_failure"
+    return summary
+
+# --- NER and Geocoding from Text Helper Function ---
+def extract_and_geocode_locations_from_text(source_geojson_filepath: str, output_dir: str, job_id: str, text_property_fields: List[str], log_prefix: str) -> Dict[str, Any]:
+    logger.info(f"{log_prefix} Starting NER and geocoding from text for {source_geojson_filepath}")
+    nlp = None
+    try:
+        nlp = spacy.load("en_core_web_sm")
+        logger.info(f"{log_prefix} spaCy model 'en_core_web_sm' loaded successfully.")
+    except (ImportError, OSError) as e_spacy_load:
+        logger.error(f"{log_prefix} Failed to load spaCy model 'en_core_web_sm'. NER processing will be skipped. Error: {e_spacy_load}")
+        return {
+            "status": "skipped_spacy_model_unavailable", "output_filepath": source_geojson_filepath,
+            "features_processed": 0, "features_with_text_fields":0, "features_missing_geometry": 0,
+            "locations_extracted_ner": 0, "locations_geocoded_successfully": 0,
+            "geocoding_failures_no_match": 0, "geocoding_service_errors": 0,
+            "errors_encountered": [f"spaCy model 'en_core_web_sm' not available: {e_spacy_load}"]
+        }
+    geolocator = Nominatim(user_agent=f"spindex_aegis_ner_geocoder/0.1 job_id/{job_id}")
+    ner_geocoded_filename = f"{job_id}_ner_geocoded.geojson"
+    ner_geocoded_filepath = os.path.join(output_dir, ner_geocoded_filename)
+    summary = {
+        "status": "completed", "output_filepath": None, "features_processed": 0,
+        "features_with_text_fields": 0, "features_missing_geometry": 0, "locations_extracted_ner": 0,
+        "locations_geocoded_successfully": 0, "geocoding_failures_no_match": 0,
+        "geocoding_service_errors": 0, "errors_encountered": []
+    }
+    output_features = []
+    try:
+        with open(source_geojson_filepath, 'r', encoding='utf-8') as f: geojson_data = json.load(f)
+        if not isinstance(geojson_data, dict) or geojson_data.get("type") != "FeatureCollection" or not isinstance(geojson_data.get("features"), list):
+            err_msg = "Input for NER geocoding is not a valid GeoJSON FeatureCollection."
+            logger.error(f"{log_prefix} {err_msg}"); summary["errors_encountered"].append(err_msg)
+            summary["status"] = "error_invalid_input_geojson"; summary["output_filepath"] = source_geojson_filepath; return summary
+        features = geojson_data["features"]; summary["features_processed"] = len(features)
+        for i, feature in enumerate(features):
+            properties = feature.get("properties", {})
+            current_geometry = feature.get("geometry"); has_valid_geometry = False
+            if current_geometry:
+                coords = current_geometry.get("coordinates"); geoms = current_geometry.get("geometries")
+                if (isinstance(coords, list) and len(coords) > 0 and any(c is not None for c in coords)) or \
+                   (isinstance(geoms, list) and len(geoms) > 0): has_valid_geometry = True
+            if has_valid_geometry: output_features.append(feature); continue
+            summary["features_missing_geometry"] += 1
+            processed_feature_for_text = False
+            if properties is None: properties = {}
+            for field_name in text_property_fields:
+                if field_name in properties and isinstance(properties[field_name], str) and properties[field_name].strip():
+                    summary["features_with_text_fields"] += 1; text_content = properties[field_name].strip()
+                    logger.debug(f"{log_prefix} Processing NER for feature {i}, field '{field_name}': '{text_content[:100]}...'")
+                    doc = nlp(text_content)
+                    found_loc_entities = [ent.text for ent in doc.ents if ent.label_ in ("GPE", "LOC")]
+                    if found_loc_entities:
+                        summary["locations_extracted_ner"] += len(found_loc_entities)
+                        for loc_name in found_loc_entities:
+                            if len(loc_name.strip()) < 3 or loc_name.strip().lower() in ["location", "city", "country", "place", "unknown", "n/a", "-"]: continue
+                            logger.info(f"{log_prefix} Attempting to geocode extracted NER location for feature {i}: '{loc_name}' from field '{field_name}'")
+                            try:
+                                time.sleep(1.1); location_result = geolocator.geocode(loc_name, timeout=10)
+                                if location_result:
+                                    logger.info(f"{log_prefix} NER Geocoded feature {i} (entity: '{loc_name}') to: {location_result.address} ({location_result.latitude}, {location_result.longitude})")
+                                    feature["geometry"] = {"type": "Point", "coordinates": [location_result.longitude, location_result.latitude]}
+                                    if not isinstance(properties, dict): properties = {}
+                                    properties["ner_source_field"] = field_name; properties["ner_extracted_location"] = loc_name
+                                    properties["ner_geocoded_address"] = location_result.address; feature["properties"] = properties
+                                    summary["locations_geocoded_successfully"] += 1; processed_feature_for_text = True; break
+                                else: summary["geocoding_failures_no_match"] += 1
+                            except GeocoderTimedOut: logger.error(f"{log_prefix} NER Geocoding service timed out for entity '{loc_name}' (feature {i})"); summary["geocoding_service_errors"] += 1
+                            except (GeocoderUnavailable, GeocoderServiceError) as e_geo_ner: logger.error(f"{log_prefix} NER Geocoding service error for entity '{loc_name}' (feature {i}): {str(e_geo_ner)}"); summary["geocoding_service_errors"] += 1
+                            if processed_feature_for_text: break
+                        if processed_feature_for_text: break
+            output_features.append(feature)
+        updated_geojson_data = {"type": "FeatureCollection", "features": output_features, "crs": geojson_data.get("crs")}
+        if not os.path.exists(output_dir): os.makedirs(output_dir)
+        with open(ner_geocoded_filepath, 'w', encoding='utf-8') as f: json.dump(updated_geojson_data, f, ensure_ascii=False, indent=2)
+        summary["output_filepath"] = ner_geocoded_filepath
+        logger.info(f"{log_prefix} NER and Geocoding from text process complete. Output: {ner_geocoded_filepath}. Summary: {summary}")
+    except FileNotFoundError: err_msg = f"Source GeoJSON file not found for NER: {source_geojson_filepath}"; logger.error(f"{log_prefix} {err_msg}"); summary["errors_encountered"].append(err_msg); summary["status"] = "error_source_not_found"; summary["output_filepath"] = source_geojson_filepath
+    except json.JSONDecodeError as e_json: err_msg = f"Invalid JSON in source file {source_geojson_filepath} for NER: {str(e_json)}"; logger.error(f"{log_prefix} {err_msg}"); summary["errors_encountered"].append(err_msg); summary["status"] = "error_invalid_input_geojson"; summary["output_filepath"] = source_geojson_filepath
+    except Exception as e_main: err_msg = f"Critical error in extract_and_geocode_locations_from_text: {str(e_main)}"; logger.error(f"{log_prefix} {err_msg}", exc_info=True); summary["errors_encountered"].append(err_msg); summary["status"] = "error_critical_failure"; summary["output_filepath"] = source_geojson_filepath
+    return summary
+
+# --- Complex Geometry Handling Helper Function ---
+def handle_complex_geometries(source_geojson_filepath: str, output_dir: str, job_id: str, log_prefix: str) -> Dict[str, Any]:
+    logger.info(f"{log_prefix} Starting complex geometry handling for {source_geojson_filepath}")
+    features_by_type = defaultdict(list)
+    summary = {
+        "status": "no_action_single_type", "output_filepaths": [source_geojson_filepath],
+        "geometry_types_found": [], "features_counts_by_type": {}, "files_created": {}, "errors_encountered": []
+    }
+    all_geom_types = set()
+    try:
+        with open(source_geojson_filepath, 'r', encoding='utf-8') as f: geojson_data = json.load(f)
+        if not isinstance(geojson_data, dict) or geojson_data.get("type") != "FeatureCollection" or not isinstance(geojson_data.get("features"), list):
+            err_msg = "Input for complex geometry handling is not a valid GeoJSON FeatureCollection."
+            logger.error(f"{log_prefix} {err_msg}"); summary["errors_encountered"].append(err_msg)
+            summary["status"] = "error_invalid_input_geojson"; summary["output_filepaths"] = []; return summary
+        for feature in geojson_data["features"]:
+            geom_type = "Unknown"
+            if feature.get("geometry") and feature["geometry"].get("type"):
+                try: s_geom = shape(feature['geometry']); geom_type = s_geom.geom_type
+                except Exception as e_shape: logger.warning(f"{log_prefix} Could not parse geometry for a feature: {e_shape}. Marking as 'Unknown' type.")
+            features_by_type[geom_type].append(feature); all_geom_types.add(geom_type)
+        summary["geometry_types_found"] = list(all_geom_types)
+        for geom_type, feats in features_by_type.items(): summary["features_counts_by_type"][geom_type] = len(feats)
+        logger.info(f"{log_prefix} Found geometry types: {summary['geometry_types_found']} with counts: {summary['features_counts_by_type']}")
+        if len(all_geom_types) > 1:
+            logger.info(f"{log_prefix} Multiple geometry types found. Splitting dataset...")
+            summary["status"] = "split_executed"; summary["output_filepaths"] = []
+            if not os.path.exists(output_dir): os.makedirs(output_dir)
+            for geom_type, features_list in features_by_type.items():
+                if not features_list: continue
+                safe_geom_type_fn = geom_type.replace(" ", "_").lower()
+                split_filename = f"{job_id}_geomtype_{safe_geom_type_fn}.geojson"
+                split_filepath = os.path.join(output_dir, split_filename)
+                split_feature_collection = {"type": "FeatureCollection", "crs": geojson_data.get("crs"), "features": features_list}
+                try:
+                    with open(split_filepath, 'w', encoding='utf-8') as f_split: json.dump(split_feature_collection, f_split, ensure_ascii=False, indent=2)
+                    summary["output_filepaths"].append(split_filepath); summary["files_created"][geom_type] = split_filepath
+                    logger.info(f"{log_prefix} Created split file for type '{geom_type}': {split_filepath}")
+                except Exception as e_write:
+                    err_msg = f"Failed to write split file for geometry type '{geom_type}' to {split_filepath}: {e_write}"
+                    logger.error(f"{log_prefix} {err_msg}", exc_info=True); summary["errors_encountered"].append(err_msg)
+            if not summary["output_filepaths"] and summary["errors_encountered"]: summary["status"] = "error_split_failed_all_types"
+        else:
+            logger.info(f"{log_prefix} Single geometry type found ('{list(all_geom_types)[0] if all_geom_types else 'None'}') or no features. No splitting needed.")
+            summary["output_filepaths"] = [source_geojson_filepath]
+    except FileNotFoundError: err_msg = f"Source GeoJSON file not found for complex geometry handling: {source_geojson_filepath}"; logger.error(f"{log_prefix} {err_msg}"); summary["errors_encountered"].append(err_msg); summary["status"] = "error_source_not_found"; summary["output_filepaths"] = []
+    except json.JSONDecodeError as e_json: err_msg = f"Invalid JSON in source file {source_geojson_filepath} for complex geometry handling: {str(e_json)}"; logger.error(f"{log_prefix} {err_msg}"); summary["errors_encountered"].append(err_msg); summary["status"] = "error_invalid_input_geojson"; summary["output_filepaths"] = []
+    except Exception as e_main: err_msg = f"Critical error in handle_complex_geometries: {str(e_main)}"; logger.error(f"{log_prefix} {err_msg}", exc_info=True); summary["errors_encountered"].append(err_msg); summary["status"] = "error_critical_failure"; summary["output_filepaths"] = []
+    logger.info(f"{log_prefix} Complex geometry handling complete. Summary: {summary}")
+    return summary
+
 # --- Celery Tasks ---
-@shared_task
-def process_staged_file_task(job_id_from_upload: str, staged_file_path: str, original_filename: str, user_id: str) -> str:
-    task_id = process_staged_file_task.request.id
+@shared_task(bind=True, acks_late=True) # bind=True for self, acks_late=True for potential retries
+def process_staged_file_task(self, job_id_from_upload: str, staged_file_path: str, original_filename: str, user_id: str) -> str:
+    task_id = self.request.id # Get task ID
     log_prefix = f"CeleryTaskID-{task_id} (JobID: {job_id_from_upload}, File: {original_filename}, User: {user_id}):"
     logger.info(f"{log_prefix} Received for processing. Staged path: '{staged_file_path}'.")
     db: Session = database.SessionLocal()
 
-    # Initialize step success flags
+    content_security_passed = True
+    content_security_summary_details = None
     format_conversion_success = False
     crs_transform_success = False
-    geometric_validation_passed_flag = False # Explicit flag for this stage's direct outcome
-    geocoding_success = True # Placeholder
-    complex_geom_handling_success = True # Placeholder
+    geometric_validation_passed_flag = False
+    geocoding_attempted = False
+    geocoding_success = False
+    ner_processing_attempted = False
+    ner_processing_success = False
+    complex_geom_handling_attempted = False
+    complex_geom_handling_success = False
     schema_validation_passed = True # Placeholder
-    content_security_passed = True # Placeholder
+    content_security_scan_passed = True # Placeholder (distinct from pre-check)
 
     current_processed_file = staged_file_path
-    original_crs_wkt = None # To be populated by format conversion
+    final_promoted_data_references: Optional[Union[str, List[str]]] = None
+    original_crs_wkt = None
+    ner_summary_details = None # Initialize ner_summary_details
 
     try:
         crud.update_ingestion_job_fields(db, job_id_from_upload, {"processing_status": "processing_in_progress", "celery_task_id": str(task_id)})
         crud.update_pipeline_log(db, job_id_from_upload, {"stage": "initialization", "status": "success", "timestamp": datetime.utcnow().isoformat(), "message": "Processing started."})
         db.commit()
 
+        # === Stage 0: Content Security Pre-Check (Zip Bomb) ===
+        if original_filename.lower().endswith(".zip"):
+            MAX_ZIP_TOTAL_SIZE = 5 * 1024**3  # 5GB
+            MAX_ZIP_FILE_COUNT = 10000
+            MAX_ZIP_RATIO = 200.0 # Max compression ratio for any single file
+
+            logger.info(f"{log_prefix} Performing content security pre-check for zip file: {original_filename}")
+            content_security_summary_details = check_zip_file_security(staged_file_path, MAX_ZIP_TOTAL_SIZE, MAX_ZIP_FILE_COUNT, MAX_ZIP_RATIO, log_prefix)
+            crud.update_ingestion_job_fields(db, job_id_from_upload, {"content_security_summary": content_security_summary_details})
+            db.commit() # Commit summary early
+
+            if not content_security_summary_details["passed"]:
+                content_security_passed = False
+                reason = content_security_summary_details["reason"]
+                logger.error(f"{log_prefix} Content security pre-check failed: {reason}")
+                crud.update_error_logs(db, job_id_from_upload, f"content_security_failed: {reason}")
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "content_security_pre_check", "status": "failure", "error": reason, "timestamp": datetime.utcnow().isoformat()})
+                crud.update_ingestion_job_fields(db, job_id_from_upload, {
+                    "processing_status": "quarantined_content_security_failed",
+                    "quarantine_timestamp": datetime.utcnow(),
+                    "location_of_quarantined_data": staged_file_path
+                })
+                db.commit()
+                return f"Content security pre-check failed for {original_filename}: {reason}"
+            else:
+                 crud.update_pipeline_log(db, job_id_from_upload, {"stage": "content_security_pre_check", "status": "success", "timestamp": datetime.utcnow().isoformat(), "details": content_security_summary_details})
+                 db.commit()
+        else:
+            content_security_passed = True # Non-zip files pass this pre-check by default
+            crud.update_pipeline_log(db, job_id_from_upload, {"stage": "content_security_pre_check", "status": "skipped_not_zip", "timestamp": datetime.utcnow().isoformat()})
+            db.commit()
+
+
         # === Stage 1: Format Conversion to GeoJSON ===
-        try:
-            crud.update_pipeline_log(db, job_id_from_upload, {"stage": "format_conversion_started", "status": "running", "timestamp": datetime.utcnow().isoformat(), "input_file": current_processed_file})
-            conversion_details = convert_to_geojson(current_processed_file, PROCESSED_AREA_PATH, job_id_from_upload, original_filename, log_prefix)
-            original_crs_wkt = conversion_details["original_crs_wkt"]
-            crud.update_ingestion_job_fields(db, job_id_from_upload, {"detected_format": conversion_details["detected_format"]})
-            current_processed_file = conversion_details["geojson_filepath"]
-            crud.update_pipeline_log(db, job_id_from_upload, {"stage": "format_conversion_completed", "status": "success", "timestamp": datetime.utcnow().isoformat(), "details": conversion_details})
-            logger.info(f"{log_prefix} Format conversion successful. Output: {current_processed_file}")
-            format_conversion_success = True
-        except Exception as e:
-            error_message = f"Format Conversion failed: {str(e)}"; logger.error(f"{log_prefix} ERROR: {error_message}", exc_info=True)
-            crud.update_error_logs(db, job_id_from_upload, f"format_conversion_error: {error_message}")
-            crud.update_pipeline_log(db, job_id_from_upload, {"stage": "format_conversion_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()})
-            crud.update_ingestion_job_fields(db, job_id_from_upload, {"processing_status": "format_conversion_failed", "quarantine_timestamp": datetime.utcnow()})
-            db.commit(); return f"Error during Format Conversion for '{original_filename}'."
-        db.commit()
+        if content_security_passed: # Only proceed if pre-check passed
+            try:
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "format_conversion_started", "status": "running", "timestamp": datetime.utcnow().isoformat(), "input_file": current_processed_file})
+                conversion_details = convert_to_geojson(current_processed_file, PROCESSED_AREA_PATH, job_id_from_upload, original_filename, log_prefix)
+                original_crs_wkt = conversion_details["original_crs_wkt"]
+                crud.update_ingestion_job_fields(db, job_id_from_upload, {"detected_format": conversion_details["detected_format"]})
+                current_processed_file = conversion_details["geojson_filepath"]
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "format_conversion_completed", "status": "success", "timestamp": datetime.utcnow().isoformat(), "details": conversion_details})
+                logger.info(f"{log_prefix} Format conversion successful. Output: {current_processed_file}")
+                format_conversion_success = True
+            except Exception as e:
+                error_message = f"Format Conversion failed: {str(e)}"; logger.error(f"{log_prefix} ERROR: {error_message}", exc_info=True)
+                crud.update_error_logs(db, job_id_from_upload, f"format_conversion_error: {error_message}")
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "format_conversion_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()})
+                crud.update_ingestion_job_fields(db, job_id_from_upload, {
+                    "processing_status": "format_conversion_failed", "quarantine_timestamp": datetime.utcnow(),
+                    "location_of_quarantined_data": staged_file_path
+                })
+                db.commit(); return f"Error during Format Conversion for '{original_filename}'."
+            db.commit()
 
         # === Stage 2: CRS Transformation ===
         if format_conversion_success:
@@ -309,7 +566,10 @@ def process_staged_file_task(job_id_from_upload: str, staged_file_path: str, ori
                 error_message = f"CRS Transformation failed: {str(e)}"; logger.error(f"{log_prefix} ERROR: {error_message}", exc_info=True)
                 crud.update_error_logs(db, job_id_from_upload, f"crs_transformation_error: {error_message}")
                 crud.update_pipeline_log(db, job_id_from_upload, {"stage": "crs_transformation_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()})
-                crud.update_ingestion_job_fields(db, job_id_from_upload, {"processing_status": "crs_transformation_failed", "quarantine_timestamp": datetime.utcnow()})
+                crud.update_ingestion_job_fields(db, job_id_from_upload, {
+                    "processing_status": "crs_transformation_failed", "quarantine_timestamp": datetime.utcnow(),
+                    "location_of_quarantined_data": current_processed_file
+                })
                 db.commit(); return f"Error during CRS Transformation for '{original_filename}'."
             db.commit()
 
@@ -317,55 +577,158 @@ def process_staged_file_task(job_id_from_upload: str, staged_file_path: str, ori
         if crs_transform_success:
             try:
                 crud.update_pipeline_log(db, job_id_from_upload, {"stage": "geometric_validation_started", "status": "running", "timestamp": datetime.utcnow().isoformat(), "input_file": current_processed_file})
-                validation_results = validate_geometries(current_processed_file, job_id_from_upload, log_prefix, attempt_repair=False)
+                validation_results = validate_geometries(current_processed_file, job_id_from_upload, log_prefix, attempt_repair=True) # ENABLED REPAIR
                 crud.update_validation_summary(db, job_id_from_upload, {"geometric_validation": validation_results})
                 geometric_validation_passed_flag = validation_results["validation_passed"]
-                # current_processed_file remains unchanged if no repair occurs that creates a new file
-                # current_processed_file = validation_results["output_filepath"] # Only if repair creates new file
-                log_status = "success" if geometric_validation_passed_flag else "failure_with_invalids"
+                current_processed_file = validation_results.get("output_filepath", current_processed_file) # Update if repair created new file
+
+                log_status = "success_with_repairs" if (validation_results.get("repaired_features", 0) > 0 and geometric_validation_passed_flag) else \
+                             ("success" if geometric_validation_passed_flag else "failure_with_invalids")
                 crud.update_pipeline_log(db, job_id_from_upload, {"stage": "geometric_validation_completed", "status": log_status, "timestamp": datetime.utcnow().isoformat(), "details": validation_results})
-                if not geometric_validation_passed_flag:
-                    logger.warning(f"{log_prefix} Geometric validation found invalid geometries. Invalid count: {validation_results['invalid_features']}")
+                if not geometric_validation_passed_flag: logger.warning(f"{log_prefix} Geometric validation found invalid geometries not repairable. Invalid count: {validation_results['invalid_features'] - validation_results.get('repaired_features',0)}")
             except Exception as e:
                 error_message = f"Geometric Validation failed critically: {str(e)}"; logger.error(f"{log_prefix} ERROR: {error_message}", exc_info=True)
-                crud.update_error_logs(db, job_id_from_upload, f"geometric_validation_error: {error_message}")
-                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "geometric_validation_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()})
+                crud.update_error_logs(db, job_id_from_upload, f"geometric_validation_critical_error: {error_message}")
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "geometric_validation_critical_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()})
+                crud.update_ingestion_job_fields(db, job_id_from_upload, {
+                    "processing_status": "geometric_validation_critical_error", "quarantine_timestamp": datetime.utcnow(),
+                    "location_of_quarantined_data": current_processed_file
+                })
                 geometric_validation_passed_flag = False
             db.commit()
 
-        # Placeholders for: Geocoding, Complex Geometry Handling, Security Scan, Schema Validation
-        # These would set their own success flags: geocoding_success, complex_geom_handling_success, etc.
+        # === Stage 4: Conditional Geocoding (Structured Address) ===
+        if geometric_validation_passed_flag:
+            geocoding_attempted = False
+            try: # Heuristic check
+                with open(current_processed_file, 'r', encoding='utf-8') as f: temp_geojson_data = json.load(f)
+                if temp_geojson_data.get("type") == "FeatureCollection" and temp_geojson_data.get("features") and temp_geojson_data["features"][0].get("properties"):
+                    props_lower_keys = [key.lower() for key in temp_geojson_data["features"][0]["properties"].keys()]
+                    address_heuristic_fields = ["address", "street", "addr", "city", "location", "beschreibung"]
+                    if any(any(ah_field in prop_key for ah_field in address_heuristic_fields) for prop_key in props_lower_keys):
+                        geocoding_attempted = True
+                if not geocoding_attempted: logger.info(f"{log_prefix} No common address-like fields for structured geocoding. Skipping.")
+            except Exception as e_heuristic: logger.warning(f"{log_prefix} Error during geocoding heuristic: {e_heuristic}. Skipping.", exc_info=True); geocoding_attempted = False
+
+            if geocoding_attempted:
+                try:
+                    crud.update_pipeline_log(db, job_id_from_upload, {"stage": "structured_geocoding_started", "status": "running", "timestamp": datetime.utcnow().isoformat(), "input_file": current_processed_file})
+                    geocoding_details = geocode_features(current_processed_file, PROCESSED_AREA_PATH, job_id_from_upload, log_prefix)
+                    crud.update_ingestion_job_fields(db, job_id_from_upload, {"geocoding_summary": geocoding_details})
+                    if geocoding_details.get("errors_encountered") or geocoding_details.get("output_filepath") is None:
+                        geocoding_success = False; crud.update_error_logs(db, job_id_from_upload, f"structured_geocoding_error: {'; '.join(geocoding_details.get('errors_encountered',[]))}")
+                    else: geocoding_success = True; current_processed_file = geocoding_details["output_filepath"]
+                    log_status_geo = "success" if geocoding_success else ("critical_failure" if geocoding_details.get("output_filepath") is None else "completed_with_errors")
+                    crud.update_pipeline_log(db, job_id_from_upload, {"stage": "structured_geocoding_completed", "status": log_status_geo, "timestamp": datetime.utcnow().isoformat(), "details": geocoding_details})
+                except Exception as e:
+                    error_message = f"Structured Geocoding stage failed critically: {str(e)}"; logger.error(f"{log_prefix} ERROR: {error_message}", exc_info=True)
+                    crud.update_error_logs(db, job_id_from_upload, f"structured_geocoding_critical_error: {error_message}")
+                    crud.update_pipeline_log(db, job_id_from_upload, {"stage": "structured_geocoding_critical_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()})
+                    crud.update_ingestion_job_fields(db, job_id_from_upload, {"processing_status": "geocoding_failed_critical", "quarantine_timestamp": datetime.utcnow(), "location_of_quarantined_data": current_processed_file})
+                    geocoding_success = False
+                db.commit()
+            else: geocoding_success = True # Skipped, not a failure
+        else: geocoding_success = True # Skipped due to prior failure
+
+        # === Stage 5: Unstructured Text Location Processing (NER) ===
+        ner_summary_details = None
+        if geometric_validation_passed_flag and (geocoding_success if geocoding_attempted else True):
+            ner_processing_attempted = True
+            try:
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "ner_text_processing_started", "status": "running", "timestamp": datetime.utcnow().isoformat(), "input_file": current_processed_file})
+                text_fields_to_scan = DEFAULT_NER_TEXT_PROPERTY_FIELDS
+                ner_summary_details = extract_and_geocode_locations_from_text(current_processed_file, PROCESSED_AREA_PATH, job_id_from_upload, text_fields_to_scan, log_prefix)
+                crud.update_ingestion_job_fields(db, job_id_from_upload, {"ner_summary": ner_summary_details})
+                if ner_summary_details.get("status") == "skipped_spacy_model_unavailable":
+                    ner_processing_success = True; log_status_ner = "skipped_model_unavailable"
+                elif ner_summary_details.get("status", "").startswith("error_") or ner_summary_details.get("output_filepath") is None or \
+                     (ner_summary_details.get("output_filepath") == current_processed_file and ner_summary_details.get("errors_encountered")):
+                    ner_processing_success = False; crud.update_error_logs(db, job_id_from_upload, f"ner_text_processing_error: {'; '.join(ner_summary_details.get('errors_encountered',[]))}"); log_status_ner = "critical_failure"
+                else:
+                    ner_processing_success = True
+                    if ner_summary_details.get("output_filepath") and ner_summary_details["output_filepath"] != current_processed_file:
+                        current_processed_file = ner_summary_details["output_filepath"]
+                    log_status_ner = "completed_with_errors" if ner_summary_details.get("errors_encountered") else "success"
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "ner_text_processing_completed", "status": log_status_ner, "timestamp": datetime.utcnow().isoformat(), "details": ner_summary_details})
+            except Exception as e:
+                error_message = f"NER Text Processing stage failed critically: {str(e)}"; logger.error(f"{log_prefix} ERROR: {error_message}", exc_info=True)
+                crud.update_error_logs(db, job_id_from_upload, f"ner_text_processing_critical_error: {error_message}")
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "ner_text_processing_critical_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()})
+                ner_processing_success = False
+            db.commit()
+        else: ner_processing_success = True
+
+        # === Stage 6: Complex Geometry Handling ===
+        complex_geom_details_summary = None
+        prior_stages_ok_for_complex_geom = (geometric_validation_passed_flag and (geocoding_success if geocoding_attempted else True) and (ner_processing_success if ner_processing_attempted else True))
+        if prior_stages_ok_for_complex_geom:
+            complex_geom_handling_attempted = True
+            try:
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "complex_geometry_handling_started", "status": "running", "timestamp": datetime.utcnow().isoformat(), "input_file": current_processed_file})
+                complex_geom_details = handle_complex_geometries(current_processed_file, PROCESSED_AREA_PATH, job_id_from_upload, log_prefix)
+                complex_geom_details_summary = complex_geom_details
+                crud.update_ingestion_job_fields(db, job_id_from_upload, {"complex_geometry_summary": complex_geom_details})
+                if complex_geom_details.get("status", "").startswith("error_") or complex_geom_details.get("errors_encountered"):
+                    complex_geom_handling_success = False; crud.update_error_logs(db, job_id_from_upload, f"complex_geometry_handling_error: {'; '.join(complex_geom_details.get('errors_encountered',[]))}")
+                    crud.update_ingestion_job_fields(db, job_id_from_upload, {"processing_status": f"complex_geom_handling_failed_critical", "quarantine_timestamp": datetime.utcnow(), "location_of_quarantined_data": current_processed_file})
+                else:
+                    complex_geom_handling_success = True
+                    if complex_geom_details.get("output_filepaths"):
+                        final_promoted_data_references = complex_geom_details["output_filepaths"]
+                        if final_promoted_data_references: current_processed_file = final_promoted_data_references[0]
+                log_status_complex = "success" if complex_geom_handling_success else ("critical_failure" if complex_geom_details.get("status","").startswith("error_") else "completed_with_errors")
+                if complex_geom_details.get("status") == "split_executed" and complex_geom_handling_success: log_status_complex = "split_executed"
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "complex_geometry_handling_completed", "status": log_status_complex, "timestamp": datetime.utcnow().isoformat(), "details": complex_geom_details})
+            except Exception as e:
+                error_message = f"Complex Geometry Handling stage failed critically: {str(e)}"; logger.error(f"{log_prefix} ERROR: {error_message}", exc_info=True)
+                crud.update_error_logs(db, job_id_from_upload, f"complex_geometry_handling_critical_error: {error_message}")
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "complex_geometry_handling_critical_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()})
+                crud.update_ingestion_job_fields(db, job_id_from_upload, { "processing_status": "complex_geom_handling_failed_critical", "quarantine_timestamp": datetime.utcnow(), "location_of_quarantined_data": current_processed_file })
+                complex_geom_handling_success = False
+            db.commit()
+        else: complex_geom_handling_success = True
 
         # === Final Status Update (Promotion/Quarantine Logic) ===
         final_status_fields = {}
         overall_success = (
+            content_security_passed and
             format_conversion_success and
             crs_transform_success and
             geometric_validation_passed_flag and
-            geocoding_success and             # Placeholder
-            complex_geom_handling_success and # Placeholder
-            schema_validation_passed and      # Placeholder
-            content_security_passed           # Placeholder
+            (geocoding_success if geocoding_attempted else True) and
+            (ner_processing_success if ner_processing_attempted else True) and
+            (complex_geom_handling_success if complex_geom_handling_attempted else True) and
+            schema_validation_passed and # Placeholder
+            content_security_scan_passed # Placeholder
         )
 
         if overall_success:
             final_status_fields["processing_status"] = "validation_successful_ready_for_promotion"
             final_status_fields["promotion_timestamp"] = datetime.utcnow()
-            final_status_fields["location_of_promoted_data"] = current_processed_file # This is the final validated file path
-            result_message = f"File '{original_filename}' processed successfully. Promoted: {current_processed_file}"; logger.info(f"{log_prefix} {result_message}")
+            if final_promoted_data_references:
+                if isinstance(final_promoted_data_references, list):
+                    if len(final_promoted_data_references) == 1: final_status_fields["location_of_promoted_data"] = final_promoted_data_references[0]
+                    else: final_status_fields["location_of_promoted_data"] = json.dumps(final_promoted_data_references)
+                else: final_status_fields["location_of_promoted_data"] = final_promoted_data_references
+            else: final_status_fields["location_of_promoted_data"] = current_processed_file
+            result_message = f"File '{original_filename}' processed successfully. Promoted data at: {final_status_fields['location_of_promoted_data']}"; logger.info(f"{log_prefix} {result_message}")
         else:
             final_status_fields["processing_status"] = "quarantined_validation_failed"
             final_status_fields["quarantine_timestamp"] = datetime.utcnow()
-            final_status_fields["location_of_quarantined_data"] = current_processed_file # Path to file at point of failure/last good state
-
+            final_status_fields["location_of_quarantined_data"] = current_processed_file
             error_list = []
-            if not format_conversion_success: error_list.append("FormatConversionFailed")
+            if not content_security_passed: error_list.append("ContentSecurityPreCheckFailed")
+            elif not format_conversion_success: error_list.append("FormatConversionFailed")
             elif not crs_transform_success: error_list.append("CRSTransformationFailed")
             elif not geometric_validation_passed_flag: error_list.append("GeometricValidationFailed")
-            # Add other specific failure reasons as they are implemented
-            error_detail = "; ".join(error_list) if error_list else "Unknown validation failure."
-            crud.update_error_logs(db, job_id_from_upload, f"overall_pipeline_failure: {error_detail}")
-            result_message = f"File '{original_filename}' failed validation and was quarantined. Details: {error_detail}"; logger.warning(f"{log_prefix} {result_message}")
+            elif geocoding_attempted and not geocoding_success: error_list.append("GeocodingModuleFailedCritically")
+            elif ner_processing_attempted and not ner_processing_success:
+                if not (ner_summary_details and ner_summary_details.get("status") == "skipped_spacy_model_unavailable"):
+                    error_list.append("NERTextProcessingFailedCritically")
+            elif complex_geom_handling_attempted and not complex_geom_handling_success: error_list.append("ComplexGeomHandlingFailedCritically")
+            error_detail = "; ".join(error_list) if error_list else "Unknown validation failure or non-critical processing issue."
+            crud.update_error_logs(db, job_id_from_upload, f"overall_pipeline_failure_leading_to_quarantine: {error_detail}")
+            result_message = f"File '{original_filename}' failed validation or a critical processing stage and was quarantined. Details: {error_detail}"; logger.warning(f"{log_prefix} {result_message}")
 
         crud.update_ingestion_job_fields(db, job_id_from_upload, final_status_fields)
         db.commit()
@@ -375,15 +738,19 @@ def process_staged_file_task(job_id_from_upload: str, staged_file_path: str, ori
         logger.error(f"{log_prefix} Unhandled exception in Celery task: {str(e)}", exc_info=True)
         if db.is_active: db.rollback()
         try:
-            crud.update_ingestion_job_fields(db, job_id_from_upload, {"processing_status": "task_failed_uncaught_exception", "quarantine_timestamp": datetime.utcnow()})
+            crud.update_ingestion_job_fields(db, job_id_from_upload, {
+                "processing_status": "task_failed_uncaught_exception",
+                "quarantine_timestamp": datetime.utcnow(),
+                "location_of_quarantined_data": current_processed_file
+            })
             crud.update_error_logs(db, job_id_from_upload, f"task_failed_uncaught_exception: {str(e)}")
             db.commit()
-        except Exception as db_err: logger.error(f"{log_prefix} Failed to update DB with uncaught exception details: {db_err}")
+        except Exception as db_err:
+            logger.error(f"{log_prefix} CRITICAL: Failed to update DB with uncaught exception details: {db_err}", exc_info=True)
         return f"Task failed for {original_filename} due to unhandled exception: {str(e)}"
     finally:
         if db.is_active: db.close()
 
-# ... (Rest of the file: create_spindex_task, API endpoints, etc.)
 @shared_task
 def create_spindex_task(index_id: str, promoted_data_path: str, index_name: str, index_type: str, index_parameters: Optional[dict]):
     task_id = create_spindex_task.request.id
@@ -410,8 +777,11 @@ def create_spindex_task(index_id: str, promoted_data_path: str, index_name: str,
 
 @app.post("/tasks/run_sample_task", response_model=TaskCreationResponse, status_code=status.HTTP_202_ACCEPTED, summary="Run Sample Celery Task", tags=["Tasks"])
 async def run_sample_task(payload: TaskCreationRequest, current_user: User = Depends(get_current_user)):
-    task = sample_celery_task.delay(payload.param_x, payload.param_y)
-    return {"task_id": task.id, "message": "Sample task submitted successfully."}
+    # Example of how a Celery task might be triggered (not directly used by AEGIS pipeline)
+    # task = sample_celery_task.delay(payload.param_x, payload.param_y)
+    # return {"task_id": task.id, "message": "Sample task submitted successfully."}
+    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Sample task endpoint not fully implemented.")
+
 
 @app.get("/tasks/status/{task_id}", response_model=TaskStatusResponse, summary="Get Task Status and Result", tags=["Tasks"])
 async def get_task_status(task_id: str, current_user: User = Depends(get_current_user)):
@@ -428,43 +798,54 @@ async def upload_data_for_processing(
     db: Session = Depends(database.get_db)
 ):
     if not user_has_permission(current_user, "upload_data"):
-        logger.warning(f"User '{current_user.username}' attempted to upload data without 'upload_data' permission.")
+        logger.warning(f"Authorization failed: User '{current_user.username}' attempted to upload data without 'upload_data' permission.")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not have permission to upload data.")
+
     if not file.filename:
-        logger.error("File upload attempt with no filename.")
+        logger.error(f"File upload attempt by user '{current_user.username}' failed: No filename provided.")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No filename provided.")
-    if file.size > MAX_FILE_SIZE: # type: ignore
-        logger.warning(f"File '{file.filename}' rejected: size ({file.size} bytes) exceeds MAX_FILE_SIZE ({MAX_FILE_SIZE} bytes).")
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=f"File size {file.size} bytes exceeds maximum allowed size of {MAX_FILE_SIZE} bytes.")
+
+    if file.size is None or file.size > MAX_FILE_SIZE:
+        actual_size = file.size if file.size is not None else "unknown"
+        logger.warning(f"File '{file.filename}' from user '{current_user.username}' rejected: size ({actual_size} bytes) exceeds MAX_FILE_SIZE ({MAX_FILE_SIZE} bytes).")
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=f"File size {actual_size} bytes exceeds maximum allowed size of {MAX_FILE_SIZE} bytes.")
+
     if file.content_type not in ALLOWED_MIME_TYPES:
-        logger.warning(f"File '{file.filename}' rejected: MIME type '{file.content_type}' not in ALLOWED_MIME_TYPES.")
+        logger.warning(f"File '{file.filename}' from user '{current_user.username}' rejected: MIME type '{file.content_type}' not in ALLOWED_MIME_TYPES ({', '.join(ALLOWED_MIME_TYPES)}).")
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=f"File MIME type '{file.content_type}' is not allowed. Allowed types: {', '.join(ALLOWED_MIME_TYPES)}")
 
     logger.info(f"File '{file.filename}' (size: {file.size}, type: {file.content_type}) passed initial validation for user '{current_user.username}'.")
+
     os.makedirs(STAGING_AREA_PATH, exist_ok=True)
-    original_filename = file.filename; file_extension = os.path.splitext(original_filename)[1]
+    original_filename = file.filename
+    file_extension = os.path.splitext(original_filename)[1]
     unique_staged_filename = f"{uuid.uuid4()}{file_extension}"
     staged_file_path = os.path.join(STAGING_AREA_PATH, unique_staged_filename)
+
     try:
         with open(staged_file_path, "wb") as buffer: shutil.copyfileobj(file.file, buffer)
-        logger.info(f"File '{original_filename}' successfully saved to staging area: '{staged_file_path}'.")
+        logger.info(f"File '{original_filename}' from user '{current_user.username}' successfully saved to staging area: '{staged_file_path}'.")
     except Exception as e:
-        logger.error(f"Could not save uploaded file '{original_filename}' to staging area: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Could not save uploaded file: {str(e)}")
-    finally: file.file.close()
+        logger.error(f"Could not save uploaded file '{original_filename}' from user '{current_user.username}' to staging area '{staged_file_path}': {str(e)}", exc_info=True)
+        if os.path.exists(staged_file_path):
+            try: os.remove(staged_file_path); logger.info(f"Successfully removed partially written file: {staged_file_path}")
+            except Exception as rm_e: logger.error(f"Failed to remove partially written file {staged_file_path} after save error: {rm_e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Could not save uploaded file. An internal error occurred.")
+    finally:
+        if file and hasattr(file, 'file') and not file.file.closed: file.file.close()
 
     job_id = str(uuid.uuid4())
     celery_task_obj = process_staged_file_task.delay(job_id, staged_file_path, original_filename, current_user.username)
-    logger.info(f"Celery task '{celery_task_obj.id}' dispatched for file '{original_filename}', associated with DB job_id '{job_id}'.")
+    logger.info(f"Celery task '{celery_task_obj.id}' dispatched for file '{original_filename}' (user: {current_user.username}), associated with DB job_id '{job_id}'.")
 
     job_data_dict = {
         "job_id":job_id, "celery_task_id":str(celery_task_obj.id), "original_filename":original_filename,
         "upload_timestamp":datetime.utcnow(), "user_id":current_user.username, "source_type":"file_upload",
         "processing_status":"staged_and_queued", "staged_file_path":staged_file_path,
-        "pipeline_stages_executed_log":[{"stage": "upload_complete_queued", "status": "success", "timestamp": datetime.utcnow().isoformat()}]
+        "pipeline_stages_executed_log":[{"stage": "upload_complete_queued", "status": "success", "timestamp": datetime.utcnow().isoformat(), "detail": f"File received from user {current_user.username}"}]
     }
     crud.create_ingestion_job(db=db, job_data=job_data_dict)
-    logger.info(f"Initial metadata record created in DB for job_id '{job_id}' (Celery Task ID: {celery_task_obj.id}).")
+    logger.info(f"Initial metadata record created in DB for job_id '{job_id}' (Celery Task ID: {celery_task_obj.id}, user: {current_user.username}).")
 
     return FileUploadResponse(job_id=job_id, filename=original_filename, message="File successfully uploaded, validated, and queued for processing.", staged_filepath=staged_file_path)
 
@@ -549,157 +930,3 @@ if __name__ == "__main__":
     import uvicorn
     logger.info("Starting Uvicorn server for SPINDEX Backend.")
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-[end of backend/main.py]
-
-[start of backend/README.md]
-# SPINDEX Backend
-
-This directory contains the Python FastAPI backend application for SPINDEX. It includes features for asynchronous task processing using Celery and Redis, a file upload endpoint for data ingestion, and a persistent metadata catalogue for tracking ingestion jobs using SQLAlchemy and SQLite.
-
-## Prerequisites
-
-*   Docker (for containerized deployment)
-*   Python 3.11+ (for local development)
-*   `pip` (Python package installer)
-*   Redis server (for local development)
-*   **GDAL (Geospatial Data Abstraction Library):** System libraries and Python bindings.
-*   **GEOS:** System library required by Shapely.
-*   **SQLAlchemy, Alembic:** For database ORM and migrations.
-
-## Application Structure
-
-*   `main.py`: The main FastAPI application file. Contains API endpoints, Pydantic models, Celery app configuration, and task definitions including the AEGIS pipeline logic.
-*   `database.py`: Configures the SQLAlchemy engine and session management.
-*   `models.py`: Defines SQLAlchemy ORM models (e.g., `IngestionJobDB`).
-*   `crud.py`: Contains CRUD functions for database model interactions.
-*   `requirements.txt`: Python dependencies.
-*   `Dockerfile`, `entrypoint.sh`: For Docker containerization.
-*   `alembic.ini`, `alembic/`: Alembic migration configuration and scripts.
-*   `spindex_aegis.db`: SQLite database file (created by Alembic).
-*   `staging_area/`: Temporary storage for raw uploaded files.
-*   `processed_area/`: Stores files processed by the AEGIS pipeline (e.g., initial GeoJSON conversion, CRS transformed GeoJSON).
-
-**Note on Directory Permissions:** (As previously stated)
-
-## Database Setup (SQLite, SQLAlchemy, Alembic)
-
-(As previously stated)
-
-## Asynchronous Task Processing (Celery & Redis)
-
-(As previously stated)
-
-### Ingestion Task Triggering & AEGIS Pipeline Execution Flow
-
-The `process_staged_file_task` Celery task orchestrates the AEGIS-ECHO pipeline:
-
-1.  **Initial Status:** Metadata status set to `"processing_in_progress"`.
-2.  **Format Conversion to GeoJSON:**
-    *   The `convert_to_geojson` internal function uses GDAL to convert the uploaded file from `staging_area/` to a standardized GeoJSON format (e.g., `{job_id}_converted.geojson`) in `processed_area/`.
-    *   Detects and stores the source format. Original CRS WKT is also extracted if available.
-3.  **Coordinate Reference System (CRS) Transformation:**
-    *   The `transform_geojson_crs` internal function processes the GeoJSON file from the previous step.
-    *   It uses GDAL to transform its content to the system's standard CRS (EPSG:4326 - WGS 84).
-    *   A new CRS-transformed GeoJSON file (e.g., `{job_id}_crs_transformed.geojson`) is saved in `processed_area/`. This becomes the primary file for subsequent steps.
-    *   `original_crs` (verified) and `target_crs` fields in metadata are updated.
-4.  **Geometric Validation:**
-    *   The `validate_geometries` internal function processes the CRS-transformed GeoJSON file.
-    *   It uses Shapely to check each geometry's validity (`is_valid`).
-    *   Currently, it does not attempt to repair invalid geometries but counts valid and invalid features.
-    *   The validation summary (counts, pass/fail status) is updated in the job's metadata. If invalid geometries are found, `geometric_validation_passed` flag is set to false, which will lead to quarantine.
-5.  **Subsequent Pipeline Stages (currently placeholders or simplified):**
-    *   Conditional Geocoding.
-    *   Complex Geometry Handling.
-    *   Placeholders for Content-Level Security Scanning and Schema & Value-Domain Validation.
-6.  **Metadata Updates:** Each step logs its outcome to `pipeline_stages_executed_log` and updates relevant fields in the `IngestionJobDB` record.
-7.  **Final Status:** Based on the success of all critical stages, the job status is set to `"validation_successful_ready_for_promotion"` or a relevant failure/quarantine status.
-
-This modular, step-by-step processing within the Celery task ensures that each stage's output can be inspected and that failures are handled at the point they occur.
-
-## Development
-
-(As previously stated)
-
-### Docker Deployment
-
-(As previously stated)
-
-## API Endpoints
-
-(As previously stated)
-
-### Data Upload Endpoint:
-
-*   **POST `/upload/data`**:
-    *   (Details as previously documented. The Celery task it triggers now includes distinct steps for format conversion, CRS transformation, and geometric validation.)
-
-(Rest of the README remains the same)
-
-[end of backend/README.md]
-
-[start of docs/AEGIS_PIPELINE_DESIGN.md]
-# AEGIS-ECHO Data Ingestion Pipeline Design
-
-## 1. Overview
-
-*   **Purpose:** This document details the architecture and design of the AEGIS-ECHO Data Ingestion Pipeline for SPINDEX. The primary goal of this pipeline is to provide a secure, resilient, and extensible mechanism for ingesting heterogeneous, unstructured, and potentially malicious geospatial data from various sources into the SPINDEX system. It aims to abstract the complexities of data handling, ensuring that only validated and standardized data is made available for indexing.
-*   **Scope:** Covers the pipeline from data reception to its promotion for indexing or quarantine.
-*   **Guiding Principles:** Security by design, resilience, modularity, extensibility, detailed metadata tracking.
-
-## 2. Pipeline Architecture
-
-**(Placeholder for a diagram illustrating the stages and data flow that can be added later)**
-
-### 2.1. Pipeline Stages
-
-(Pipeline Stages 1-7 remain as previously defined, with Metadata Cataloguing using a persistent database)
-*   **Stage 1: Secure Upload/Reception Endpoint**
-*   **Stage 2: Staging Area**
-*   **Stage 3: Ingestion Task Trigger**
-*   **Stage 4: Pipeline Worker Execution**
-*   **Stage 5: Data Promotion**
-    *   **Responsibilities:** Move validated and processed data to a trusted location for subsequent indexing by SPINDEX.
-    *   **Process:**
-        *   If all critical pipeline modules (Format Conversion, CRS Transformation, Geometric Validation, and eventually Security/Schema checks) execute successfully:
-            1.  The `IngestionJobDB.processing_status` is updated to `"validation_successful_ready_for_promotion"`.
-            2.  The `IngestionJobDB.location_of_promoted_data` is set to the path of the final, validated file (e.g., the CRS-transformed GeoJSON, or a geometry-repaired GeoJSON if that step modifies the file).
-            3.  `IngestionJobDB.promotion_timestamp` is set to the current time.
-            4.  A log entry indicating successful promotion is added to `pipeline_stages_executed_log`.
-*   **Stage 6: Data Quarantine (DLQ)**
-    *   (As previously defined)
-*   **Stage 7: Metadata Cataloguing**
-    *   (As previously defined)
-
-## 3. Core Pluggable Modules (Executed within `process_staged_file_task`)
-
-*   **3.1. Format Conversion & Abstraction (GDAL/OGR Integration)**
-    *   (As previously defined)
-*   **3.2. Coordinate Reference System (CRS) Transformation**
-    *   (As previously defined)
-*   **3.3. Geometric Validation**
-    *   (As previously defined)
-*   **3.4. Geocoding Service Integration**
-    *   (As previously defined)
-*   **3.5. Complex Geometry Handling**
-    *   (As previously defined)
-*   **3.6. Unstructured Text Parsing (NLP/NER)**
-    *   (As previously defined)
-
-## 4. Security: Validation & Sanitization Mandates
-
-*   **4.1. Geometric Validation:** (Covered in section 3.3)
-*   **4.2. Content-Level Security Scanning**
-    *   (As previously defined)
-*   **4.3. Value-Domain & Schema Validation**
-    *   (As previously defined)
-
-## 5. UI Integration
-
-(As previously stated)
-
-## 6. Metadata Cataloguing (Reiteration from Stage 7)
-
-(As previously stated)
-
-[end of docs/AEGIS_PIPELINE_DESIGN.md]

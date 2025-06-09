@@ -23,7 +23,11 @@ def create_ingestion_job(db: Session, job_data: Dict[str, Any]) -> models.Ingest
         staged_file_path=job_data.get('staged_file_path'),
         celery_task_id=job_data.get('celery_task_id'),
         pipeline_stages_executed_log=job_data.get('pipeline_stages_executed_log', []),
-        error_log_references=job_data.get('error_log_references', [])
+        error_log_references=job_data.get('error_log_references', []),
+        validation_summary=job_data.get('validation_summary'),
+        geocoding_summary=job_data.get('geocoding_summary'),
+        complex_geometry_summary=job_data.get('complex_geometry_summary'),
+        ner_summary=job_data.get('ner_summary') # Add new field
         # Add other fields as necessary, ensuring defaults or None if not provided
     )
     db.add(db_job)
@@ -45,7 +49,10 @@ def update_ingestion_job_fields(db: Session, job_id: str, fields_to_update: Dict
         # The current approach in main.py for these (read, append, write) is okay for JSON fields.
         # If these were separate related tables, different logic would apply.
 
-        db_job.updated_at = datetime.utcnow() # Assuming an updated_at field exists or should be added
+        # Note: The IngestionJobDB model does not currently have an 'updated_at' field
+        # with an onupdate trigger. If it did, SQLAlchemy would handle it.
+        # Removing manual setting of a non-existent field:
+        # db_job.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(db_job)
     return db_job
