@@ -194,15 +194,16 @@ Status: **DONE ✅**
     *   Priority: Medium
 
 **Phase 6: Advanced Features - AVX-512 & Machine Learning**
+Status: In Progress
 
 These are significant undertakings.
 
-1.  **Task: [AVX-001] Implement AVX-512 Phrase Search Plugin (`avx512_phrase_search.so`)**
+1.  **Task: [AVX-001] Implement full AVX-512 phrase search algorithm**
     *   Description: Develop the C-based AVX-512 optimized phrase search algorithm as a plugin. This is a highly specialized task.
     *   Files: `plugins/search_algorithms/avx512_phrase_search.c`
-    *   Priority: High (if core feature) / Medium (if performance optimization can come later)
+    *   Priority: High
     *   Dependencies: [CORE-007]
-    *   Status: Core logic demonstratively implemented (uses AvxSearchParams, basic AVX-512 operations for partial matching). Full algorithm pending.
+    *   Status: To Do
 2.  **Task: [ES-003] Integrate AVX-512 Search with Elasticsearch Queries**
     *   Description: Design how SPINDEX's AVX-512 search interacts with or enhances Elasticsearch vector search. This might involve custom ES plugins or specific query formations.
     *   Priority: Medium
@@ -257,292 +258,165 @@ These are significant undertakings.
         *   Priority: Medium
         *   Dependencies: [ML-OV-002]
         *   Status: DONE ✅ (Code complete, FP16 model usage integrated; NPU specific tuning is hardware-dependent)
-    5.  **Task: [ML-OV-005] Test OpenVINO FP16 Inference on Meteor Lake 165h**
+    5.  **Task: [ML-OV-005] Execute hardware-specific testing and validation for OpenVINO FP16 Inference on Meteor Lake 165h**
         *   Description: Conduct thorough testing of the OpenVINO-enabled plugin with suitable FP16 models on a system equipped with an Intel Meteor Lake 165h processor. Verify functional correctness, performance gains, and stability. Compare against non-accelerated inference if possible.
-        *   Priority: Medium
+        *   Priority: High
         *   Dependencies: [ML-OV-004], Access to target hardware.
-        *   Status: Code complete, pending hardware-specific testing and validation.
+        *   Status: To Do
 
-**Phase 7: Optimizations, Security, and Final Touches**
+**Phase 7: Backend Finalization and AEGIS Pipeline Completion**
+Status: Pending
+(Based on backend/README.md and docs/AEGIS_PIPELINE_DESIGN.md)
 
-1.  **Task: [OPT-001] Implement General Hardware Optimization Plugins (`optimizations/`)**
+1.  **Task: [BE-001] Implement persistent storage for Metadata Catalogue (IngestionJobMetadata and IndexMetadata)**
+    *   Description: Replace current in-memory lists for `IngestionJobMetadata` and `IndexMetadata` with a persistent storage solution (e.g., SQLite, PostgreSQL).
+    *   Priority: High
+    *   Status: To Do
+2.  **Task: [BE-002] Implement persistent storage for Query History**
+    *   Description: Replace current in-memory list for `QueryHistory` with a persistent storage solution.
+    *   Priority: High
+    *   Status: To Do
+3.  **Task: [BE-003] Complete Content-Level Security Scanning module in AEGIS pipeline**
+    *   Description: Implement robust content-level security scanning (Stage 3.4 in AEGIS_PIPELINE_DESIGN.md) for various file types, including checks for XXE in XML-based formats and "zip bomb" characteristics.
+    *   Priority: High
+    *   Status: To Do
+4.  **Task: [BE-004] Complete Schema & Value-Domain Validation module in AEGIS pipeline**
+    *   Description: Implement comprehensive schema and value-domain validation (Stage 3.5 in AEGIS_PIPELINE_DESIGN.md), including checks for required attributes, data types, and coordinate value domains. Allow for user-defined schemas.
+    *   Priority: High
+    *   Status: To Do
+5.  **Task: [BE-005] Implement Unstructured Text Parsing (NLP/NER) for Location Extraction in AEGIS pipeline**
+    *   Description: Implement Stage 3.8 from AEGIS_PIPELINE_DESIGN.md, using NLP/NER (e.g., spaCy) to extract location names from text and integrate with the geocoding module.
+    *   Priority: High
+    *   Status: To Do
+6.  **Task: [BE-006] Implement robust error handling and user notification for AEGIS pipeline failures**
+    *   Description: Enhance error handling within the AEGIS pipeline, provide clearer error messages in `IngestionJobMetadata`, and establish a user notification system for failures (e.g., via GUI alerts or email).
+    *   Priority: Medium
+    *   Status: To Do
+7.  **Task: [BE-007] Testing and Refinement of Backend and AEGIS pipeline**
+    *   Description: Conduct thorough testing of all backend endpoints, Celery tasks, and AEGIS pipeline stages with diverse datasets and error conditions. Refine based on test outcomes.
+    *   Priority: High
+    *   Status: To Do
+
+**Phase 8: GUI Development**
+Status: Pending
+(Based on GUI_DESIGN.md and gui/GUI_MOCKUPS.md)
+
+1.  **Task: [GUI-001] Implement Dashboard View**
+    *   Description: Develop the main dashboard UI components as per `gui/GUI_MOCKUPS.md`.
+    *   Priority: Medium
+    *   Status: To Do
+2.  **Task: [GUI-002] Implement Index Management View (including wizard integration)**
+    *   Description: Develop the Index Management UI, including the table for listing indexes and integrating the "Enhanced Index Creation Wizard" modal. Backend interaction for `GET /indexes`, `DELETE /indexes/{index_id}`.
+    *   Priority: Medium
+    *   Status: To Do
+3.  **Task: [GUI-003] Implement Query Interface View**
+    *   Description: Develop the Query Interface UI, including index selection, query type selection, dynamic parameter inputs, results display, and query history. Backend interaction for `POST /query/execute`, `GET /query/history`, and `GET /indexes?status=ready`.
+    *   Priority: Medium
+    *   Status: To Do
+4.  **Task: [GUI-004] Implement Data Visualization View (basic map and layer controls)**
+    *   Description: Develop the Data Visualization UI with a map display and basic layer/style controls.
+    *   Priority: Medium
+    *   Status: To Do
+5.  **Task: [GUI-005] Implement Settings View (basic structure and user preferences)**
+    *   Description: Develop the Settings UI with initial tabs for Data Sources and User Preferences.
+    *   Priority: Medium
+    *   Status: To Do
+6.  **Task: [GUI-006] Implement Ingestion Dashboard View (file upload, job listing)**
+    *   Description: Develop the Ingestion Dashboard UI, including file upload functionality (`POST /upload/data`), and tables for Ingestion Jobs and Quarantined Jobs (`GET /metadata/ingestion_jobs`).
+    *   Priority: Medium
+    *   Status: To Do
+7.  **Task: [GUI-007] Implement Enhanced Index Creation Wizard (all steps)**
+    *   Description: Fully implement the multi-step "Enhanced Index Creation Wizard" modal, including fetching processed data (`GET /metadata/ingestion_jobs?processing_status=validation_successful_ready_for_promotion`), displaying validation summaries, collecting index parameters, and submitting for creation (`POST /indexes`).
+    *   Priority: Medium
+    *   Dependencies: [GUI-002]
+    *   Status: To Do
+8.  **Task: [GUI-008] Implement GUI Backend API Interaction (connecting UI elements to backend endpoints in `script.js`)**
+    *   Description: Ensure all JavaScript functions in `script.js` correctly call backend API endpoints, handle responses, and update the UI accordingly for all implemented views.
+    *   Priority: High
+    *   Status: To Do (Ongoing with each view)
+9.  **Task: [GUI-009] Implement UI feedback mechanisms (loading indicators, error messages, help tooltips)**
+    *   Description: Add loading spinners/messages for API calls, clear error messages for users, and helpful tooltips for complex UI elements as described in mockups.
+    *   Priority: Medium
+    *   Status: To Do (Ongoing with each view)
+10. **Task: [GUI-010] Testing and Refinement of GUI components.**
+    *   Description: Conduct usability testing, cross-browser checks, and functional testing of all GUI views and interactions. Refine based on feedback.
+    *   Priority: High
+    *   Status: To Do
+
+**Phase 9: Optimizations, Security, and Final System Touches**
+Status: Pending
+
+1.  **Task: [OPT-001] Implement general hardware optimization plugins**
     *   Description: If specific CPU-bound tasks in parsers/preprocessors can be optimized with SIMD (beyond the dedicated AVX-512 search), create plugins for these.
+    *   Files: `plugins/optimizations/`
     *   Priority: Low
-2.  **Task: [SEC-001] Implement Security Analysis Plugins (`security/`)**
-    *   Description: Develop plugins for hash separation, password analysis, etc. (e.g., `hash_separator.so`, `password_analyzer.so`).
-    *   Priority: Low / Medium (depending on requirements)
+    *   Status: To Do
+2.  **Task: [SEC-001] Implement security analysis plugins (e.g., hash_separator.so, password_analyzer.so)**
+    *   Description: Develop plugins for hash separation, password analysis, etc.
+    *   Files: `plugins/security/`
+    *   Priority: Low
+    *   Status: To Do
 3.  **Task: [CORE-008] Implement Threading Model (`threading.c`)**
     *   Description: Implement multi-threading for parallel processing of files or chunks within the ingestion pipeline.
     *   Files: `core/threading.c`, `core/threading.h`
     *   Priority: Medium
+    *   Status: To Do
 4.  **Task: [DOCS-001] Write `README.md` and Basic Usage Documentation**
     *   Files: `README.md`, `docs/`
     *   Priority: Medium (ongoing)
-5.  **Task: [TEST-003] Comprehensive System & Performance Testing**
+    *   Status: In Progress
+5.  **Task: [TEST-003] Execute comprehensive system and performance testing**
     *   Description: Test with large datasets, various file types, measure throughput, and identify bottlenecks.
     *   Priority: Medium
-
-Okay, let's break this down into more digestible chunks for Jules. I'll group them logically, focusing on delivering functional milestones.
+    *   Status: To Do
 
 ---
+
+**Chunk Reorganization (Reflecting New Phases and Task Updates)**
+
+This section provides a high-level view, grouping phases into larger chunks.
 
 **Chunk 1: Core System & Plugin Foundation**
 Status: **DONE ✅**
-
-*Goal: Establish the basic application structure, plugin loading, and configuration management.*
-
-1.  **Task: [CORE-001] Implement `main.c` Entry Point**
-    *   Description: Create the main application entry point. Basic argument parsing (e.g., config file path).
-    *   Files: `core/main.c`
-    *   Priority: High
-2.  **Task: [CORE-002] Define Core Data Structures & Types**
-    *   Description: Define common data structures (e.g., for processed data chunks, plugin info) in `data_types.h`.
-    *   Files: `include/data_types.h`
-    *   Priority: High
-3.  **Task: [CORE-003] Define Plugin Interface (`plugin_interface.h`)**
-    *   Description: Define the C function pointer interfaces for all plugin types (parsers, preprocessors, indexers, etc.).
-    *   Files: `include/plugin_interface.h`
-    *   Priority: High
-4.  **Task: [CORE-004] Implement Plugin Loader (`plugin_loader.c`)**
-    *   Description: Develop the module to scan `plugins/` subdirectories, dynamically load `.so` files, and register them.
-    *   Files: `core/plugin_loader.c`, `core/plugin_loader.h`
-    *   Priority: High
-5.  **Task: [CORE-005] Implement Configuration Manager (`config_manager.c`)**
-    *   Description: Develop the module to parse configuration files. Define config structures in `config.h`.
-    *   Files: `core/config_manager.c`, `core/config_manager.h`, `include/config.h`
-    *   Priority: High
-6.  **Task: [BUILD-001] Create Initial Makefile**
-    *   Description: Set up a basic `Makefile` to compile the core components.
-    *   Files: `Makefile`
-    *   Priority: High
-7.  **Task: [CORE-006] Implement Basic Logging Utility**
-    *   Description: A simple logging mechanism for debug, info, error messages (e.g., in `utils.c`).
-    *   Files: `core/utils.c`, `core/utils.h`
-    *   Priority: Medium
-
----
+*(Corresponds to Phase 1)*
 
 **Chunk 2: Basic Ingestion Pipeline & JSON Processing**
 Status: **DONE ✅**
-
-*Goal: Get the first file type (JSON) processing through a rudimentary pipeline, leveraging the existing `json_preprocessor.c`.*
-
-1.  **Task: [INGEST-001] Implement Ingestion Pipeline Manager (`ingestion_pipeline.c`)**
-    *   Description: Core logic to manage data flow: identify file type, call preprocessor, call parser.
-    *   Files: `core/ingestion_pipeline.c`, `core/ingestion_pipeline.h`
-    *   Priority: High
-    *   Dependencies: [CORE-003], [CORE-004]
-2.  **Task: [JSON-001] Adapt `json_preprocessor.c` to Plugin Interface**
-    *   Description: Modify `json_preprocessor.c` to conform to `plugin_interface.h`. Compile as `plugins/preprocessors/json_preprocessor.so`.
-    *   Files: `plugins/preprocessors/json_preprocessor.c`
-    *   Priority: High
-    *   *Status: `json_preprocessor.c` exists, needs adaptation.*
-3.  **Task: [JSON-002] Implement `json_parser.c` Plugin**
-    *   Description: Create the JSON parser plugin to parse JSON structure into a format defined in `data_types.h`.
-    *   Files: `plugins/parsers/json_parser.c`
-    *   Priority: High
-    *   Dependencies: [CORE-002], [CORE-003]
-4.  **Task: [BUILD-002] Extend Makefile for JSON Plugins**
-    *   Description: Add rules to `Makefile` to compile `json_preprocessor.so` and `json_parser.so`.
-    *   Files: `Makefile`
-    *   Priority: High
-5.  **Task: [TEST-001] Test Core JSON Ingestion Path**
-    *   Description: Create a test harness or extend `main.c` to load a JSON file and pass it through the pipeline using JSON plugins, logging the output.
-    *   Priority: High
-
----
+*(Corresponds to Phase 2)*
 
 **Chunk 3: Elasticsearch Integration**
 Status: **DONE ✅**
+*(Corresponds to Phase 3)*
 
-*Goal: Enable sending processed data to Elasticsearch for indexing.*
-
-1.  **Task: [ES-001] Implement Elasticsearch Client (`elasticsearch_client.c`)**
-    *   Description: Module for communication with Elasticsearch (e.g., using `libcurl`).
-    *   Files: `core/elasticsearch_client.c`, `core/elasticsearch_client.h`
-    *   Priority: High
-2.  **Task: [ES-002] Implement Elasticsearch Indexer Plugin (`elasticsearch_indexer.so`)**
-    *   Description: Plugin that takes parsed data and sends it to Elasticsearch via `elasticsearch_client.c`.
-    *   Files: `plugins/indexers/elasticsearch_indexer.c`
-    *   Priority: High
-    *   Dependencies: [ES-001], [CORE-002], [CORE-003]
-3.  **Task: [BUILD-003] Extend Makefile for Elasticsearch Indexer**
-    *   Description: Add rules to `Makefile` to compile `elasticsearch_indexer.so`.
-    *   Files: `Makefile`
-    *   Priority: High
-4.  **Task: [TEST-002] End-to-End JSON Indexing Test**
-    *   Description: Test indexing a JSON file into a local Elasticsearch instance. Verify data in Elasticsearch/Kibana.
-    *   Priority: High
-
----
-
-**Chunk 4: Adding Text & CSV Parsers/Preprocessors**
+**Chunk 4: Expanding Parsers & Preprocessors**
 Status: **DONE ✅**
+*(Corresponds to Phase 4)*
 
-*Goal: Expand file type support with common text-based formats.*
-
-1.  **Task: [TXT-001] Implement `txt_preprocessor.c` & `txt_parser.c`**
-    *   Description: Create preprocessor and parser plugins for TXT files.
-    *   Files: `plugins/preprocessors/txt_preprocessor.c`, `plugins/parsers/txt_parser.c`
-    *   Priority: Medium
-2.  **Task: [CSV-001] Implement `csv_preprocessor.c` & `csv_parser.c`**
-    *   Description: Create preprocessor and parser plugins for CSV files.
-    *   Files: `plugins/preprocessors/csv_preprocessor.c`, `plugins/parsers/csv_parser.c`
-    *   Priority: Medium
-3.  **Task: [BUILD-004A] Extend Makefile for TXT & CSV Plugins**
-    *   Description: Add rules to compile TXT and CSV plugins. (Note: Makefile updates will be ongoing, denoted as A, B, C etc. for this phase)
-    *   Files: `Makefile`
-    *   Priority: Medium
-
----
-
-**Chunk 5: Adding SQL, XML, YML, HTML Parsers/Preprocessors**
+**Chunk 5: Decompressor Plugins**
 Status: **DONE ✅**
+*(Corresponds to Phase 5)*
 
-*Goal: Further expand support for structured and semi-structured text formats.*
+**Chunk 6: Advanced Features - AVX-512 & Machine Learning**
+Status: **In Progress**
+*(Corresponds to Phase 6)*
+*   Key Pending Tasks: [AVX-001] Full Implementation (High), [ML-OV-005] Meteor Lake Testing (High).
 
-1.  **Task: [SQL-001] Implement `sql_preprocessor.c` & `sql_parser.c`**
-    *   Files: `plugins/preprocessors/sql_preprocessor.c`, `plugins/parsers/sql_parser.c`
-    *   Priority: Medium
-2.  **Task: [XML-001] Implement `xml_preprocessor.c` & `xml_parser.c`** (Consider `libxml2`)
-    *   Files: `plugins/preprocessors/xml_preprocessor.c`, `plugins/parsers/xml_parser.c`
-    *   Priority: Medium
-3.  **Task: [YML-001] Implement `yml_preprocessor.c` & `yml_parser.c`** (Consider `libyaml`)
-    *   Files: `plugins/preprocessors/yml_preprocessor.c`, `plugins/parsers/yml_parser.c`
-    *   Priority: Medium
-4.  **Task: [HTML-001] Implement `html_preprocessor.c` & `html_parser.c`** (Consider `libxml2` HTML mode)
-    *   Files: `plugins/preprocessors/html_preprocessor.c`, `plugins/parsers/html_parser.c`
-    *   Priority: Medium
-5.  **Task: [BUILD-004B] Extend Makefile for SQL, XML, YML, HTML Plugins**
-    *   Files: `Makefile`
-    *   Priority: Medium
+**Chunk 7: Backend Finalization and AEGIS Pipeline Completion**
+Status: **Pending**
+*(Corresponds to Phase 7 - New)*
+*   Key Tasks: [BE-001] Persistent Storage (High), [BE-002] Persistent Query History (High), [BE-003] Security Scanning (High), [BE-004] Schema Validation (High), [BE-005] NLP/NER Implementation (High), [BE-006] Error Handling (Medium), [BE-007] Backend Testing (High).
 
----
+**Chunk 8: GUI Development**
+Status: **Pending**
+*(Corresponds to Phase 8 - New)*
+*   Key Tasks: [GUI-001] Dashboard (Medium), [GUI-002] Index Mgt (Medium), [GUI-003] Query Interface (Medium), [GUI-006] Ingestion (Medium), [GUI-007] Index Wizard (Medium), [GUI-008] API Interaction (High), [GUI-010] GUI Testing (High).
 
-**Chunk 6: Decompressor Plugins**
-Status: **DONE ✅**
-
-*Goal: Add support for handling compressed files.*
-
-1.  **Task: [DECOMP-001] Implement `zip_decompressor.c`** (e.g., `libzip` or `miniz`) - **DONE ✅**
-    *   Files: `plugins/decompressors/zip_decompressor.c`
-    *   Priority: Medium
-2.  **Task: [DECOMP-002] Implement `gzip_decompressor.c`** (e.g., `zlib`) - **DONE ✅**
-    *   Files: `plugins/decompressors/gzip_decompressor.c`
-    *   Priority: Medium
-3.  **Task: [DECOMP-003] Implement `zstd_decompressor.c`** (e.g., `libzstd`) - **DONE ✅**
-    *   Files: `plugins/decompressors/zstd_decompressor.c` (Corrected from .so to .c as per actual implementation)
-    *   Priority: Medium
-4.  **Task: [INGEST-002] Integrate Decompressors into Ingestion Pipeline** - **DONE ✅**
-    *   Description: Modify `ingestion_pipeline.c` to detect and use decompressor plugins.
-    *   Priority: Medium
-5.  **Task: [BUILD-005] Extend Makefile for Decompressors** - **DONE ✅**
-    *   Files: `Makefile`
-    *   Priority: Medium
-
----
-
-**Chunk 7: Advanced Document & Specialized Format Parsers (Addressed by Phase 4)**
-Status: **DONE ✅**
-
-*Goal: Begin tackling more complex formats. Initial focus might be on research, library selection, and creating stubs.*
-
-1.  **Task: [DOC-001] Research & Implement `doc_parser.c` & `doc_preprocessor.c`** (Identify libraries like `libdoc`, or tools like `antiword`/`pandoc`)
-    *   Status: **DONE ✅**
-2.  **Task: [XLS-001] Research & Implement `xls_parser.c` & `xls_preprocessor.c`** (Identify libraries like `libxls`, or tools)
-    *   Status: **DONE ✅**
-3.  **Task: [PDF-001] Research & Implement `pdf_parser.c` & `pdf_preprocessor.c`** (Identify libraries like `poppler`, or tools like `pdftotext`)
-    *   Status: **DONE ✅**
-4.  **Task: [RTF-001] Research & Implement `rtf_parser.c` & `rtf_preprocessor.c`** (Identify libraries like `librtf`, or tools)
-    *   Status: **DONE ✅**
-5.  **Task: [DIC-001] Research & Implement `dic_parser.c` & `dic_preprocessor.c`** (For DICOM, e.g., `dcmtk`)
-    *   Status: **DONE ✅**
-6.  **Task: [SQLITE-001] Research & Implement `sqlite_parser.c` & `sqlite_preprocessor.c`** (Using `sqlite3` lib)
-    *   Status: **DONE ✅**
-7.  **Task: [BUILD-004C] Extend Makefile for New Parser/Preprocessor Stubs**
-    *   Files: `Makefile`
-    *   Priority: Low to Medium (implementation detail can come later)
-    *   Status: **DONE ✅**
-
----
-
-**Chunk 8: Machine Learning Integration Foundation**
-
-*Goal: Set up the interfaces and basic structure for ML-based classification.*
-
-1.  **Task: [ML-001] Define Machine Learning Interface (`ml_interface.h`)**
-    *   Description: Specify C interfaces for loading ML models and performing inference.
-    *   Files: `include/ml_interface.h`
-    *   Priority: Medium
-    *   Status: **DONE ✅**
-2.  **Task: [ML-002] Implement Stub for ML Classifier Plugin (`ml_classifier.so`)**
-    *   Description: Create a basic structure for the `ml_classifier.so` plugin, conforming to `ml_interface.h`. Actual ML model loading can come later.
-    *   Files: `plugins/classifiers/ml_classifier.c` (Path corrected)
-    *   Priority: Medium
-    *   Status: **DONE ✅**
-3.  **Task: [ML-003] Implement Content Analyzer Plugin (`content_analyzer.so`)**
-    *   Description: Plugin for heuristic-based content analysis, as a supplement/fallback.
-    *   Files: `plugins/analyzers/content_analyzer.c` (Path corrected)
-    *   Priority: Medium
-    *   Status: **DONE ✅**
-4.  **Task: [INGEST-003] Plan ML Integration into Ingestion Pipeline**
-    *   Description: Design how `ingestion_pipeline.c` and preprocessors (e.g., `txt_preprocessor.c`) will use ML classification. Implement basic hooks.
-    *   Priority: Medium
-    *   Status: **DONE ✅**
-5.  **Task: [BUILD-006A] Extend Makefile for ML Foundation Plugins**
-    *   Files: `Makefile`
-    *   Priority: Medium
-    *   Status: **DONE ✅**
-
----
-
-**Chunk 9: AVX-512 Phrase Search (Core Algorithm)**
-
-*Goal: Implement the specialized AVX-512 search algorithm.*
-
-1.  **Task: [CORE-007] Implement Hardware Detection (`hardware_detection.c`)**
-    *   Description: Module to detect CPU capabilities (e.g., AVX-512 support using CPUID).
-    *   Files: `core/hardware_detection.c`, `core/hardware_detection.h`
-    *   Priority: Medium (Prerequisite for AVX work)
-    *   Status: **DONE ✅**
-2.  **Task: [AVX-001] Implement AVX-512 Phrase Search Plugin (`avx512_phrase_search.so`)**
-    *   Description: Develop the C-based AVX-512 optimized phrase search algorithm. This is a specialized task.
-    *   Files: `plugins/search_algorithms/avx512_phrase_search.c`
-    *   Priority: High (if core feature) / Medium
-    *   Dependencies: [CORE-007]
-    *   Status: Core logic demonstratively implemented (uses AvxSearchParams, basic AVX-512 operations for partial matching). Full algorithm pending.
-3.  **Task: [BUILD-006B] Extend Makefile for AVX Plugin**
-    *   Files: `Makefile`
-    *   Priority: Medium
-    *   Status: **DONE ✅**
-
----
-
-**Chunk 10: System Enhancements & Finalization**
-
-*Goal: Add threading, security features, and prepare for broader use.*
-
-1.  **Task: [CORE-008] Implement Threading Model (`threading.c`)**
-    *   Description: Implement multi-threading for parallel processing in the ingestion pipeline.
-    *   Files: `core/threading.c`, `core/threading.h`
-    *   Priority: Medium
-2.  **Task: [ES-003] Integrate AVX-512 Search with Elasticsearch Queries (Design & Stubs)**
-    *   Description: Plan how SPINDEX's AVX-512 search interacts with or enhances Elasticsearch vector search.
-    *   Priority: Medium
-    *   Status: Design Complete. See `docs/avx_elasticsearch_integration_design.md`. (Note: This is a duplicate of Phase 6 ES-003, status updated here too)
-3.  **Task: [SEC-001] Implement Stubs for Security Analysis Plugins (`security/`)**
-    *   Description: Create basic structures for plugins like `hash_separator.so`, `password_analyzer.so`.
-    *   Priority: Low / Medium
-4.  **Task: [OPT-001] Plan for General Hardware Optimization Plugins (`optimizations/`)**
-    *   Description: Identify areas for further SIMD optimizations beyond the main phrase search.
-    *   Priority: Low
-5.  **Task: [DOCS-001] Write `README.md` and Basic Usage Documentation**
-    *   Files: `README.md`, `docs/`
-    *   Priority: Medium (ongoing)
-6.  **Task: [TEST-003] Comprehensive System & Performance Testing Plan**
-    *   Description: Outline strategy for testing with large datasets and various file types.
-    *   Priority: Medium
+**Chunk 9: System Enhancements & Finalization**
+Status: **Pending**
+*(Corresponds to Phase 9 - Previously Phase 7 / Chunk 10, now incorporating remaining and updated tasks)*
+*   Key Tasks: [OPT-001] Hardware Opt. Plugins (Low), [SEC-001] Security Analysis Plugins (Low), [CORE-008] Threading (Medium), [DOCS-001] Documentation (Medium), [TEST-003] System Testing (Medium).
 
 ---
 
 This breakdown should provide smaller, more manageable sets of tasks for Jules. Each chunk aims for a tangible step forward. You can tackle these chunks sequentially or, where dependencies allow, some in parallel.
+(Note: Original Chunk 7-10 have been re-mapped to align with the new phase structure and updates.)
