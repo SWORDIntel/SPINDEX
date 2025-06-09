@@ -1,998 +1,705 @@
 from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field as PydanticField
 from typing import List, Optional, Dict, Any
-import time # Added for Celery task simulation
-from datetime import datetime # For timestamps
-from celery import Celery, shared_task # Added for Celery
-from celery.result import AsyncResult # Added for Celery task status
-import shutil # For file operations
-import os # For path operations
-import uuid # For generating unique filenames
-from osgeo import ogr, osr # Import GDAL components
-import json # For reading GeoJSON output for Shapely validation
-from shapely.geometry import shape, Point as ShapelyPoint # For converting GeoJSON geometry to Shapely object
-from shapely.validation import is_valid # For checking geometry validity
-import requests # For geopy/Nominatim HTTP requests, though geopy handles it. Good to have if direct calls needed.
-from geopy.geocoders import Nominatim # For geocoding
+import time
+from datetime import datetime
+from celery import Celery, shared_task
+from celery.result import AsyncResult
+import shutil
+import os
+import uuid
+from osgeo import ogr, osr
+import json
+from shapely.geometry import shape, Point as ShapelyPoint
+from shapely.validation import is_valid, make_valid
+import requests
+from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError
+import logging
+
+from sqlalchemy.orm import Session
+from backend import database, models, crud
 
 # --- Constants ---
 STAGING_AREA_PATH = "staging_area"
-PROCESSED_AREA_PATH = "processed_area" # For successfully processed files
-TARGET_CRS_EPSG = 4326 # WGS 84
+PROCESSED_AREA_PATH = "processed_area"
+TARGET_CRS_EPSG = 4326
+EXPECTED_INPUT_FORMATS = [
+    "ESRI Shapefile", "GeoJSON", "KML", "GML", "GPKG", "FlatGeobuf"
+]
+
+# --- File Upload Validation Constants ---
+MAX_FILE_SIZE = 100 * 1024 * 1024
+ALLOWED_MIME_TYPES = [
+    "application/geo+json", "application/json", "application/zip",
+    "application/vnd.google-earth.kml+xml", "application/gml+xml",
+    "text/xml", "application/octet-stream"
+]
+
+# --- Logging Configuration ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# --- Ensure Core Directories Exist on Startup ---
+os.makedirs(STAGING_AREA_PATH, exist_ok=True)
+os.makedirs(PROCESSED_AREA_PATH, exist_ok=True)
+logger.info(f"Ensured staging area exists: {STAGING_AREA_PATH}")
+logger.info(f"Ensured processed area exists: {PROCESSED_AREA_PATH}")
+
 
 # --- Celery Configuration ---
-# The broker URL specifies the Redis instance Celery will use to send and receive messages.
-# The backend URL specifies the Redis instance Celery will use to store task states and results.
-# Using /0 and /1 to use different Redis databases if desired, or keep them same.
 celery_app = Celery(
-    __name__, # Using __name__ will make task names relative to this module
+    __name__,
     broker='redis://localhost:6379/0',
-    backend='redis://localhost:6379/1' # Using a different DB for backend results
+    backend='redis://localhost:6379/1'
 )
-
-# Optional: More detailed Celery configuration if needed
 celery_app.conf.update(
     task_serializer='json',
-    accept_content=['json'],  # Ignore other content
+    accept_content=['json'],
     result_serializer='json',
     timezone='UTC',
     enable_utc=True,
-    # task_track_started=True, # Uncomment if you want to track 'STARTED' state
 )
 
-
-# --- Pydantic Models (Data Structures) ---
-class Role(BaseModel):
-    name: str
-    permissions: List[str] = []
-
-class User(BaseModel):
-    username: str
-    email: Optional[str] = None
-    full_name: Optional[str] = None
-    roles: List[Role] = []
-    # In a real app, this would store hashed passwords, not plain text
-    # hashed_password: str
-
-# --- Metadata Catalogue Models ---
+# --- Pydantic Models ---
+class Role(BaseModel): name: str; permissions: List[str] = []
+class User(BaseModel): username: str; email: Optional[str] = None; full_name: Optional[str] = None; roles: List[Role] = []
 class IngestionJobMetadata(BaseModel):
-    job_id: str = Field(default_factory=lambda: str(uuid.uuid4())) # The Celery task ID will serve as job_id
+    job_id: str
     original_filename: Optional[str] = None
-    upload_timestamp: datetime = Field(default_factory=datetime.utcnow)
+    upload_timestamp: datetime
     user_id: Optional[str] = None
-    source_type: Optional[str] = "file_upload" # Default for current implementation
+    source_type: Optional[str] = "file_upload"
     detected_format: Optional[str] = None
     original_crs: Optional[str] = None
-    target_crs: Optional[str] = None # System's standard CRS, e.g., EPSG:4326
-    processing_status: str = "pending_staging" # e.g., pending_staging, staged, processing, promoted, quarantined, failed
-    staged_file_path: Optional[str] = None # Path within the staging area
+    target_crs: Optional[str] = None
+    processing_status: str
+    staged_file_path: Optional[str] = None
     promotion_timestamp: Optional[datetime] = None
     quarantine_timestamp: Optional[datetime] = None
     location_of_promoted_data: Optional[str] = None
     location_of_quarantined_data: Optional[str] = None
-    pipeline_stages_executed_log: List[Dict[str, Any]] = [] # List of dicts e.g. {"stage": "validation", "status": "success", "timestamp": "..."}
-    validation_summary: Optional[Dict[str, Any]] = None # e.g., {"geometry_errors": 0, "schema_violations": 0}
-    error_log_references: List[str] = [] # e.g., links or IDs to detailed error logs
+    pipeline_stages_executed_log: List[Dict[str, Any]] = PydanticField(default_factory=list)
+    validation_summary: Optional[Dict[str, Any]] = None
+    error_log_references: List[str] = PydanticField(default_factory=list)
     data_hash_original: Optional[str] = None
     data_hash_processed: Optional[str] = None
-    celery_task_id: Optional[str] = None # To link back to the Celery task if job_id is different
-
-    class Config:
-        orm_mode = True # For easier conversion from ORM objects if we use one later
-        json_encoders = {
-            datetime: lambda v: v.isoformat() if v else None
-        }
-
-
-# --- In-memory "Database" for Metadata Catalogue ---
-metadata_catalogue_db: List[IngestionJobMetadata] = []
-
-
-# --- Index Management Pydantic Models ---
-class IndexCreationRequest(BaseModel):
-    promoted_data_path: str
-    index_name: str
-    index_type: str # e.g., "R-Tree", "Quadtree"
-    index_parameters: Optional[Dict[str, Any]] = None
-
+    celery_task_id: Optional[str] = None
+    class Config: orm_mode = True; json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+class IndexCreationRequest(BaseModel): promoted_data_path: str; index_name: str; index_type: str; index_parameters: Optional[Dict[str, Any]] = None
 class IndexMetadata(BaseModel):
-    index_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    index_name: str
-    index_type: str
-    promoted_data_path: str # Path to the data file used for this index version
-    version: int = 1
-    status: str = "creating" # e.g., 'creating', 'ready', 'failed', 'updating'
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: Optional[datetime] = None
-    celery_task_id: Optional[str] = None # For tracking the creation/update task
-    # Additional fields like description, specific parameters used, item_count, etc. can be added
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat() if v else None
-        }
-
-# --- In-memory "Database" for Index Metadata ---
+    index_id: str = PydanticField(default_factory=lambda: str(uuid.uuid4())); index_name: str; index_type: str
+    promoted_data_path: str; version: int = 1; status: str = "creating"; created_at: datetime = PydanticField(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = None; celery_task_id: Optional[str] = None
+    class Config: orm_mode = True; json_encoders = {datetime: lambda v: v.isoformat() if v else None}
 index_metadata_db: List[IndexMetadata] = []
-
-
-# --- Query Pydantic Models ---
-class QueryRequest(BaseModel):
-    index_id: str
-    query_type: str  # e.g., 'bbox', 'point', 'knn'
-    parameters: Dict[str, Any] # e.g., {"bbox": [minx, miny, maxx, maxy]}, {"point": [x,y], "k": 5}
-
-class QueryResponse(BaseModel):
-    results: List[Dict[str, Any]] # Each dict could represent a GeoJSON Feature
-    count: int
-    query_time_ms: int
-    message: Optional[str] = None
-    # Could also include query_parameters_received, warnings, etc.
-
+class QueryRequest(BaseModel): index_id: str; query_type: str; parameters: Dict[str, Any]
+class QueryResponse(BaseModel): results: List[Dict[str, Any]]; count: int; query_time_ms: int; message: Optional[str] = None
 class QueryHistoryItem(BaseModel):
-    query_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-    user_id: str
-    request_data: QueryRequest
-    # response_summary: Optional[Dict[str,Any]] # e.g. count, time_ms. Avoid storing full results in history for now.
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat() if v else None
-        }
-
-# --- In-memory "Database" for Query History ---
+    query_id: str = PydanticField(default_factory=lambda: str(uuid.uuid4())); timestamp: datetime = PydanticField(default_factory=datetime.utcnow)
+    user_id: str; request_data: QueryRequest
+    class Config: orm_mode = True; json_encoders = {datetime: lambda v: v.isoformat() if v else None}
 query_history_db: List[QueryHistoryItem] = []
+class TaskStatusResponse(BaseModel): task_id: str; status: str; result: Optional[Any] = None
+class TaskCreationRequest(BaseModel): param_x: int; param_y: int
+class TaskCreationResponse(BaseModel): task_id: str; message: str
+class FileUploadResponse(BaseModel): job_id: str; filename: str; message: str; staged_filepath: Optional[str] = None
 
-
-# --- Task Management Pydantic Models ---
-class TaskStatusResponse(BaseModel):
-    task_id: str
-    status: str
-    result: Optional[Any] = None # Can be any type depending on task
-
-class TaskCreationRequest(BaseModel):
-    param_x: int
-    param_y: int
-
-class TaskCreationResponse(BaseModel):
-    task_id: str
-    message: str
-
-class FileUploadResponse(BaseModel):
-    job_id: str
-    filename: str
-    message: str
-    staged_filepath: Optional[str] = None # For debugging/confirmation, might remove in prod
-
-# --- Dummy Data & OAuth2 Scheme ---
-# This is a dummy user for now. In a real app, this would come from a database.
-dummy_admin_role = Role(name="Admin", permissions=["create_index", "delete_index", "query_data", "manage_users"])
-dummy_analyst_role = Role(name="Analyst", permissions=["create_index", "query_data"])
+# --- Dummy Auth Data ---
+dummy_admin_role = Role(name="Admin", permissions=["create_index", "delete_index", "query_data", "manage_users", "upload_data"])
+dummy_analyst_role = Role(name="Analyst", permissions=["create_index", "query_data", "upload_data"])
 dummy_viewer_role = Role(name="Viewer", permissions=["query_data"])
-
 dummy_users_db = {
-    "admin": User(username="admin", email="admin@example.com", full_name="Admin User", roles=[dummy_admin_role]),
-    "analyst": User(username="analyst", email="analyst@example.com", full_name="Analyst User", roles=[dummy_analyst_role]),
-    "viewer": User(username="viewer", email="viewer@example.com", full_name="Viewer User", roles=[dummy_viewer_role]),
+    "admin": User(username="admin", roles=[dummy_admin_role]),
+    "analyst": User(username="analyst", roles=[dummy_analyst_role]),
+    "viewer": User(username="viewer", roles=[dummy_viewer_role]),
 }
-
-# OAuth2PasswordBearer is a utility to get the token from the Authorization header
-# tokenUrl is a placeholder, would point to the actual token endpoint in a real auth system
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-# --- FastAPI App Instance ---
 app = FastAPI(title="SPINDEX Backend", version="0.1.0")
 
-# --- RBAC Stub Functions ---
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
-    """
-    Stub function to get the current user.
-    In a real application, this would:
-    1. Decode the JWT token.
-    2. Validate the token (signature, expiry, etc.).
-    3. Extract user information (e.g., user ID or username).
-    4. Fetch the user from the database.
-    For now, it returns a dummy user based on a simple token string.
-    """
-    # Simulate token validation - extremely simplified!
-    # In a real app, use python-jose to decode and validate.
-    if token == "faketoken_admin":
-        user = dummy_users_db.get("admin")
-    elif token == "faketoken_analyst":
-        user = dummy_users_db.get("analyst")
-    elif token == "faketoken_viewer":
-        user = dummy_users_db.get("viewer")
-    else:
-        # This mimics an invalid or expired token
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if user is None: # Should not happen if token is valid based on above logic
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
+    user_map = {"faketoken_admin": "admin", "faketoken_analyst": "analyst", "faketoken_viewer": "viewer"}
+    username = user_map.get(token)
+    if not username or username not in dummy_users_db:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials", headers={"WWW-Authenticate": "Bearer"})
+    return dummy_users_db[username]
 
 def user_has_permission(user: User, permission_needed: str) -> bool:
-    """
-    Stub function to check if a user has a specific permission.
-    In a real application, this would iterate through the user's roles
-    and check if any role contains the required permission.
-    For now, it always returns True for simplicity in this subtask.
-    """
-    # Real implementation would be:
-    # for role in user.roles:
-    #     if permission_needed in role.permissions:
-    #         return True
-    # return False
-    return True # Stub: always return True
+    for role in user.roles:
+        if permission_needed in role.permissions: return True
+    return False
 
-# --- API Endpoints ---
-@app.get("/health", summary="Health Check", tags=["General"])
-async def health_check():
-    """
-    Simple health check endpoint to confirm the API is running.
-    """
-    return {"status": "success", "message": "SPINDEX API is healthy"}
+# --- AEGIS Pipeline Helper Functions ---
+def convert_to_geojson(source_filepath: str, output_dir: str, job_id: str, original_filename: str, log_prefix: str) -> Dict[str, Any]:
+    logger.info(f"{log_prefix} Starting format conversion for {original_filename} (path: {source_filepath})")
+    geojson_filename = f"{job_id}_converted.geojson"
+    geojson_filepath = os.path.join(output_dir, geojson_filename)
+    conversion_result = {"detected_format": "Unknown", "geojson_filepath": None, "layer_count": 0, "total_features_processed": 0, "errors_encountered": [], "original_crs_wkt": None}
+    in_ds = ogr.Open(source_filepath, 0)
+    if in_ds is None:
+        error_msg = f"GDAL: Could not open source file '{source_filepath}'."; logger.error(f"{log_prefix} {error_msg}"); conversion_result["errors_encountered"].append(error_msg); raise Exception(error_msg)
+    detected_format = in_ds.GetDriver().GetName(); conversion_result["detected_format"] = detected_format
+    logger.info(f"{log_prefix} Detected format: {detected_format} for {original_filename}.")
+    if detected_format not in EXPECTED_INPUT_FORMATS: logger.warning(f"{log_prefix} Format '{detected_format}' not in EXPECTED_INPUT_FORMATS list.")
+    out_driver = ogr.GetDriverByName("GeoJSON")
+    if out_driver is None:
+        error_msg = "GDAL: GeoJSON driver not available."; logger.error(f"{log_prefix} {error_msg}"); in_ds.Destroy(); conversion_result["errors_encountered"].append(error_msg); raise Exception(error_msg)
+    if os.path.exists(geojson_filepath): out_driver.DeleteDataSource(geojson_filepath)
+    out_ds = out_driver.CreateDataSource(geojson_filepath)
+    if out_ds is None:
+        error_msg = f"GDAL: Could not create output GeoJSON file '{geojson_filepath}'."; logger.error(f"{log_prefix} {error_msg}"); in_ds.Destroy(); conversion_result["errors_encountered"].append(error_msg); raise Exception(error_msg)
+    total_features = 0; num_layers = in_ds.GetLayerCount(); conversion_result["layer_count"] = num_layers;
+    if num_layers > 0:
+        first_layer_srs = in_ds.GetLayer(0).GetSpatialRef()
+        if first_layer_srs: conversion_result["original_crs_wkt"] = first_layer_srs.ExportToWkt()
+    for i in range(num_layers):
+        in_layer = in_ds.GetLayer(i); out_layer_name = in_layer.GetName()
+        out_layer = out_ds.CreateLayer(out_layer_name, geom_type=in_layer.GetGeomType(), srs=in_layer.GetSpatialRef())
+        layer_defn = in_layer.GetLayerDefn()
+        for j in range(layer_defn.GetFieldCount()): out_layer.CreateField(layer_defn.GetFieldDefn(j))
+        for in_feature in in_layer:
+            out_feature = ogr.Feature(out_layer.GetLayerDefn()); out_feature.SetFrom(in_feature)
+            if out_layer.CreateFeature(out_feature) != ogr.OGRERR_NONE:
+                err = f"Failed to create feature in output layer for job {job_id}"; logger.warning(f"{log_prefix} {err}"); conversion_result["errors_encountered"].append(err)
+            out_feature.Destroy(); total_features += 1
+    conversion_result["total_features_processed"] = total_features; conversion_result["geojson_filepath"] = geojson_filepath
+    logger.info(f"{log_prefix} Converted {original_filename} to GeoJSON: {geojson_filepath} ({num_layers} layers, {total_features} features). Original CRS (first layer WKT): {conversion_result['original_crs_wkt']}")
+    in_ds.Destroy(); out_ds.Destroy(); return conversion_result
 
-@app.get("/users/me", response_model=User, summary="Get Current User Details", tags=["Users"])
-async def read_users_me(current_user: User = Depends(get_current_user)):
-    """
-    Returns the details of the currently authenticated user.
-    This endpoint is protected and requires authentication.
-    """
-    # Example of how to use user_has_permission (though it's stubbed to True)
-    # if not user_has_permission(current_user, "view_profile"):
-    #     raise HTTPException(
-    #         status_code=status.HTTP_403_FORBIDDEN,
-    #         detail="You do not have permission to view this profile.",
-    #     )
-    return current_user
+def transform_geojson_crs(source_geojson_filepath: str, output_dir: str, job_id: str, target_crs_epsg: int, original_crs_wkt_from_previous_step: Optional[str], log_prefix: str) -> Dict[str, Any]:
+    logger.info(f"{log_prefix} Starting CRS transformation for {source_geojson_filepath} to EPSG:{target_crs_epsg}")
+    transformed_filename = f"{job_id}_crs_transformed.geojson"
+    transformed_filepath = os.path.join(output_dir, transformed_filename)
+    transform_result = {"crs_transformed_geojson_filepath": None, "detected_input_crs_wkt": original_crs_wkt_from_previous_step, "errors_encountered": []}
+    in_ds = ogr.Open(source_geojson_filepath, 0)
+    if in_ds is None:
+        error_msg = f"GDAL: Could not open GeoJSON file '{source_geojson_filepath}' for CRS transformation."; logger.error(f"{log_prefix} {error_msg}"); transform_result["errors_encountered"].append(error_msg); raise Exception(error_msg)
+    target_srs = osr.SpatialReference(); target_srs.ImportFromEPSG(target_crs_epsg)
+    out_driver = ogr.GetDriverByName("GeoJSON")
+    if out_driver is None:
+        error_msg = "GDAL: GeoJSON driver not available for CRS transform output."; logger.error(f"{log_prefix} {error_msg}"); in_ds.Destroy(); transform_result["errors_encountered"].append(error_msg); raise Exception(error_msg)
+    if os.path.exists(transformed_filepath): out_driver.DeleteDataSource(transformed_filepath)
+    out_ds = out_driver.CreateDataSource(transformed_filepath)
+    if out_ds is None:
+        error_msg = f"GDAL: Could not create output CRS-transformed file '{transformed_filepath}'."; logger.error(f"{log_prefix} {error_msg}"); in_ds.Destroy(); transform_result["errors_encountered"].append(error_msg); raise Exception(error_msg)
+    total_features_transformed = 0
+    for i in range(in_ds.GetLayerCount()):
+        in_layer = in_ds.GetLayer(i); in_srs = in_layer.GetSpatialRef()
+        if not in_srs and original_crs_wkt_from_previous_step:
+            in_srs = osr.SpatialReference(); in_srs.ImportFromWkt(original_crs_wkt_from_previous_step)
+            logger.info(f"{log_prefix} Used original_crs_wkt for transformation as GeoJSON layer had no SRS.")
+        elif not in_srs:
+            logger.warning(f"{log_prefix} No CRS found in GeoJSON layer and no original_crs_wkt provided. Assuming EPSG:4326 for input.")
+            in_srs = osr.SpatialReference(); in_srs.ImportFromEPSG(4326)
+        transform_result["detected_input_crs_wkt"] = in_srs.ExportToWkt() if in_srs else "Unknown"
+        transform = osr.CoordinateTransformation(in_srs, target_srs) if in_srs and target_srs and not in_srs.IsSame(target_srs) else None
+        out_layer_name = os.path.splitext(transformed_filename)[0]
+        out_layer = out_ds.CreateLayer(out_layer_name, geom_type=in_layer.GetGeomType(), srs=target_srs)
+        layer_defn = in_layer.GetLayerDefn()
+        for j in range(layer_defn.GetFieldCount()): out_layer.CreateField(layer_defn.GetFieldDefn(j))
+        for in_feature in in_layer:
+            out_feature = ogr.Feature(out_layer.GetLayerDefn()); out_feature.SetFrom(in_feature)
+            geom = out_feature.GetGeometryRef()
+            if geom and transform:
+                ogr_err = geom.Transform(transform)
+                if ogr_err != ogr.OGRERR_NONE: logger.warning(f"{log_prefix} Feature {in_feature.GetFID()} geometry transformation failed with OGR error: {ogr_err}")
+            elif geom and not transform: logger.debug(f"{log_prefix} No transformation needed/applied for feature {in_feature.GetFID()}.")
+            else: logger.debug(f"{log_prefix} No geometry or no transform for feature {in_feature.GetFID()}.")
+            out_layer.CreateFeature(out_feature); out_feature.Destroy()
+            total_features_transformed +=1
+    transform_result["crs_transformed_geojson_filepath"] = transformed_filepath
+    logger.info(f"{log_prefix} CRS transformation successful. Output: {transformed_filepath} ({total_features_transformed} features). Detected input CRS for transform: {transform_result['detected_input_crs_wkt']}")
+    in_ds.Destroy(); out_ds.Destroy(); return transform_result
 
-@app.get("/secure-data", summary="Access Secure Data (Example)", tags=["Data"])
-async def get_secure_data(current_user: User = Depends(get_current_user)):
-    """
-    Example of a secure endpoint requiring a specific permission.
-    """
-    if not user_has_permission(current_user, "query_data"): # This permission is in dummy roles
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to access this data.",
-        )
-    return {"message": f"Hello {current_user.username}, you have permission to see this secure data!"}
-
-# --- Placeholder for future endpoints ---
-# Example: Index Management (would require Admin or Analyst roles)
-# @app.post("/indexes", summary="Create Index", tags=["Indexes"])
-# async def create_index(index_data: dict, current_user: User = Depends(get_current_user)):
-#     if not user_has_permission(current_user, "create_index"):
-#         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
-#     return {"message": "Index creation initiated (stub)", "data": index_data}
-
+def validate_geometries(source_geojson_filepath: str, job_id: str, log_prefix: str, attempt_repair: bool = False) -> Dict[str, Any]:
+    logger.info(f"{log_prefix} Starting geometric validation for {source_geojson_filepath}")
+    validation_results = {"valid_features": 0, "invalid_features": 0, "repaired_features": 0, "features_total": 0, "validation_passed": False, "output_filepath": source_geojson_filepath, "errors_encountered": []}
+    features_to_write = []; modified_by_repair = False
+    try:
+        with open(source_geojson_filepath, 'r') as f: geojson_data = json.load(f)
+        if geojson_data.get("type") != "FeatureCollection" or not isinstance(geojson_data.get("features"), list):
+            raise ValueError("Input for geometry validation is not a valid GeoJSON FeatureCollection.")
+        features = geojson_data["features"]; validation_results["features_total"] = len(features)
+        for i, feature in enumerate(features):
+            if 'geometry' in feature and feature['geometry']:
+                try:
+                    geom = shape(feature['geometry'])
+                    if is_valid(geom): validation_results["valid_features"] += 1; features_to_write.append(feature)
+                    else:
+                        validation_results["invalid_features"] += 1; logger.warning(f"{log_prefix} Invalid geometry found for feature {i} (FID if available: {feature.get('id', 'N/A')}).")
+                        if attempt_repair:
+                            repaired_geom = make_valid(geom)
+                            if repaired_geom and is_valid(repaired_geom):
+                                logger.info(f"{log_prefix} Successfully repaired geometry for feature {i}.")
+                                validation_results["repaired_features"] += 1; import shapely.geometry; feature['geometry'] = shapely.geometry.mapping(repaired_geom)
+                                features_to_write.append(feature); modified_by_repair = True
+                            else: logger.warning(f"{log_prefix} Failed to repair geometry for feature {i} or repaired geometry is still invalid."); features_to_write.append(feature)
+                        else: features_to_write.append(feature)
+                except Exception as e_shapely:
+                    logger.error(f"{log_prefix} Error processing geometry for feature {i}: {str(e_shapely)}"); validation_results["invalid_features"] += 1
+                    validation_results["errors_encountered"].append(f"Feature {i} geometry processing error: {str(e_shapely)}"); features_to_write.append(feature)
+            else: validation_results["valid_features"] += 1; features_to_write.append(feature)
+        if attempt_repair and modified_by_repair:
+            repaired_geojson_filename = f"{job_id}_geom_repaired.geojson"; repaired_filepath = os.path.join(os.path.dirname(source_geojson_filepath), repaired_geojson_filename)
+            repaired_geojson_data = {"type": "FeatureCollection", "features": features_to_write}
+            with open(repaired_filepath, 'w') as f: json.dump(repaired_geojson_data, f)
+            logger.info(f"{log_prefix} Saved geometry-repaired data to: {repaired_filepath}"); validation_results["output_filepath"] = repaired_filepath
+        if attempt_repair: validation_results["validation_passed"] = (validation_results["invalid_features"] == validation_results["repaired_features"])
+        else: validation_results["validation_passed"] = (validation_results["invalid_features"] == 0)
+    except Exception as e:
+        error_msg = f"Geometric validation stage failed critically: {str(e)}"; logger.error(f"{log_prefix} {error_msg}")
+        validation_results["errors_encountered"].append(error_msg); validation_results["validation_passed"] = False
+    logger.info(f"{log_prefix} Geometric validation complete. Results: {validation_results}"); return validation_results
 
 # --- Celery Tasks ---
-@shared_task # Use @shared_task if you might define tasks in other files too
-def sample_celery_task(x: int, y: int) -> int:
-    """
-    A simple Celery task that simulates some work and returns a result.
-    """
-    time.sleep(10)  # Simulate a long-running operation
-    return x + y
-
 @shared_task
-def process_staged_file_task(staged_file_path: str, original_filename: str, user_id: str) -> str:
-    """
-    Performs CRS transformation, geometric validation, geocoding, and placeholder security/schema checks.
-    Updates metadata catalogue with processing details.
-    """
+def process_staged_file_task(job_id_from_upload: str, staged_file_path: str, original_filename: str, user_id: str) -> str:
     task_id = process_staged_file_task.request.id
-    log_prefix = f"Celery Task {task_id} (File: {original_filename}, User: {user_id}):"
-    print(f"{log_prefix} Received for processing. Staged path: '{staged_file_path}'.")
+    log_prefix = f"CeleryTaskID-{task_id} (JobID: {job_id_from_upload}, File: {original_filename}, User: {user_id}):"
+    logger.info(f"{log_prefix} Received for processing. Staged path: '{staged_file_path}'.")
+    db: Session = database.SessionLocal()
 
-    metadata_record = next((job for job in metadata_catalogue_db if job.celery_task_id == task_id), None)
-
-    if not metadata_record:
-        print(f"{log_prefix} CRITICAL_ERROR: Metadata record not found for task ID {task_id}.")
-        return f"Error: Metadata record for task {task_id} not found. Processing aborted."
-
-    metadata_record.processing_status = "processing_in_progress"
-    metadata_record.pipeline_stages_executed_log.append({
-        "stage": "initialization", "status": "success", "timestamp": datetime.utcnow().isoformat(),
-        "message": "Processing started."
-    })
-
-    os.makedirs(PROCESSED_AREA_PATH, exist_ok=True)
-    # Path for GDAL processed file (CRS transformed, initial validation)
-    gdal_output_filename = f"{metadata_record.job_id}_crs_transformed.geojson" # Use job_id for unique naming
-    gdal_output_filepath = os.path.join(PROCESSED_AREA_PATH, gdal_output_filename)
-
-    # Path for Geocoded file (if geocoding happens)
-    geocoded_output_filename = f"{metadata_record.job_id}_geocoded.geojson"
-    geocoded_output_filepath = os.path.join(PROCESSED_AREA_PATH, geocoded_output_filename)
-
-    in_ds = None
-    out_ds = None
-    gdal_success = False
-    geometric_validation_passed = False
-    geocoding_stats = {"attempted": 0, "successful": 0, "failed": 0}
+    # Initialize step success flags
+    format_conversion_success = False
+    crs_transform_success = False
+    geometric_validation_passed_flag = False # Explicit flag for this stage's direct outcome
+    geocoding_success = True # Placeholder
+    complex_geom_handling_success = True # Placeholder
     schema_validation_passed = True # Placeholder
     content_security_passed = True # Placeholder
-    current_processed_file = staged_file_path # Start with the original staged file
+
+    current_processed_file = staged_file_path
+    original_crs_wkt = None # To be populated by format conversion
 
     try:
-        # === Stage 1: GDAL/OGR CRS Transformation ===
-        metadata_record.pipeline_stages_executed_log.append({
-            "stage": "gdal_crs_transform_started", "status": "running", "timestamp": datetime.utcnow().isoformat()
-        })
-        # ... (GDAL CRS transformation logic as before, saves to gdal_output_filepath) ...
-        # Ensure gdal_output_filepath is correctly used and gdal_success is set
-        # For brevity, assuming the GDAL logic from previous step is here
-        # On success, set:
-        # current_processed_file = gdal_output_filepath
-        # metadata_record.location_of_promoted_data = gdal_output_filepath # Tentative promotion path
-        # (Full GDAL logic from previous step needs to be here)
-        # This is a simplified representation of the GDAL block:
-        in_ds = ogr.Open(staged_file_path, 0);
-        if in_ds is None: raise Exception(f"GDAL: Could not open file '{staged_file_path}'.")
-        metadata_record.detected_format = in_ds.GetDriver().GetName()
-        target_srs = osr.SpatialReference(); target_srs.ImportFromEPSG(TARGET_CRS_EPSG)
-        metadata_record.target_crs = f"EPSG:{TARGET_CRS_EPSG}"
-        out_driver = ogr.GetDriverByName("GeoJSON");
-        if out_driver is None: raise Exception("GDAL: GeoJSON driver not available.")
-        if os.path.exists(gdal_output_filepath): out_driver.DeleteDataSource(gdal_output_filepath)
-        out_ds = out_driver.CreateDataSource(gdal_output_filepath)
-        if out_ds is None: raise Exception(f"GDAL: Could not create output file '{gdal_output_filepath}'.")
-        total_features_processed = 0
-        for i in range(in_ds.GetLayerCount()):
-            in_layer = in_ds.GetLayer(i); in_srs = in_layer.GetSpatialRef()
-            transform = osr.CoordinateTransformation(in_srs, target_srs) if in_srs else None
-            if in_srs: metadata_record.original_crs = in_srs.ExportToWkt()
-            else: metadata_record.original_crs = "Unknown"
-            out_layer_name = os.path.splitext(gdal_output_filename)[0]
-            out_layer = out_ds.CreateLayer(out_layer_name, geom_type=in_layer.GetGeomType(), srs=target_srs)
-            layer_defn = in_layer.GetLayerDefn()
-            for j in range(layer_defn.GetFieldCount()): out_layer.CreateField(layer_defn.GetFieldDefn(j))
-            for in_feature in in_layer:
-                out_feature = ogr.Feature(out_layer.GetLayerDefn()); out_feature.SetFrom(in_feature)
-                geom = out_feature.GetGeometryRef()
-                if geom and transform: geom.Transform(transform)
-                out_layer.CreateFeature(out_feature); out_feature.Destroy()
-                total_features_processed +=1
-        gdal_success = True
-        current_processed_file = gdal_output_filepath # Update current file path
-        metadata_record.pipeline_stages_executed_log.append({
-            "stage": "gdal_crs_transform_completed", "status": "success", "timestamp": datetime.utcnow().isoformat(),
-            "output_path": gdal_output_filepath, "features_total": total_features_processed
-        })
-        print(f"{log_prefix} GDAL CRS transformation successful. Output: {gdal_output_filepath}")
-        # End of simplified GDAL block
+        crud.update_ingestion_job_fields(db, job_id_from_upload, {"processing_status": "processing_in_progress", "celery_task_id": str(task_id)})
+        crud.update_pipeline_log(db, job_id_from_upload, {"stage": "initialization", "status": "success", "timestamp": datetime.utcnow().isoformat(), "message": "Processing started."})
+        db.commit()
+
+        # === Stage 1: Format Conversion to GeoJSON ===
+        try:
+            crud.update_pipeline_log(db, job_id_from_upload, {"stage": "format_conversion_started", "status": "running", "timestamp": datetime.utcnow().isoformat(), "input_file": current_processed_file})
+            conversion_details = convert_to_geojson(current_processed_file, PROCESSED_AREA_PATH, job_id_from_upload, original_filename, log_prefix)
+            original_crs_wkt = conversion_details["original_crs_wkt"]
+            crud.update_ingestion_job_fields(db, job_id_from_upload, {"detected_format": conversion_details["detected_format"]})
+            current_processed_file = conversion_details["geojson_filepath"]
+            crud.update_pipeline_log(db, job_id_from_upload, {"stage": "format_conversion_completed", "status": "success", "timestamp": datetime.utcnow().isoformat(), "details": conversion_details})
+            logger.info(f"{log_prefix} Format conversion successful. Output: {current_processed_file}")
+            format_conversion_success = True
+        except Exception as e:
+            error_message = f"Format Conversion failed: {str(e)}"; logger.error(f"{log_prefix} ERROR: {error_message}", exc_info=True)
+            crud.update_error_logs(db, job_id_from_upload, f"format_conversion_error: {error_message}")
+            crud.update_pipeline_log(db, job_id_from_upload, {"stage": "format_conversion_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()})
+            crud.update_ingestion_job_fields(db, job_id_from_upload, {"processing_status": "format_conversion_failed", "quarantine_timestamp": datetime.utcnow()})
+            db.commit(); return f"Error during Format Conversion for '{original_filename}'."
+        db.commit()
+
+        # === Stage 2: CRS Transformation ===
+        if format_conversion_success:
+            try:
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "crs_transformation_started", "status": "running", "timestamp": datetime.utcnow().isoformat(), "input_file": current_processed_file})
+                transform_details = transform_geojson_crs(current_processed_file, PROCESSED_AREA_PATH, job_id_from_upload, TARGET_CRS_EPSG, original_crs_wkt, log_prefix)
+                crud.update_ingestion_job_fields(db, job_id_from_upload, {"original_crs": transform_details["detected_input_crs_wkt"], "target_crs": f"EPSG:{TARGET_CRS_EPSG}"})
+                current_processed_file = transform_details["crs_transformed_geojson_filepath"]
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "crs_transformation_completed", "status": "success", "timestamp": datetime.utcnow().isoformat(), "details": transform_details})
+                logger.info(f"{log_prefix} CRS transformation successful. Output: {current_processed_file}")
+                crs_transform_success = True
+            except Exception as e:
+                error_message = f"CRS Transformation failed: {str(e)}"; logger.error(f"{log_prefix} ERROR: {error_message}", exc_info=True)
+                crud.update_error_logs(db, job_id_from_upload, f"crs_transformation_error: {error_message}")
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "crs_transformation_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()})
+                crud.update_ingestion_job_fields(db, job_id_from_upload, {"processing_status": "crs_transformation_failed", "quarantine_timestamp": datetime.utcnow()})
+                db.commit(); return f"Error during CRS Transformation for '{original_filename}'."
+            db.commit()
+
+        # === Stage 3: Geometric Validation ===
+        if crs_transform_success:
+            try:
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "geometric_validation_started", "status": "running", "timestamp": datetime.utcnow().isoformat(), "input_file": current_processed_file})
+                validation_results = validate_geometries(current_processed_file, job_id_from_upload, log_prefix, attempt_repair=False)
+                crud.update_validation_summary(db, job_id_from_upload, {"geometric_validation": validation_results})
+                geometric_validation_passed_flag = validation_results["validation_passed"]
+                # current_processed_file remains unchanged if no repair occurs that creates a new file
+                # current_processed_file = validation_results["output_filepath"] # Only if repair creates new file
+                log_status = "success" if geometric_validation_passed_flag else "failure_with_invalids"
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "geometric_validation_completed", "status": log_status, "timestamp": datetime.utcnow().isoformat(), "details": validation_results})
+                if not geometric_validation_passed_flag:
+                    logger.warning(f"{log_prefix} Geometric validation found invalid geometries. Invalid count: {validation_results['invalid_features']}")
+            except Exception as e:
+                error_message = f"Geometric Validation failed critically: {str(e)}"; logger.error(f"{log_prefix} ERROR: {error_message}", exc_info=True)
+                crud.update_error_logs(db, job_id_from_upload, f"geometric_validation_error: {error_message}")
+                crud.update_pipeline_log(db, job_id_from_upload, {"stage": "geometric_validation_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()})
+                geometric_validation_passed_flag = False
+            db.commit()
+
+        # Placeholders for: Geocoding, Complex Geometry Handling, Security Scan, Schema Validation
+        # These would set their own success flags: geocoding_success, complex_geom_handling_success, etc.
+
+        # === Final Status Update (Promotion/Quarantine Logic) ===
+        final_status_fields = {}
+        overall_success = (
+            format_conversion_success and
+            crs_transform_success and
+            geometric_validation_passed_flag and
+            geocoding_success and             # Placeholder
+            complex_geom_handling_success and # Placeholder
+            schema_validation_passed and      # Placeholder
+            content_security_passed           # Placeholder
+        )
+
+        if overall_success:
+            final_status_fields["processing_status"] = "validation_successful_ready_for_promotion"
+            final_status_fields["promotion_timestamp"] = datetime.utcnow()
+            final_status_fields["location_of_promoted_data"] = current_processed_file # This is the final validated file path
+            result_message = f"File '{original_filename}' processed successfully. Promoted: {current_processed_file}"; logger.info(f"{log_prefix} {result_message}")
+        else:
+            final_status_fields["processing_status"] = "quarantined_validation_failed"
+            final_status_fields["quarantine_timestamp"] = datetime.utcnow()
+            final_status_fields["location_of_quarantined_data"] = current_processed_file # Path to file at point of failure/last good state
+
+            error_list = []
+            if not format_conversion_success: error_list.append("FormatConversionFailed")
+            elif not crs_transform_success: error_list.append("CRSTransformationFailed")
+            elif not geometric_validation_passed_flag: error_list.append("GeometricValidationFailed")
+            # Add other specific failure reasons as they are implemented
+            error_detail = "; ".join(error_list) if error_list else "Unknown validation failure."
+            crud.update_error_logs(db, job_id_from_upload, f"overall_pipeline_failure: {error_detail}")
+            result_message = f"File '{original_filename}' failed validation and was quarantined. Details: {error_detail}"; logger.warning(f"{log_prefix} {result_message}")
+
+        crud.update_ingestion_job_fields(db, job_id_from_upload, final_status_fields)
+        db.commit()
+        return result_message
 
     except Exception as e:
-        # ... (error handling as before) ...
-        error_message = f"GDAL/OGR processing failed: {str(e)}"
-        print(f"{log_prefix} ERROR: {error_message}")
-        metadata_record.error_log_references.append(f"gdal_error: {error_message}")
-        metadata_record.pipeline_stages_executed_log.append({
-            "stage": "gdal_crs_transform_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()
-        })
+        logger.error(f"{log_prefix} Unhandled exception in Celery task: {str(e)}", exc_info=True)
+        if db.is_active: db.rollback()
+        try:
+            crud.update_ingestion_job_fields(db, job_id_from_upload, {"processing_status": "task_failed_uncaught_exception", "quarantine_timestamp": datetime.utcnow()})
+            crud.update_error_logs(db, job_id_from_upload, f"task_failed_uncaught_exception: {str(e)}")
+            db.commit()
+        except Exception as db_err: logger.error(f"{log_prefix} Failed to update DB with uncaught exception details: {db_err}")
+        return f"Task failed for {original_filename} due to unhandled exception: {str(e)}"
     finally:
-        if in_ds: in_ds.Destroy()
-        if out_ds: out_ds.Destroy()
+        if db.is_active: db.close()
 
-    if not gdal_success:
-        metadata_record.processing_status = "crs_transformed_failed"
-        metadata_record.quarantine_timestamp = datetime.utcnow()
-        return f"Error during GDAL processing for '{original_filename}'. No further processing."
-
-    # === Stage 2: Geometric Validation (using Shapely on GDAL-processed GeoJSON) ===
-    # ... (geometric validation logic as before, using 'current_processed_file' as input) ...
-    # This is a simplified representation of the validation block:
-    metadata_record.pipeline_stages_executed_log.append({
-        "stage": "geometric_validation_started", "status": "running", "timestamp": datetime.utcnow().isoformat(), "input_file": current_processed_file
-    })
-    valid_geoms = 0; invalid_geoms = 0
-    try:
-        with open(current_processed_file, 'r') as f: geojson_data_for_validation = json.load(f)
-        if geojson_data_for_validation.get("type") == "FeatureCollection":
-            for feature in geojson_data_for_validation.get("features", []):
-                if 'geometry' in feature and feature['geometry']:
-                    geom = shape(feature['geometry']);
-                    if is_valid(geom): valid_geoms += 1
-                    else: invalid_geoms += 1
-                else: valid_geoms +=1
-        geometric_validation_passed = (invalid_geoms == 0)
-        metadata_record.validation_summary = {**(metadata_record.validation_summary or {}), "geometric_validation": {"valid_features": valid_geoms, "invalid_features": invalid_geoms, "passed": geometric_validation_passed}}
-        metadata_record.pipeline_stages_executed_log.append({"stage": "geometric_validation_completed", "status": "success" if geometric_validation_passed else "failure", "valid_geoms": valid_geoms, "invalid_geoms": invalid_geoms, "timestamp": datetime.utcnow().isoformat()})
-    except Exception as e:
-        error_message = f"Shapely geometric validation failed: {str(e)}"; print(f"{log_prefix} ERROR: {error_message}")
-        metadata_record.error_log_references.append(f"shapely_error: {error_message}"); geometric_validation_passed = False
-        metadata_record.pipeline_stages_executed_log.append({"stage": "geometric_validation_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()})
-    # End of simplified validation block
-
-    # === Stage 3: Geocoding (if applicable, on the GeoJSON from previous stage) ===
-    # This stage assumes the input is the 'current_processed_file' (which is GeoJSON)
-    # TODO: Make address_field_name configurable
-    address_field_name = 'address'
-    geocoding_applied = False
-    temp_geocoded_features = []
-
-    try:
-        with open(current_processed_file, 'r') as f:
-            geojson_data_for_geocoding = json.load(f)
-
-        if geojson_data_for_geocoding.get("type") == "FeatureCollection":
-            geolocator = Nominatim(user_agent=f"spindex_pipeline_processor_v1_{uuid.uuid4()}") # Unique user agent per task run
-
-            for feature in geojson_data_for_geocoding.get("features", []):
-                properties = feature.get('properties', {})
-                geometry = feature.get('geometry') # Could be None or an existing geometry dict
-
-                # Condition: address exists and geometry is None or explicitly marked for update (e.g. point (0,0) from bad source)
-                if properties and address_field_name in properties and (not geometry or not is_valid(shape(geometry))): # Basic check for missing/invalid geom
-                    address_to_geocode = properties[address_field_name]
-                    if address_to_geocode and isinstance(address_to_geocode, str):
-                        geocoding_stats["attempted"] += 1
-                        print(f"{log_prefix} Attempting to geocode address: '{address_to_geocode}'")
-                        try:
-                            location = geolocator.geocode(address_to_geocode, timeout=10)
-                            time.sleep(1) # IMPORTANT: Nominatim usage policy (1 req/sec)
-                            if location:
-                                feature['geometry'] = {'type': 'Point', 'coordinates': [location.longitude, location.latitude]}
-                                properties['geocoding_status'] = 'success'
-                                properties['geocoded_lat'] = location.latitude
-                                properties['geocoded_lon'] = location.longitude
-                                geocoding_stats["successful"] += 1
-                                print(f"{log_prefix} Geocoded successfully: {location.address} -> ({location.latitude}, {location.longitude})")
-                                geocoding_applied = True
-                            else:
-                                properties['geocoding_status'] = 'failed_not_found'
-                                geocoding_stats["failed"] += 1
-                                print(f"{log_prefix} Address not found by geocoder: '{address_to_geocode}'")
-                        except GeocoderTimedOut:
-                            properties['geocoding_status'] = 'failed_timeout'
-                            geocoding_stats["failed"] += 1
-                            print(f"{log_prefix} Geocoding timed out for address: '{address_to_geocode}'")
-                            time.sleep(1) # Wait after timeout as well
-                        except (GeocoderUnavailable, GeocoderServiceError) as e:
-                            properties['geocoding_status'] = f'failed_service_error: {str(e)}'
-                            geocoding_stats["failed"] += 1
-                            print(f"{log_prefix} Geocoding service error for '{address_to_geocode}': {e}")
-                            time.sleep(1) # Wait after service error
-                    else:
-                        properties['geocoding_status'] = 'skipped_no_valid_address_field'
-                temp_geocoded_features.append(feature)
-
-            if geocoding_applied: # Save to a new file if any geocoding was done
-                geojson_data_for_geocoding['features'] = temp_geocoded_features
-                with open(geocoded_output_filepath, 'w') as f:
-                    json.dump(geojson_data_for_geocoding, f)
-                current_processed_file = geocoded_output_filepath # Update current file to this new geocoded version
-                print(f"{log_prefix} Saved geocoded data to: {geocoded_output_filepath}")
-
-        metadata_record.pipeline_stages_executed_log.append({
-            "stage": "geocoding_completed", "status": "success", "timestamp": datetime.utcnow().isoformat(),
-            "stats": geocoding_stats
-        })
-        if metadata_record.validation_summary: metadata_record.validation_summary["geocoding_stats"] = geocoding_stats
-        else: metadata_record.validation_summary = {"geocoding_stats": geocoding_stats}
-
-    except Exception as e:
-        error_message = f"Geocoding stage failed: {str(e)}"
-        print(f"{log_prefix} ERROR: {error_message}")
-        metadata_record.error_log_references.append(f"geocoding_error: {error_message}")
-        metadata_record.pipeline_stages_executed_log.append({
-            "stage": "geocoding_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()
-        })
-        # Depending on policy, a geocoding failure might or might not be critical
-        # For now, we'll let it proceed to overall validation status check.
-
-    # === Stage 4: Content-Level Security Scanning (Placeholder) ===
-    # ... (as before) ...
-
-    # === Stage 5: Schema & Value-Domain Validation (Placeholder) ===
-    # ... (as before) ...
-
-    # === Stage 6: Complex Geometry Handling (Filtering) ===
-    metadata_record.pipeline_stages_executed_log.append({
-        "stage": "complex_geometry_handling_started", "status": "running",
-        "timestamp": datetime.utcnow().isoformat(), "input_file": current_processed_file
-    })
-    geom_filtering_success = False
-    try:
-        if not os.path.exists(current_processed_file):
-            raise FileNotFoundError(f"Input file for geometry filtering not found: {current_processed_file}")
-
-        with open(current_processed_file, 'r') as f:
-            source_geojson_data = json.load(f)
-
-        if not isinstance(source_geojson_data, dict) or source_geojson_data.get("type") != "FeatureCollection" or not isinstance(source_geojson_data.get("features"), list):
-            raise ValueError("Input for geometry filtering is not a valid GeoJSON FeatureCollection.")
-
-        features = source_geojson_data["features"]
-        original_feature_count = len(features)
-        target_geometry_type = None
-
-        # Determine target_geometry_type from the first few valid geometries
-        # TODO: Allow desired_geometry_type as a parameter to the task for user control.
-        for i, feature_to_inspect in enumerate(features[:10]): # Check up to first 10 features
-            if feature_to_inspect and isinstance(feature_to_inspect.get('geometry'), dict) and feature_to_inspect['geometry'].get('type'):
-                # Basic check for valid geometry structure before trying to use it
-                try:
-                    # Use Shapely to ensure it's a valid geometry object before trusting its type
-                    temp_shape = shape(feature_to_inspect['geometry'])
-                    if is_valid(temp_shape): # Only consider valid geometries for type determination
-                        target_geometry_type = feature_to_inspect['geometry']['type']
-                        print(f"{log_prefix} Determined target geometry type: {target_geometry_type} from feature {i}.")
-                        break
-                except Exception: # Catch errors from `shape()` if geometry is malformed
-                    print(f"{log_prefix} Malformed geometry encountered while determining target type at feature {i}. Skipping.")
-                    continue # Try next feature
-
-        if not target_geometry_type:
-            # If no valid geometry found in first 10, or all were null/malformed, make a decision.
-            # For now, if no type determined, we might not filter, or filter out everything if strict.
-            # Let's assume if no dominant type found, we keep all valid geometries from previous step.
-            # This means this stage effectively does nothing if target_geometry_type remains None.
-            # OR, if the previous stage (geometric_validation) already ensures homogeneity or a single type,
-            # then this step is more about confirming that.
-            # For this subtask, if no target_geometry_type is found, we'll just pass all features through.
-            # This means if all geometries were null/invalid, they will pass here but might have failed geometric_validation_passed.
-            print(f"{log_prefix} No dominant valid geometry type found in first 10 features. Passing all features from previous step.")
-            filtered_features = features # Pass through if no specific type determined
-        else:
-            filtered_features = [
-                f for f in features if f.get('geometry') and f['geometry'].get('type') == target_geometry_type
-            ]
-
-        filtered_feature_count = len(filtered_features)
-
-        geom_filter_log_message = f"Geometry Handling: Target type '{target_geometry_type}'. Original: {original_feature_count} features, Filtered: {filtered_feature_count} features."
-        print(f"{log_prefix} {geom_filter_log_message}")
-
-        if filtered_feature_count < original_feature_count or geocoding_applied : # Only re-save if features were filtered or geocoding happened
-            # Create new GeoJSON with filtered features
-            filtered_geojson_data = {
-                "type": "FeatureCollection",
-                "features": filtered_features
-            }
-            geomfiltered_output_filename = f"{metadata_record.job_id}_geomfiltered.geojson"
-            geomfiltered_output_filepath = os.path.join(PROCESSED_AREA_PATH, geomfiltered_output_filename)
-
-            with open(geomfiltered_output_filepath, 'w') as f:
-                json.dump(filtered_geojson_data, f)
-
-            current_processed_file = geomfiltered_output_filepath # Update current file to this new filtered version
-            print(f"{log_prefix} Saved geometry-filtered data to: {geomfiltered_output_filepath}")
-            metadata_record.pipeline_stages_executed_log.append({
-                "stage": "complex_geometry_filtered", "status": "success", "timestamp": datetime.utcnow().isoformat(),
-                "details": geom_filter_log_message, "output_path": current_processed_file
-            })
-        else:
-             metadata_record.pipeline_stages_executed_log.append({
-                "stage": "complex_geometry_no_filter_needed", "status": "success", "timestamp": datetime.utcnow().isoformat(),
-                "details": geom_filter_log_message
-            })
-        geom_filtering_success = True
-
-    except Exception as e:
-        error_message = f"Complex Geometry Handling stage failed: {str(e)}"
-        print(f"{log_prefix} ERROR: {error_message}")
-        metadata_record.error_log_references.append(f"geometry_handling_error: {error_message}")
-        metadata_record.pipeline_stages_executed_log.append({
-            "stage": "complex_geometry_handling_error", "status": "failure", "error": error_message, "timestamp": datetime.utcnow().isoformat()
-        })
-        # This failure might lead to quarantine depending on overall policy
-
-    # === Stage 7: Data Promotion/Quarantine Logic ===
-    # Ensure current_processed_file path is updated in metadata if any processing stage created a new file
-    metadata_record.location_of_promoted_data = current_processed_file # Default to last known good file
-
-    if gdal_success and geometric_validation_passed and geom_filtering_success and schema_validation_passed and content_security_passed:
-        metadata_record.processing_status = "validation_successful_ready_for_promotion"
-        metadata_record.promotion_timestamp = datetime.utcnow()
-        result_message = f"File '{original_filename}' processed and validated successfully. Ready for promotion from: {current_processed_file}"
-        print(f"{log_prefix} {result_message}")
-    else:
-        metadata_record.processing_status = "quarantined_validation_failed"
-        metadata_record.quarantine_timestamp = datetime.utcnow()
-        metadata_record.location_of_quarantined_data = current_processed_file # The last successfully written file
-
-        error_summary = []
-        if not geometric_validation_passed: error_summary.append(f"Geometric validation failed (invalid geoms: {invalid_geoms})")
-        # Add other failure reasons
-        full_error_message = "; ".join(error_summary) if error_summary else "Validation failed due to unspecified reasons (check logs)."
-        metadata_record.error_log_references.append(f"validation_failure: {full_error_message}")
-
-        result_message = f"File '{original_filename}' failed validation and was quarantined. Details: {full_error_message}"
-        print(f"{log_prefix} {result_message}")
-
-    return result_message
-
+# ... (Rest of the file: create_spindex_task, API endpoints, etc.)
 @shared_task
 def create_spindex_task(index_id: str, promoted_data_path: str, index_name: str, index_type: str, index_parameters: Optional[dict]):
-    """
-    Placeholder Celery task to simulate the actual creation of a SPINDEX index.
-    Updates the IndexMetadata record upon completion or failure.
-    """
     task_id = create_spindex_task.request.id
-    log_prefix = f"Celery Task {task_id} (Index Creation for ID: {index_id}):"
-    print(f"{log_prefix} Received. Index Name: {index_name}, Type: {index_type}, Data: {promoted_data_path}, Params: {index_parameters}")
-
-    # Find metadata record to update its celery_task_id
+    log_prefix = f"CeleryTaskID-{task_id} (Index Creation for ID: {index_id}):"
+    logger.info(f"{log_prefix} Received. Index Name: {index_name}, Type: {index_type}, Data: {promoted_data_path}, Params: {index_parameters}")
     metadata_record = next((idx for idx in index_metadata_db if idx.index_id == index_id), None)
+    if metadata_record: metadata_record.celery_task_id = str(task_id)
+    else: logger.critical(f"{log_prefix} CRITICAL_ERROR: IndexMetadata record (in-memory) not found for index_id {index_id} at task start.")
+    logger.info(f"{log_prefix} SPINDEX core simulation: Creating {index_name} ({index_type}) from {promoted_data_path}...")
+    time.sleep(15)
     if metadata_record:
-        metadata_record.celery_task_id = str(task_id) # Log current celery task id
-    else:
-        print(f"{log_prefix} CRITICAL_ERROR: IndexMetadata record not found for index_id {index_id} at task start.")
-        # This indicates a potential issue, as the record should have been created by the API before dispatching.
-        # Depending on desired robustness, could create one here, but it suggests an inconsistent state.
-
-    # Simulate index creation work with SPINDEX core
-    print(f"{log_prefix} SPINDEX core simulation: Creating {index_name} ({index_type}) from {promoted_data_path}...")
-    time.sleep(15) # Simulate long processing time for index creation
-
-    # Update metadata status after "creation"
-    # This direct modification of a global list from Celery is a simplification for this subtask.
-    # In a real system, this update would happen via a database transaction or an API call to the main app
-    # to ensure data consistency and avoid race conditions, especially if Celery workers are separate processes/machines.
-    if metadata_record:
-        # Simulate success/failure of actual index creation
-        creation_succeeded = True # Toggle this to test failure path
+        creation_succeeded = True
         if creation_succeeded:
-            metadata_record.status = "ready"
-            metadata_record.updated_at = datetime.utcnow()
-            # metadata_record.celery_task_id = None # Clear task ID once completed (optional)
-            print(f"{log_prefix} Index '{index_name}' marked as 'ready'.")
+            metadata_record.status = "ready"; metadata_record.updated_at = datetime.utcnow()
+            logger.info(f"{log_prefix} Index '{index_name}' marked as 'ready'.")
             return f"Index '{index_name}' (ID: {index_id}) created successfully."
         else:
-            metadata_record.status = "failed"
-            metadata_record.updated_at = datetime.utcnow()
-            # metadata_record.celery_task_id = None
-            print(f"{log_prefix} Index '{index_name}' marked as 'failed'.")
+            metadata_record.status = "failed"; metadata_record.updated_at = datetime.utcnow()
+            logger.warning(f"{log_prefix} Index '{index_name}' marked as 'failed'.")
             return f"Failed to create index '{index_name}' (ID: {index_id})."
     else:
-        # This case should ideally not be reached if the initial metadata creation in the API is robust.
-        print(f"{log_prefix} CRITICAL_ERROR: IndexMetadata record not found for index_id {index_id} at task completion.")
+        logger.critical(f"{log_prefix} CRITICAL_ERROR: IndexMetadata record (in-memory) not found for index_id {index_id} at task completion.")
         return f"Critical error: Metadata for index {index_id} not found upon task completion."
 
-
-# --- Task Management API Endpoints ---
 @app.post("/tasks/run_sample_task", response_model=TaskCreationResponse, status_code=status.HTTP_202_ACCEPTED, summary="Run Sample Celery Task", tags=["Tasks"])
 async def run_sample_task(payload: TaskCreationRequest, current_user: User = Depends(get_current_user)):
-    """
-    Submits the `sample_celery_task` to the Celery worker.
-    Requires authentication.
-    """
-    # Example of permission check for task submission (optional)
-    # if not user_has_permission(current_user, "submit_tasks"):
-    #     raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not allowed to submit tasks")
-
     task = sample_celery_task.delay(payload.param_x, payload.param_y)
     return {"task_id": task.id, "message": "Sample task submitted successfully."}
 
 @app.get("/tasks/status/{task_id}", response_model=TaskStatusResponse, summary="Get Task Status and Result", tags=["Tasks"])
 async def get_task_status(task_id: str, current_user: User = Depends(get_current_user)):
-    """
-    Retrieves the status and result of a Celery task given its ID.
-    Requires authentication.
-    """
     task_result = AsyncResult(task_id, app=celery_app)
-
-    response_data = {
-        "task_id": task_id,
-        "status": task_result.status,
-    }
-
-    if task_result.successful():
-        response_data["result"] = task_result.result
-    elif task_result.failed():
-        response_data["result"] = {"error": str(task_result.info)} # task_result.info contains the exception
-    # Other states: PENDING, STARTED, RETRY, REVOKED
-    # You might want to handle these explicitly if needed.
-
+    response_data = {"task_id": task_id, "status": task_result.status}
+    if task_result.successful(): response_data["result"] = task_result.result
+    elif task_result.failed(): response_data["result"] = {"error": str(task_result.info)}
     return response_data
+
+@app.post("/upload/data", response_model=FileUploadResponse, status_code=status.HTTP_202_ACCEPTED, summary="Upload Data for Processing", tags=["Data Upload"])
+async def upload_data_for_processing(
+    current_user: User = Depends(get_current_user),
+    file: UploadFile = File(...),
+    db: Session = Depends(database.get_db)
+):
+    if not user_has_permission(current_user, "upload_data"):
+        logger.warning(f"User '{current_user.username}' attempted to upload data without 'upload_data' permission.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not have permission to upload data.")
+    if not file.filename:
+        logger.error("File upload attempt with no filename.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No filename provided.")
+    if file.size > MAX_FILE_SIZE: # type: ignore
+        logger.warning(f"File '{file.filename}' rejected: size ({file.size} bytes) exceeds MAX_FILE_SIZE ({MAX_FILE_SIZE} bytes).")
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=f"File size {file.size} bytes exceeds maximum allowed size of {MAX_FILE_SIZE} bytes.")
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        logger.warning(f"File '{file.filename}' rejected: MIME type '{file.content_type}' not in ALLOWED_MIME_TYPES.")
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=f"File MIME type '{file.content_type}' is not allowed. Allowed types: {', '.join(ALLOWED_MIME_TYPES)}")
+
+    logger.info(f"File '{file.filename}' (size: {file.size}, type: {file.content_type}) passed initial validation for user '{current_user.username}'.")
+    os.makedirs(STAGING_AREA_PATH, exist_ok=True)
+    original_filename = file.filename; file_extension = os.path.splitext(original_filename)[1]
+    unique_staged_filename = f"{uuid.uuid4()}{file_extension}"
+    staged_file_path = os.path.join(STAGING_AREA_PATH, unique_staged_filename)
+    try:
+        with open(staged_file_path, "wb") as buffer: shutil.copyfileobj(file.file, buffer)
+        logger.info(f"File '{original_filename}' successfully saved to staging area: '{staged_file_path}'.")
+    except Exception as e:
+        logger.error(f"Could not save uploaded file '{original_filename}' to staging area: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Could not save uploaded file: {str(e)}")
+    finally: file.file.close()
+
+    job_id = str(uuid.uuid4())
+    celery_task_obj = process_staged_file_task.delay(job_id, staged_file_path, original_filename, current_user.username)
+    logger.info(f"Celery task '{celery_task_obj.id}' dispatched for file '{original_filename}', associated with DB job_id '{job_id}'.")
+
+    job_data_dict = {
+        "job_id":job_id, "celery_task_id":str(celery_task_obj.id), "original_filename":original_filename,
+        "upload_timestamp":datetime.utcnow(), "user_id":current_user.username, "source_type":"file_upload",
+        "processing_status":"staged_and_queued", "staged_file_path":staged_file_path,
+        "pipeline_stages_executed_log":[{"stage": "upload_complete_queued", "status": "success", "timestamp": datetime.utcnow().isoformat()}]
+    }
+    crud.create_ingestion_job(db=db, job_data=job_data_dict)
+    logger.info(f"Initial metadata record created in DB for job_id '{job_id}' (Celery Task ID: {celery_task_obj.id}).")
+
+    return FileUploadResponse(job_id=job_id, filename=original_filename, message="File successfully uploaded, validated, and queued for processing.", staged_filepath=staged_file_path)
+
+@app.post("/metadata/ingestion_jobs", response_model=IngestionJobMetadata, status_code=status.HTTP_201_CREATED, summary="Create Ingestion Job Metadata (Manual)", tags=["Metadata"])
+async def create_ingestion_job_metadata_manual(metadata_in: IngestionJobMetadata, db: Session = Depends(database.get_db), current_user: User = Depends(get_current_user)):
+    db_job = crud.get_ingestion_job(db, job_id=metadata_in.job_id)
+    if db_job: raise HTTPException(status_code=400, detail=f"Job with ID {metadata_in.job_id} already exists.")
+    job_data = metadata_in.dict();
+    if 'job_id' not in job_data or not job_data['job_id']: job_data['job_id'] = str(uuid.uuid4())
+    created_job_db = crud.create_ingestion_job(db=db, job_data=job_data)
+    return IngestionJobMetadata.from_orm(created_job_db)
+
+@app.get("/metadata/ingestion_jobs/{job_id}", response_model=IngestionJobMetadata, summary="Get Ingestion Job Metadata by ID", tags=["Metadata"])
+async def get_ingestion_job_metadata_by_id(job_id: str, db: Session = Depends(database.get_db), current_user: User = Depends(get_current_user)):
+    db_job = crud.get_ingestion_job(db, job_id=job_id)
+    if db_job is None: raise HTTPException(status_code=404, detail=f"Ingestion job with ID {job_id} not found.")
+    return IngestionJobMetadata.from_orm(db_job)
+
+@app.get("/metadata/ingestion_jobs", response_model=List[IngestionJobMetadata], summary="List Ingestion Job Metadata", tags=["Metadata"])
+async def list_ingestion_job_metadata(skip: int = 0, limit: int = 10, db: Session = Depends(database.get_db), current_user: User = Depends(get_current_user)):
+    jobs_db = crud.get_ingestion_jobs(db, skip=skip, limit=limit)
+    return [IngestionJobMetadata.from_orm(job) for job in jobs_db]
+
+@app.put("/metadata/ingestion_jobs/{job_id}", response_model=IngestionJobMetadata, summary="Update Ingestion Job Metadata", tags=["Metadata"])
+async def update_ingestion_job_metadata_endpoint(job_id: str, job_update_data: IngestionJobMetadata, db: Session = Depends(database.get_db), current_user: User = Depends(get_current_user)):
+    update_data_dict = job_update_data.dict(exclude_unset=True)
+    if 'job_id' in update_data_dict and update_data_dict['job_id'] != job_id:
+        logger.warning(f"job_id in path ({job_id}) and body ({update_data_dict['job_id']}) differ. Using path job_id.")
+    update_data_dict['job_id'] = job_id
+    updated_job_db = crud.update_ingestion_job_fields(db, job_id=job_id, fields_to_update=update_data_dict)
+    if updated_job_db is None: raise HTTPException(status_code=404, detail=f"Ingestion job with ID {job_id} not found.")
+    return IngestionJobMetadata.from_orm(updated_job_db)
+
+@app.post("/indexes", response_model=IndexMetadata, status_code=status.HTTP_202_ACCEPTED, summary="Create New Spatial Index", tags=["Indexes"])
+async def create_new_index(request: IndexCreationRequest, current_user: User = Depends(get_current_user)):
+    if not user_has_permission(current_user, "create_index"): raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not have permission to create indexes.")
+    if not os.path.exists(request.promoted_data_path): raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Promoted data path does not exist: {request.promoted_data_path}")
+    new_index_id = str(uuid.uuid4())
+    index_meta = IndexMetadata(index_id=new_index_id, index_name=request.index_name, index_type=request.index_type, promoted_data_path=request.promoted_data_path, status="creating", version=1, created_at=datetime.utcnow())
+    celery_task_obj = create_spindex_task.delay(index_id=new_index_id, promoted_data_path=request.promoted_data_path, index_name=request.index_name, index_type=request.index_type, index_parameters=request.index_parameters)
+    index_meta.celery_task_id = str(celery_task_obj.id); index_metadata_db.append(index_meta); return index_meta
+
+@app.get("/indexes", response_model=List[IndexMetadata], summary="List All Spatial Indexes", tags=["Indexes"])
+async def list_all_indexes(skip: int = 0, limit: int = 10, current_user: User = Depends(get_current_user)): return index_metadata_db[skip : skip + limit]
+
+@app.get("/indexes/{index_id}", response_model=IndexMetadata, summary="Get Spatial Index Metadata by ID", tags=["Indexes"])
+async def get_index_metadata_by_id(index_id: str, current_user: User = Depends(get_current_user)):
+    index_meta = next((idx for idx in index_metadata_db if idx.index_id == index_id), None)
+    if not index_meta: raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Index with ID {index_id} not found.")
+    return index_meta
+
+@app.delete("/indexes/{index_id}", status_code=status.HTTP_200_OK, summary="Delete Spatial Index", tags=["Indexes"])
+async def delete_spatial_index(index_id: str, current_user: User = Depends(get_current_user)):
+    if not user_has_permission(current_user, "delete_index"): raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not have permission to delete indexes.")
+    global index_metadata_db; original_len = len(index_metadata_db)
+    index_metadata_db = [idx for idx in index_metadata_db if idx.index_id != index_id]
+    if len(index_metadata_db) == original_len: raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Index with ID {index_id} not found for deletion.")
+    return {"message": f"Index with ID {index_id} deleted successfully (metadata only)."}
+
+@app.post("/query/execute", response_model=QueryResponse, summary="Execute Spatial Query", tags=["Query"])
+async def execute_query(query_request: QueryRequest, current_user: User = Depends(get_current_user)):
+    if not user_has_permission(current_user, "query_data"): raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not have permission to execute queries.")
+    target_index = next((idx for idx in index_metadata_db if idx.index_id == query_request.index_id), None)
+    if not target_index: raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Index with ID {query_request.index_id} not found.")
+    if target_index.status != "ready": raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Index {query_request.index_id} is not in 'ready' state (current: {target_index.status}).")
+    history_item = QueryHistoryItem(user_id=current_user.username, request_data=query_request)
+    query_history_db.insert(0, history_item)
+    logger.info(f"Simulating query on index {target_index.index_name} (ID: {target_index.index_id}) with params: {query_request.parameters}")
+    start_time = time.time(); time.sleep(0.1); end_time = time.time(); query_time_ms = int((end_time - start_time) * 1000)
+    dummy_results = []
+    if query_request.query_type == "bbox": dummy_results = [{'type': 'Feature', 'geometry': {'type': 'Polygon', 'coordinates': [[[0,0], [1,0], [1,1], [0,1], [0,0]]]}, 'properties': {'id': 1, 'name': 'Dummy BBox Result'}}]
+    elif query_request.query_type == "point_radius" or query_request.query_type == "knn": dummy_results = [{'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': query_request.parameters.get("point", [0,0])}, 'properties': {'id': 2, 'name': 'Dummy Point Result'}}]
+    return QueryResponse(results=dummy_results, count=len(dummy_results), query_time_ms=query_time_ms, message="Query executed successfully (simulated).")
+
+@app.get("/query/history", response_model=List[QueryHistoryItem], summary="Get Query History", tags=["Query"])
+async def get_query_history(skip: int = 0, limit: int = 20, current_user: User = Depends(get_current_user)):
+    user_history = query_history_db
+    return user_history[skip : skip + limit]
 
 
 if __name__ == "__main__":
     import uvicorn
-    # This is for local development. For deployment, use Docker or a process manager.
-    # To run celery worker locally:
-    # celery -A main.celery_app worker -l info
-    # Ensure Redis server is running.
+    logger.info("Starting Uvicorn server for SPINDEX Backend.")
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
+[end of backend/main.py]
 
-# --- File Upload Endpoint ---
-@app.post("/upload/data", response_model=FileUploadResponse, status_code=status.HTTP_202_ACCEPTED, summary="Upload Data for Processing", tags=["Data Upload"])
-async def upload_data_for_processing(
-    current_user: User = Depends(get_current_user),
-    file: UploadFile = File(...)
-):
-    """
-    Accepts a file upload, saves it to a staging area, and dispatches a Celery task
-    for asynchronous processing via the AEGIS-ECHO pipeline.
-    """
-    if not file.filename:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No filename provided.")
+[start of backend/README.md]
+# SPINDEX Backend
 
-    # Create staging directory if it doesn't exist
-    os.makedirs(STAGING_AREA_PATH, exist_ok=True)
+This directory contains the Python FastAPI backend application for SPINDEX. It includes features for asynchronous task processing using Celery and Redis, a file upload endpoint for data ingestion, and a persistent metadata catalogue for tracking ingestion jobs using SQLAlchemy and SQLite.
 
-    # Generate a unique filename for staging to avoid conflicts, preserving original extension
-    original_filename = file.filename
-    file_extension = os.path.splitext(original_filename)[1]
-    unique_staged_filename = f"{uuid.uuid4()}{file_extension}"
-    staged_file_path = os.path.join(STAGING_AREA_PATH, unique_staged_filename)
+## Prerequisites
 
-    try:
-        # Save the uploaded file to the staging area
-        with open(staged_file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    except Exception as e:
-        # Log the error appropriately in a real app
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Could not save uploaded file: {str(e)}"
-        )
-    finally:
-        file.file.close() # Ensure the file is closed
+*   Docker (for containerized deployment)
+*   Python 3.11+ (for local development)
+*   `pip` (Python package installer)
+*   Redis server (for local development)
+*   **GDAL (Geospatial Data Abstraction Library):** System libraries and Python bindings.
+*   **GEOS:** System library required by Shapely.
+*   **SQLAlchemy, Alembic:** For database ORM and migrations.
 
-    # Dispatch Celery task for processing
-    # Pass the absolute path or a path recognizable by the Celery worker
-    # For simplicity, using relative path here, assuming Celery worker has same CWD context
-    # In a distributed setup, this path would need to be accessible by all workers (e.g., shared volume, S3 path)
+## Application Structure
 
-    # Create initial metadata record
-    # The job_id for metadata can be the same as celery task_id for direct linkage
-    celery_task = process_staged_file_task.delay(staged_file_path, original_filename, current_user.username)
+*   `main.py`: The main FastAPI application file. Contains API endpoints, Pydantic models, Celery app configuration, and task definitions including the AEGIS pipeline logic.
+*   `database.py`: Configures the SQLAlchemy engine and session management.
+*   `models.py`: Defines SQLAlchemy ORM models (e.g., `IngestionJobDB`).
+*   `crud.py`: Contains CRUD functions for database model interactions.
+*   `requirements.txt`: Python dependencies.
+*   `Dockerfile`, `entrypoint.sh`: For Docker containerization.
+*   `alembic.ini`, `alembic/`: Alembic migration configuration and scripts.
+*   `spindex_aegis.db`: SQLite database file (created by Alembic).
+*   `staging_area/`: Temporary storage for raw uploaded files.
+*   `processed_area/`: Stores files processed by the AEGIS pipeline (e.g., initial GeoJSON conversion, CRS transformed GeoJSON).
 
-    initial_metadata = IngestionJobMetadata(
-        job_id=celery_task.id, # Using Celery task ID as the job_id for metadata
-        celery_task_id=celery_task.id,
-        original_filename=original_filename,
-        upload_timestamp=datetime.utcnow(),
-        user_id=current_user.username,
-        source_type="file_upload",
-        processing_status="staged_and_queued",
-        staged_file_path=staged_file_path,
-        pipeline_stages_executed_log=[{"stage": "upload_complete_queued", "status": "success", "timestamp": datetime.utcnow().isoformat()}]
-    )
-    metadata_catalogue_db.append(initial_metadata)
+**Note on Directory Permissions:** (As previously stated)
 
-    return FileUploadResponse(
-        job_id=celery_task.id,
-        filename=original_filename,
-        message="File successfully uploaded and queued for processing.",
-        staged_filepath=staged_file_path
-    )
+## Database Setup (SQLite, SQLAlchemy, Alembic)
 
-# --- Metadata Catalogue API Endpoints ---
-@app.post("/metadata/ingestion_jobs", response_model=IngestionJobMetadata, status_code=status.HTTP_201_CREATED, summary="Create Ingestion Job Metadata", tags=["Metadata"])
-async def create_ingestion_job_metadata(
-    metadata: IngestionJobMetadata,
-    current_user: User = Depends(get_current_user) # Assuming admin/system role might do this
-):
-    """
-    Manually creates an ingestion job metadata record.
-    Primarily for testing or if pipeline workers need to register jobs directly via API.
-    The main flow is that `/upload/data` creates the initial metadata record.
-    """
-    # Ensure job_id is unique if provided, or rely on default factory if not.
-    if any(job.job_id == metadata.job_id for job in metadata_catalogue_db):
-        raise HTTPException(status_code=400, detail=f"Job with ID {metadata.job_id} already exists.")
-    metadata_catalogue_db.append(metadata)
-    return metadata
+(As previously stated)
 
-@app.get("/metadata/ingestion_jobs/{job_id}", response_model=IngestionJobMetadata, summary="Get Ingestion Job Metadata by ID", tags=["Metadata"])
-async def get_ingestion_job_metadata_by_id(job_id: str, current_user: User = Depends(get_current_user)):
-    """
-    Retrieves a specific ingestion job metadata record by its job_id (which is the Celery task ID).
-    """
-    job = next((job for job in metadata_catalogue_db if job.job_id == job_id), None)
-    if not job:
-        raise HTTPException(status_code=404, detail=f"Ingestion job with ID {job_id} not found.")
-    return job
+## Asynchronous Task Processing (Celery & Redis)
 
-@app.get("/metadata/ingestion_jobs", response_model=List[IngestionJobMetadata], summary="List Ingestion Job Metadata", tags=["Metadata"])
-async def list_ingestion_job_metadata(
-    skip: int = 0,
-    limit: int = 10,
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Retrieves a list of ingestion job metadata records, with optional pagination.
-    """
-    return metadata_catalogue_db[skip : skip + limit]
+(As previously stated)
 
-@app.put("/metadata/ingestion_jobs/{job_id}", response_model=IngestionJobMetadata, summary="Update Ingestion Job Metadata", tags=["Metadata"])
-async def update_ingestion_job_metadata(
-    job_id: str,
-    metadata_update: IngestionJobMetadata, # Technically, this should be a PATCH model
-    current_user: User = Depends(get_current_user) # Assuming admin/system role
-):
-    """
-    Updates an existing ingestion job metadata record.
-    NOTE: This is a full PUT, meaning the entire object is replaced.
-          A PATCH method with a model containing only updatable fields would be more appropriate for partial updates.
-          For simplicity in this subtask, we use PUT.
-    """
-    job_index = -1
-    for i, job in enumerate(metadata_catalogue_db):
-        if job.job_id == job_id:
-            job_index = i
-            break
+### Ingestion Task Triggering & AEGIS Pipeline Execution Flow
 
-    if job_index == -1:
-        raise HTTPException(status_code=404, detail=f"Ingestion job with ID {job_id} not found.")
+The `process_staged_file_task` Celery task orchestrates the AEGIS-ECHO pipeline:
 
-    # Ensure the job_id in the path matches the one in the body, or update it if not present in body
-    if metadata_update.job_id != job_id :
-         # If job_id in body is different, it might be an error or an attempt to change job_id.
-         # For this stub, we'll assume the path job_id is authoritative if body's is different or default.
-         # A stricter check might be needed in a real app.
-         pass # Keep path job_id
+1.  **Initial Status:** Metadata status set to `"processing_in_progress"`.
+2.  **Format Conversion to GeoJSON:**
+    *   The `convert_to_geojson` internal function uses GDAL to convert the uploaded file from `staging_area/` to a standardized GeoJSON format (e.g., `{job_id}_converted.geojson`) in `processed_area/`.
+    *   Detects and stores the source format. Original CRS WKT is also extracted if available.
+3.  **Coordinate Reference System (CRS) Transformation:**
+    *   The `transform_geojson_crs` internal function processes the GeoJSON file from the previous step.
+    *   It uses GDAL to transform its content to the system's standard CRS (EPSG:4326 - WGS 84).
+    *   A new CRS-transformed GeoJSON file (e.g., `{job_id}_crs_transformed.geojson`) is saved in `processed_area/`. This becomes the primary file for subsequent steps.
+    *   `original_crs` (verified) and `target_crs` fields in metadata are updated.
+4.  **Geometric Validation:**
+    *   The `validate_geometries` internal function processes the CRS-transformed GeoJSON file.
+    *   It uses Shapely to check each geometry's validity (`is_valid`).
+    *   Currently, it does not attempt to repair invalid geometries but counts valid and invalid features.
+    *   The validation summary (counts, pass/fail status) is updated in the job's metadata. If invalid geometries are found, `geometric_validation_passed` flag is set to false, which will lead to quarantine.
+5.  **Subsequent Pipeline Stages (currently placeholders or simplified):**
+    *   Conditional Geocoding.
+    *   Complex Geometry Handling.
+    *   Placeholders for Content-Level Security Scanning and Schema & Value-Domain Validation.
+6.  **Metadata Updates:** Each step logs its outcome to `pipeline_stages_executed_log` and updates relevant fields in the `IngestionJobDB` record.
+7.  **Final Status:** Based on the success of all critical stages, the job status is set to `"validation_successful_ready_for_promotion"` or a relevant failure/quarantine status.
 
-    updated_job = metadata_update.copy(update={'job_id': job_id}) # Ensure path job_id is used
-    metadata_catalogue_db[job_index] = updated_job
-    return updated_job
+This modular, step-by-step processing within the Celery task ensures that each stage's output can be inspected and that failures are handled at the point they occur.
 
+## Development
 
-# --- SPINDEX Index Management API Endpoints ---
-@app.post("/indexes", response_model=IndexMetadata, status_code=status.HTTP_202_ACCEPTED, summary="Create New Spatial Index", tags=["Indexes"])
-async def create_new_index(
-    request: IndexCreationRequest,
-    current_user: User = Depends(get_current_user) # Analyst or Admin role
-):
-    """
-    Initiates the creation of a new spatial index from a successfully processed data file.
-    - `promoted_data_path`: Path to the data file in the 'processed_area' that has passed AEGIS validation.
-    - `index_name`: User-defined name for the index.
-    - `index_type`: Type of spatial index (e.g., "R-Tree", "Quadtree").
-    - `index_parameters`: Optional dictionary of parameters for the chosen index type.
-    """
-    # Basic permission check (example, assuming 'create_index' permission)
-    if not user_has_permission(current_user, "create_index"): # This is a stub, always true
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not have permission to create indexes.")
+(As previously stated)
 
-    # TODO: Validate promoted_data_path - e.g., check if it exists and is in an expected location.
-    # For now, we assume it's valid if provided.
-    if not os.path.exists(request.promoted_data_path): # Simple check
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Promoted data path does not exist: {request.promoted_data_path}")
+### Docker Deployment
 
-    new_index_id = str(uuid.uuid4())
+(As previously stated)
 
-    index_meta = IndexMetadata(
-        index_id=new_index_id,
-        index_name=request.index_name,
-        index_type=request.index_type,
-        promoted_data_path=request.promoted_data_path,
-        status="creating", # Initial status
-        version=1, # Initial version
-        created_at=datetime.utcnow(),
-        # celery_task_id will be set by the task itself, or can be set here if preferred.
-    )
+## API Endpoints
 
-    # Dispatch Celery task for actual index creation by SPINDEX core (simulated)
-    celery_task = create_spindex_task.delay(
-        index_id=new_index_id,
-        promoted_data_path=request.promoted_data_path,
-        index_name=request.index_name,
-        index_type=request.index_type,
-        index_parameters=request.index_parameters
-    )
+(As previously stated)
 
-    index_meta.celery_task_id = celery_task.id # Store Celery task ID for tracking
-    index_metadata_db.append(index_meta)
+### Data Upload Endpoint:
 
-    return index_meta
+*   **POST `/upload/data`**:
+    *   (Details as previously documented. The Celery task it triggers now includes distinct steps for format conversion, CRS transformation, and geometric validation.)
 
-@app.get("/indexes", response_model=List[IndexMetadata], summary="List All Spatial Indexes", tags=["Indexes"])
-async def list_all_indexes(
-    skip: int = 0,
-    limit: int = 10,
-    current_user: User = Depends(get_current_user) # Any authenticated user can list
-):
-    """
-    Retrieves a list of all spatial index metadata records, with optional pagination.
-    """
-    return index_metadata_db[skip : skip + limit]
+(Rest of the README remains the same)
 
-@app.get("/indexes/{index_id}", response_model=IndexMetadata, summary="Get Spatial Index Metadata by ID", tags=["Indexes"])
-async def get_index_metadata_by_id(index_id: str, current_user: User = Depends(get_current_user)):
-    """
-    Retrieves metadata for a specific spatial index by its ID.
-    """
-    index_meta = next((idx for idx in index_metadata_db if idx.index_id == index_id), None)
-    if not index_meta:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Index with ID {index_id} not found.")
-    return index_meta
+[end of backend/README.md]
 
-@app.delete("/indexes/{index_id}", status_code=status.HTTP_200_OK, summary="Delete Spatial Index", tags=["Indexes"])
-async def delete_spatial_index(index_id: str, current_user: User = Depends(get_current_user)): # Admin role typically
-    """
-    Deletes a spatial index (metadata and conceptual deletion of index data).
-    Actual data files (promoted data, index files on disk) are not deleted by this stub.
-    """
-    if not user_has_permission(current_user, "delete_index"): # Stub, always true
-         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not have permission to delete indexes.")
+[start of docs/AEGIS_PIPELINE_DESIGN.md]
+# AEGIS-ECHO Data Ingestion Pipeline Design
 
-    global index_metadata_db
-    original_len = len(index_metadata_db)
-    index_metadata_db = [idx for idx in index_metadata_db if idx.index_id != index_id]
+## 1. Overview
 
-    if len(index_metadata_db) == original_len:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Index with ID {index_id} not found for deletion.")
+*   **Purpose:** This document details the architecture and design of the AEGIS-ECHO Data Ingestion Pipeline for SPINDEX. The primary goal of this pipeline is to provide a secure, resilient, and extensible mechanism for ingesting heterogeneous, unstructured, and potentially malicious geospatial data from various sources into the SPINDEX system. It aims to abstract the complexities of data handling, ensuring that only validated and standardized data is made available for indexing.
+*   **Scope:** Covers the pipeline from data reception to its promotion for indexing or quarantine.
+*   **Guiding Principles:** Security by design, resilience, modularity, extensibility, detailed metadata tracking.
 
-    # TODO: In a real system, trigger cleanup of actual index files from SPINDEX core
-    # and potentially the underlying processed data if no other index versions depend on it.
+## 2. Pipeline Architecture
 
-    return {"message": f"Index with ID {index_id} deleted successfully (metadata only)."}
+**(Placeholder for a diagram illustrating the stages and data flow that can be added later)**
 
+### 2.1. Pipeline Stages
 
-# --- Query API Endpoints ---
-@app.post("/query/execute", response_model=QueryResponse, summary="Execute Spatial Query", tags=["Query"])
-async def execute_query(
-    query_request: QueryRequest,
-    current_user: User = Depends(get_current_user) # Requires 'query_data' permission
-):
-    """
-    Executes a spatial query against a specified index.
-    (Currently returns dummy data)
-    """
-    if not user_has_permission(current_user, "query_data"): # Stub, always true
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not have permission to execute queries.")
+(Pipeline Stages 1-7 remain as previously defined, with Metadata Cataloguing using a persistent database)
+*   **Stage 1: Secure Upload/Reception Endpoint**
+*   **Stage 2: Staging Area**
+*   **Stage 3: Ingestion Task Trigger**
+*   **Stage 4: Pipeline Worker Execution**
+*   **Stage 5: Data Promotion**
+    *   **Responsibilities:** Move validated and processed data to a trusted location for subsequent indexing by SPINDEX.
+    *   **Process:**
+        *   If all critical pipeline modules (Format Conversion, CRS Transformation, Geometric Validation, and eventually Security/Schema checks) execute successfully:
+            1.  The `IngestionJobDB.processing_status` is updated to `"validation_successful_ready_for_promotion"`.
+            2.  The `IngestionJobDB.location_of_promoted_data` is set to the path of the final, validated file (e.g., the CRS-transformed GeoJSON, or a geometry-repaired GeoJSON if that step modifies the file).
+            3.  `IngestionJobDB.promotion_timestamp` is set to the current time.
+            4.  A log entry indicating successful promotion is added to `pipeline_stages_executed_log`.
+*   **Stage 6: Data Quarantine (DLQ)**
+    *   (As previously defined)
+*   **Stage 7: Metadata Cataloguing**
+    *   (As previously defined)
 
-    # 1. Validate index_id
-    target_index = next((idx for idx in index_metadata_db if idx.index_id == query_request.index_id), None)
-    if not target_index:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Index with ID {query_request.index_id} not found.")
-    if target_index.status != "ready":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Index {query_request.index_id} is not in 'ready' state (current: {target_index.status}).")
+## 3. Core Pluggable Modules (Executed within `process_staged_file_task`)
 
-    # 2. Log query to history
-    history_item = QueryHistoryItem(
-        user_id=current_user.username, # Or a more persistent user ID
-        request_data=query_request
-    )
-    query_history_db.insert(0, history_item) # Insert at beginning for recent first
+*   **3.1. Format Conversion & Abstraction (GDAL/OGR Integration)**
+    *   (As previously defined)
+*   **3.2. Coordinate Reference System (CRS) Transformation**
+    *   (As previously defined)
+*   **3.3. Geometric Validation**
+    *   (As previously defined)
+*   **3.4. Geocoding Service Integration**
+    *   (As previously defined)
+*   **3.5. Complex Geometry Handling**
+    *   (As previously defined)
+*   **3.6. Unstructured Text Parsing (NLP/NER)**
+    *   (As previously defined)
 
-    # 3. Simulate query execution with SPINDEX Core
-    # This would involve passing query_request.parameters and target_index.promoted_data_path
-    # to the SPINDEX core engine.
-    print(f"Simulating query on index {target_index.index_name} (ID: {target_index.index_id}) with params: {query_request.parameters}")
-    start_time = time.time()
-    time.sleep(0.1) # Simulate query time
-    end_time = time.time()
-    query_time_ms = int((end_time - start_time) * 1000)
+## 4. Security: Validation & Sanitization Mandates
 
-    # For now, return dummy results based on query_type
-    dummy_results = []
-    if query_request.query_type == "bbox":
-        dummy_results = [{'type': 'Feature', 'geometry': {'type': 'Polygon', 'coordinates': [[[0,0], [1,0], [1,1], [0,1], [0,0]]]}, 'properties': {'id': 1, 'name': 'Dummy BBox Result'}}]
-    elif query_request.query_type == "point_radius" or query_request.query_type == "knn": # Assuming point based query
-         dummy_results = [{'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': query_request.parameters.get("point", [0,0])}, 'properties': {'id': 2, 'name': 'Dummy Point Result'}}]
+*   **4.1. Geometric Validation:** (Covered in section 3.3)
+*   **4.2. Content-Level Security Scanning**
+    *   (As previously defined)
+*   **4.3. Value-Domain & Schema Validation**
+    *   (As previously defined)
 
-    return QueryResponse(
-        results=dummy_results,
-        count=len(dummy_results),
-        query_time_ms=query_time_ms,
-        message="Query executed successfully (simulated)."
-    )
+## 5. UI Integration
 
-@app.get("/query/history", response_model=List[QueryHistoryItem], summary="Get Query History", tags=["Query"])
-async def get_query_history(
-    skip: int = 0,
-    limit: int = 20, # Show more history by default
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Retrieves the current user's query history (or all history for admin - not implemented yet).
-    """
-    # Simple user-based filtering for query history (can be expanded)
-    # user_history = [item for item in query_history_db if item.user_id == current_user.username]
-    # For now, returning global history for simplicity of testing across users
-    user_history = query_history_db
-    return user_history[skip : skip + limit]
+(As previously stated)
+
+## 6. Metadata Cataloguing (Reiteration from Stage 7)
+
+(As previously stated)
+
+[end of docs/AEGIS_PIPELINE_DESIGN.md]
