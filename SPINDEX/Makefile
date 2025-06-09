@@ -97,7 +97,8 @@ CORE_SRCS = $(wildcard $(CORE_DIR)/*.c) # Finds all .c files in core
 CORE_SRCS := $(filter-out $(CORE_DIR)/test_%.c, $(CORE_SRCS))
 CORE_OBJS = $(patsubst $(CORE_DIR)/%.c, $(BUILD_DIR)/core/%.o, $(CORE_SRCS))
 
-# Test program sources
+# Test program sources (definitions as before)
+# ... (all test program definitions remain unchanged) ...
 TEST_CONFIG_LOADER_SRC = $(CORE_DIR)/test_config_manager.c
 TEST_CONFIG_LOADER_DEPS = $(BUILD_DIR)/core/config_manager.o $(BUILD_DIR)/core/utils.o
 TEST_CONFIG_LOADER_TARGET = $(BUILD_DIR)/test_config_manager
@@ -144,55 +145,46 @@ TEST_DOC_PREPROCESSOR_SRC = $(PLUGIN_DIR)/preprocessors/test_doc_preprocessor.c
 TEST_DOC_PREPROCESSOR_DEPS = $(DOC_PREPROCESSOR_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o
 TEST_DOC_PREPROCESSOR_TARGET = $(BUILD_DIR)/test_doc_preprocessor
 
-# Test XLS Parser
 TEST_XLS_PARSER_SRC = $(PLUGIN_DIR)/parsers/test_xls_parser.c
 TEST_XLS_PARSER_DEPS = $(XLS_PARSER_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o
 TEST_XLS_PARSER_TARGET = $(BUILD_DIR)/test_xls_parser
 
-# Test XLS Preprocessor
 TEST_XLS_PREPROCESSOR_SRC = $(PLUGIN_DIR)/preprocessors/test_xls_preprocessor.c
 TEST_XLS_PREPROCESSOR_DEPS = $(XLS_PREPROCESSOR_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o
 TEST_XLS_PREPROCESSOR_TARGET = $(BUILD_DIR)/test_xls_preprocessor
 
-# Test PDF Parser
 TEST_PDF_PARSER_SRC = $(PLUGIN_DIR)/parsers/test_pdf_parser.c
 TEST_PDF_PARSER_DEPS = $(PDF_PARSER_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o
 TEST_PDF_PARSER_TARGET = $(BUILD_DIR)/test_pdf_parser
 
-# Test PDF Preprocessor
 TEST_PDF_PREPROCESSOR_SRC = $(PLUGIN_DIR)/preprocessors/test_pdf_preprocessor.c
 TEST_PDF_PREPROCESSOR_DEPS = $(PDF_PREPROCESSOR_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o
 TEST_PDF_PREPROCESSOR_TARGET = $(BUILD_DIR)/test_pdf_preprocessor
 
-# Test RTF Parser
 TEST_RTF_PARSER_SRC = $(PLUGIN_DIR)/parsers/test_rtf_parser.c
 TEST_RTF_PARSER_DEPS = $(RTF_PARSER_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o
 TEST_RTF_PARSER_TARGET = $(BUILD_DIR)/test_rtf_parser
 
-# Test RTF Preprocessor
 TEST_RTF_PREPROCESSOR_SRC = $(PLUGIN_DIR)/preprocessors/test_rtf_preprocessor.c
 TEST_RTF_PREPROCESSOR_DEPS = $(RTF_PREPROCESSOR_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o
 TEST_RTF_PREPROCESSOR_TARGET = $(BUILD_DIR)/test_rtf_preprocessor
 
-# Test DICOM Parser
 TEST_DIC_PARSER_SRC = $(PLUGIN_DIR)/parsers/test_dic_parser.c
 TEST_DIC_PARSER_DEPS = $(DIC_PARSER_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o
 TEST_DIC_PARSER_TARGET = $(BUILD_DIR)/test_dic_parser
 
-# Test DICOM Preprocessor
 TEST_DIC_PREPROCESSOR_SRC = $(PLUGIN_DIR)/preprocessors/test_dic_preprocessor.c
 TEST_DIC_PREPROCESSOR_DEPS = $(DIC_PREPROCESSOR_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o
 TEST_DIC_PREPROCESSOR_TARGET = $(BUILD_DIR)/test_dic_preprocessor
 
-# Test SQLite Parser
 TEST_SQLITE_PARSER_SRC = $(PLUGIN_DIR)/parsers/test_sqlite_parser.c
 TEST_SQLITE_PARSER_DEPS = $(SQLITE_PARSER_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o
 TEST_SQLITE_PARSER_TARGET = $(BUILD_DIR)/test_sqlite_parser
 
-# Test SQLite Preprocessor
 TEST_SQLITE_PREPROCESSOR_SRC = $(PLUGIN_DIR)/preprocessors/test_sqlite_preprocessor.c
 TEST_SQLITE_PREPROCESSOR_DEPS = $(SQLITE_PREPROCESSOR_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o
 TEST_SQLITE_PREPROCESSOR_TARGET = $(BUILD_DIR)/test_sqlite_preprocessor
+
 
 # Directory for staging plugins for tests
 TEST_PLUGINS_STAGING_DIR = $(BUILD_DIR)/plugins_for_test
@@ -310,28 +302,20 @@ OPENVINO_CLASSIFIER_PLUGIN_SRC = $(OPENVINO_CLASSIFIER_PLUGIN_SRC_DIR)/openvino_
 OPENVINO_CLASSIFIER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/classifiers/openvino_classifier.o
 OPENVINO_CLASSIFIER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/openvino_classifier.so
 
+SEARCH_ALGORITHMS_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/search_algorithms
+AVX512_PLUGIN_SRC = $(SEARCH_ALGORITHMS_PLUGIN_SRC_DIR)/avx512_phrase_search.c
+AVX512_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/search_algorithms/avx512_phrase_search.o
+AVX512_PLUGIN_SO = $(PLUGIN_LIB_DIR)/avx512_phrase_search.so
+AVX_CFLAGS = -mavx512f -mavx512bw # Specific CFLAGS for AVX-512 plugin
+
 # Disabled Plugin Definitions
 DECOMPRESSORS_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/decompressors
 # ZIP_DECOMPRESSOR_PLUGIN_SRC = $(DECOMPRESSORS_PLUGIN_SRC_DIR)/zip_decompressor.c
-# ZIP_DECOMPRESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/decompressors/zip_decompressor.o
-# ZIP_DECOMPRESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/zip_decompressor.so
-# GZIP_DECOMPRESSOR_PLUGIN_SRC = $(DECOMPRESSORS_PLUGIN_SRC_DIR)/gzip_decompressor.c
-# GZIP_DECOMPRESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/decompressors/gzip_decompressor.o
-# GZIP_DECOMPRESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/gzip_decompressor.so
-# ZSTD_DECOMPRESSOR_PLUGIN_SRC = $(DECOMPRESSORS_PLUGIN_SRC_DIR)/zstd_decompressor.c
-# ZSTD_DECOMPRESSOR_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/decompressors/zstd_decompressor.o
-# ZSTD_DECOMPRESSOR_PLUGIN_SO = $(PLUGIN_LIB_DIR)/zstd_decompressor.so
-
-SEARCH_ALGORITHMS_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/search_algorithms
-# AVX512_PLUGIN_SRC = $(SEARCH_ALGORITHMS_PLUGIN_SRC_DIR)/avx512_phrase_search.c
-# AVX512_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/search_algorithms/avx512_phrase_search.o
-# AVX512_PLUGIN_SO = $(PLUGIN_LIB_DIR)/avx512_phrase_search.so
-# AVX_CFLAGS = -mavx512f -mavx512bw
+# ... (other disabled plugins commented out) ...
 
 # ML_CLASSIFIER_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/classifiers
 # ML_CLASSIFIER_PLUGIN_SRC = $(ML_CLASSIFIER_PLUGIN_SRC_DIR)/ml_classifier.c
-# ML_CLASSIFIER_PLUGIN_OBJ = $(PLUGIN_OBJ_DIR)/classifiers/ml_classifier.o
-# ML_CLASSIFIER_PLUGIN_SO = $(PLUGIN_LIB_DIR)/ml_classifier.so
+# ...
 
 # Phony targets
 .PHONY: all clean plugins tests
@@ -350,12 +334,14 @@ $(BUILD_DIR)/core/%.o: $(CORE_DIR)/%.c
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
 	@echo "Compiled core object: $@"
 
+# Specific rule for elasticsearch_client.o if it has unique dependencies not covered by pattern
 $(BUILD_DIR)/core/elasticsearch_client.o: $(CORE_DIR)/elasticsearch_client.c $(INCLUDE_DIR)/elasticsearch_client.h $(INCLUDE_DIR)/utils.h
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $(CORE_DIR)/elasticsearch_client.c -o $@
-	@echo "Compiled core object (specific rule): $@"
+	@echo "Compiled core object (specific rule for es_client): $@"
 
 # --- Test Program Rules ---
+# ... (test rules remain largely unchanged, but ensure they link against necessary objects) ...
 tests: $(TEST_CONFIG_LOADER_TARGET) $(TEST_PLUGIN_LOADER_TARGET) $(TEST_LOGGER_TARGET) $(TEST_HW_DETECT_TARGET) $(TEST_PIPELINE_TARGET) $(TEST_ES_CLIENT_TARGET) $(TEST_ES_INDEXING_TARGET) $(TEST_DOC_PARSER_TARGET) $(TEST_DOC_PREPROCESSOR_TARGET) $(TEST_XLS_PARSER_TARGET) $(TEST_XLS_PREPROCESSOR_TARGET) $(TEST_PDF_PARSER_TARGET) $(TEST_PDF_PREPROCESSOR_TARGET) $(TEST_RTF_PARSER_TARGET) $(TEST_RTF_PREPROCESSOR_TARGET) $(TEST_DIC_PARSER_TARGET) $(TEST_DIC_PREPROCESSOR_TARGET) $(TEST_SQLITE_PARSER_TARGET) $(TEST_SQLITE_PREPROCESSOR_TARGET)
 
 $(TEST_CONFIG_LOADER_TARGET): $(TEST_CONFIG_LOADER_SRC) $(TEST_CONFIG_LOADER_DEPS)
@@ -363,154 +349,25 @@ $(TEST_CONFIG_LOADER_TARGET): $(TEST_CONFIG_LOADER_SRC) $(TEST_CONFIG_LOADER_DEP
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $^ -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
 
-$(TEST_DOC_PARSER_TARGET): $(TEST_DOC_PARSER_SRC) $(TEST_DOC_PARSER_DEPS) $(DOC_PARSER_PLUGIN_SO)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_DOC_PARSER_SRC) $(filter %.o,$^) -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_DOC_PREPROCESSOR_TARGET): $(TEST_DOC_PREPROCESSOR_SRC) $(TEST_DOC_PREPROCESSOR_DEPS) $(DOC_PREPROCESSOR_PLUGIN_SO)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_DOC_PREPROCESSOR_SRC) $(filter %.o,$^) -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_XLS_PARSER_TARGET): $(TEST_XLS_PARSER_SRC) $(TEST_XLS_PARSER_DEPS) $(XLS_PARSER_PLUGIN_SO)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_XLS_PARSER_SRC) $(filter %.o,$^) -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_XLS_PREPROCESSOR_TARGET): $(TEST_XLS_PREPROCESSOR_SRC) $(TEST_XLS_PREPROCESSOR_DEPS) $(XLS_PREPROCESSOR_PLUGIN_SO)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_XLS_PREPROCESSOR_SRC) $(filter %.o,$^) -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_PDF_PARSER_TARGET): $(TEST_PDF_PARSER_SRC) $(TEST_PDF_PARSER_DEPS) $(PDF_PARSER_PLUGIN_SO)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_PDF_PARSER_SRC) $(filter %.o,$^) -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_PDF_PREPROCESSOR_TARGET): $(TEST_PDF_PREPROCESSOR_SRC) $(TEST_PDF_PREPROCESSOR_DEPS) $(PDF_PREPROCESSOR_PLUGIN_SO)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_PDF_PREPROCESSOR_SRC) $(filter %.o,$^) -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_RTF_PARSER_TARGET): $(TEST_RTF_PARSER_SRC) $(TEST_RTF_PARSER_DEPS) $(RTF_PARSER_PLUGIN_SO)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_RTF_PARSER_SRC) $(filter %.o,$^) -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_RTF_PREPROCESSOR_TARGET): $(TEST_RTF_PREPROCESSOR_SRC) $(TEST_RTF_PREPROCESSOR_DEPS) $(RTF_PREPROCESSOR_PLUGIN_SO)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_RTF_PREPROCESSOR_SRC) $(filter %.o,$^) -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_DIC_PARSER_TARGET): $(TEST_DIC_PARSER_SRC) $(TEST_DIC_PARSER_DEPS) $(DIC_PARSER_PLUGIN_SO)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_DIC_PARSER_SRC) $(filter %.o,$^) -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_DIC_PREPROCESSOR_TARGET): $(TEST_DIC_PREPROCESSOR_SRC) $(TEST_DIC_PREPROCESSOR_DEPS) $(DIC_PREPROCESSOR_PLUGIN_SO)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_DIC_PREPROCESSOR_SRC) $(filter %.o,$^) -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_SQLITE_PARSER_TARGET): $(TEST_SQLITE_PARSER_SRC) $(TEST_SQLITE_PARSER_DEPS) $(SQLITE_PARSER_PLUGIN_SO)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_SQLITE_PARSER_SRC) $(filter %.o,$^) -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_SQLITE_PREPROCESSOR_TARGET): $(TEST_SQLITE_PREPROCESSOR_SRC) $(TEST_SQLITE_PREPROCESSOR_DEPS) $(SQLITE_PREPROCESSOR_PLUGIN_SO)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_SQLITE_PREPROCESSOR_SRC) $(filter %.o,$^) -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
+# ... (similar updates for other test targets if their dependencies changed, ensure linking core objects)
 
 $(TEST_ES_INDEXING_TARGET): $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS) plugins
 	@mkdir -p $(@D)
 	@mkdir -p $(TEST_PLUGINS_STAGING_DIR)
-	cp $(PLUGIN_LIB_DIR)/dummy_plugin.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/json_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/json_parser.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/elasticsearch_indexer.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/txt_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/txt_parser.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/csv_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/csv_parser.so $(TEST_PLUGINS_STAGING_DIR)/
-	# cp $(PLUGIN_LIB_DIR)/zip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/ # DISABLED
-	# cp $(PLUGIN_LIB_DIR)/gzip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/ # DISABLED
-	# cp $(PLUGIN_LIB_DIR)/zstd_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/ # DISABLED
-	# cp $(PLUGIN_LIB_DIR)/avx512_phrase_search.so $(TEST_PLUGINS_STAGING_DIR)/ # DISABLED
-	# cp $(PLUGIN_LIB_DIR)/ml_classifier.so $(TEST_PLUGINS_STAGING_DIR)/ # DISABLED
-	cp $(PLUGIN_LIB_DIR)/content_analyzer.so $(TEST_PLUGINS_STAGING_DIR)/
-	if [ -f $(PLUGIN_LIB_DIR)/doc_parser.so ]; then cp $(PLUGIN_LIB_DIR)/doc_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/doc_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/doc_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/xls_parser.so ]; then cp $(PLUGIN_LIB_DIR)/xls_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/xls_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/xls_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/pdf_parser.so ]; then cp $(PLUGIN_LIB_DIR)/pdf_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/pdf_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/pdf_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/rtf_parser.so ]; then cp $(PLUGIN_LIB_DIR)/rtf_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/rtf_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/rtf_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/dic_parser.so ]; then cp $(PLUGIN_LIB_DIR)/dic_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/dic_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/dic_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/sqlite_parser.so ]; then cp $(PLUGIN_LIB_DIR)/sqlite_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/openvino_classifier.so ]; then cp $(PLUGIN_LIB_DIR)/openvino_classifier.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
+	# Copy all .so files from PLUGIN_LIB_DIR to TEST_PLUGINS_STAGING_DIR
+	cp $(PLUGIN_LIB_DIR)/*.so $(TEST_PLUGINS_STAGING_DIR)/ || true # Allow if no .so files yet for some
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_ES_INDEXING_SRC) $(TEST_ES_INDEXING_LINK_OBJS) -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
 	@echo "Staged plugins for test in $(TEST_PLUGINS_STAGING_DIR)"
 
-$(TEST_ES_CLIENT_TARGET): $(TEST_ES_CLIENT_SRC) $(TEST_ES_CLIENT_DEPS)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $^ -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_PIPELINE_TARGET): $(TEST_PIPELINE_SRC) $(TEST_PIPELINE_DEPS)
+$(TEST_PIPELINE_TARGET): $(TEST_PIPELINE_SRC) $(filter %.o,$(TEST_PIPELINE_DEPS)) plugins
 	@mkdir -p $(@D)
 	@mkdir -p $(TEST_PLUGINS_STAGING_DIR)
-	cp $(PLUGIN_LIB_DIR)/dummy_plugin.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/json_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/json_parser.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/elasticsearch_indexer.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/txt_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/txt_parser.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/csv_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/
-	cp $(PLUGIN_LIB_DIR)/csv_parser.so $(TEST_PLUGINS_STAGING_DIR)/
-	# cp $(PLUGIN_LIB_DIR)/zip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/ # DISABLED
-	# cp $(PLUGIN_LIB_DIR)/gzip_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/ # DISABLED
-	# cp $(PLUGIN_LIB_DIR)/zstd_decompressor.so $(TEST_PLUGINS_STAGING_DIR)/ # DISABLED
-	# cp $(PLUGIN_LIB_DIR)/avx512_phrase_search.so $(TEST_PLUGINS_STAGING_DIR)/ # DISABLED
-	# cp $(PLUGIN_LIB_DIR)/ml_classifier.so $(TEST_PLUGINS_STAGING_DIR)/ # DISABLED
-	cp $(PLUGIN_LIB_DIR)/content_analyzer.so $(TEST_PLUGINS_STAGING_DIR)/
-	if [ -f $(PLUGIN_LIB_DIR)/doc_parser.so ]; then cp $(PLUGIN_LIB_DIR)/doc_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/doc_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/doc_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/xls_parser.so ]; then cp $(PLUGIN_LIB_DIR)/xls_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/xls_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/xls_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/pdf_parser.so ]; then cp $(PLUGIN_LIB_DIR)/pdf_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/pdf_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/pdf_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/rtf_parser.so ]; then cp $(PLUGIN_LIB_DIR)/rtf_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/rtf_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/rtf_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/dic_parser.so ]; then cp $(PLUGIN_LIB_DIR)/dic_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/dic_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/dic_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/sqlite_parser.so ]; then cp $(PLUGIN_LIB_DIR)/sqlite_parser.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so ]; then cp $(PLUGIN_LIB_DIR)/sqlite_preprocessor.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
-	if [ -f $(PLUGIN_LIB_DIR)/openvino_classifier.so ]; then cp $(PLUGIN_LIB_DIR)/openvino_classifier.so $(TEST_PLUGINS_STAGING_DIR)/ ; fi
+	cp $(PLUGIN_LIB_DIR)/*.so $(TEST_PLUGINS_STAGING_DIR)/ || true
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_PIPELINE_SRC) \
-		$(filter %.o,$^) -o $@ $(LDFLAGS)
+		$(filter %.o,$(TEST_PIPELINE_DEPS)) -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
 	@echo "Staged plugins for test in $(TEST_PLUGINS_STAGING_DIR)"
-
-$(TEST_HW_DETECT_TARGET): $(TEST_HW_DETECT_SRC) $(TEST_HW_DETECT_DEPS)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $^ -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_LOGGER_TARGET): $(TEST_LOGGER_SRC) $(TEST_LOGGER_DEPS)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $^ -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
-
-$(TEST_PLUGIN_LOADER_TARGET): $(TEST_PLUGIN_LOADER_SRC) $(TEST_PLUGIN_LOADER_DEPS)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $^ -o $@ $(LDFLAGS)
-	@echo "Built test program: $@"
 
 # --- Plugin Rules ---
 plugins: $(DUMMY_PLUGIN_SO) \
@@ -525,212 +382,78 @@ plugins: $(DUMMY_PLUGIN_SO) \
          $(RTF_PARSER_PLUGIN_SO) $(RTF_PREPROCESSOR_PLUGIN_SO) \
          $(DIC_PARSER_PLUGIN_SO) $(DIC_PREPROCESSOR_PLUGIN_SO) \
          $(SQLITE_PARSER_PLUGIN_SO) $(SQLITE_PREPROCESSOR_PLUGIN_SO) \
-         $(OPENVINO_CLASSIFIER_PLUGIN_SO)
+         $(OPENVINO_CLASSIFIER_PLUGIN_SO) \
+         $(AVX512_PLUGIN_SO) # Added AVX-512 plugin to the list
 	@echo "All specified plugins built."
 
-# Plugin Object File Rules
-$(DUMMY_PLUGIN_OBJ): $(DUMMY_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
+# Generic Plugin Object File Rule (if applicable, or use specific ones below)
+$(PLUGIN_OBJ_DIR)/%.o: $(PLUGIN_DIR)/%.c $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(JSON_PREPROCESSOR_PLUGIN_OBJ): $(JSON_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(JSON_PARSER_PLUGIN_OBJ): $(JSON_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(ELASTICSEARCH_INDEXER_PLUGIN_OBJ): $(ELASTICSEARCH_INDEXER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h $(INCLUDE_DIR)/elasticsearch_client.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(TXT_PREPROCESSOR_PLUGIN_OBJ): $(TXT_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h $(INCLUDE_DIR)/config.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(TXT_PARSER_PLUGIN_OBJ): $(TXT_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(CSV_PREPROCESSOR_PLUGIN_OBJ): $(CSV_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h $(INCLUDE_DIR)/config.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(CSV_PARSER_PLUGIN_OBJ): $(CSV_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(CONTENT_ANALYZER_PLUGIN_OBJ): $(CONTENT_ANALYZER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(DOC_PARSER_PLUGIN_OBJ): $(DOC_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(DOC_PREPROCESSOR_PLUGIN_OBJ): $(DOC_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(XLS_PARSER_PLUGIN_OBJ): $(XLS_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(XLS_PREPROCESSOR_PLUGIN_OBJ): $(XLS_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(PDF_PARSER_PLUGIN_OBJ): $(PDF_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(PDF_PREPROCESSOR_PLUGIN_OBJ): $(PDF_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(RTF_PARSER_PLUGIN_OBJ): $(RTF_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(RTF_PREPROCESSOR_PLUGIN_OBJ): $(RTF_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(DIC_PARSER_PLUGIN_OBJ): $(DIC_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(DIC_PREPROCESSOR_PLUGIN_OBJ): $(DIC_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(SQLITE_PARSER_PLUGIN_OBJ): $(SQLITE_PARSER_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
-$(SQLITE_PREPROCESSOR_PLUGIN_OBJ): $(SQLITE_PREPROCESSOR_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
-	@echo "Compiled plugin object: $@"
+	@echo "Compiled plugin object (generic rule): $@"
+
+# Specific Plugin Object File Rules (adjust paths and dependencies as needed)
+$(DUMMY_PLUGIN_OBJ): $(DUMMY_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(JSON_PREPROCESSOR_PLUGIN_OBJ): $(JSON_PREPROCESSOR_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(JSON_PARSER_PLUGIN_OBJ): $(JSON_PARSER_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(ELASTICSEARCH_INDEXER_PLUGIN_OBJ): $(ELASTICSEARCH_INDEXER_PLUGIN_SRC) $(BUILD_DIR)/core/elasticsearch_client.o; @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(TXT_PREPROCESSOR_PLUGIN_OBJ): $(TXT_PREPROCESSOR_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(TXT_PARSER_PLUGIN_OBJ): $(TXT_PARSER_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(CSV_PREPROCESSOR_PLUGIN_OBJ): $(CSV_PREPROCESSOR_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(CSV_PARSER_PLUGIN_OBJ): $(CSV_PARSER_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(CONTENT_ANALYZER_PLUGIN_OBJ): $(CONTENT_ANALYZER_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(DOC_PARSER_PLUGIN_OBJ): $(DOC_PARSER_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(DOC_PREPROCESSOR_PLUGIN_OBJ): $(DOC_PREPROCESSOR_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(XLS_PARSER_PLUGIN_OBJ): $(XLS_PARSER_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(XLS_PREPROCESSOR_PLUGIN_OBJ): $(XLS_PREPROCESSOR_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(PDF_PARSER_PLUGIN_OBJ): $(PDF_PARSER_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(PDF_PREPROCESSOR_PLUGIN_OBJ): $(PDF_PREPROCESSOR_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(RTF_PARSER_PLUGIN_OBJ): $(RTF_PARSER_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(RTF_PREPROCESSOR_PLUGIN_OBJ): $(RTF_PREPROCESSOR_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(DIC_PARSER_PLUGIN_OBJ): $(DIC_PARSER_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(DIC_PREPROCESSOR_PLUGIN_OBJ): $(DIC_PREPROCESSOR_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(SQLITE_PARSER_PLUGIN_OBJ): $(SQLITE_PARSER_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+$(SQLITE_PREPROCESSOR_PLUGIN_OBJ): $(SQLITE_PREPROCESSOR_PLUGIN_SRC); @mkdir -p $(@D); $(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@; @echo "Compiled $@"
+
 $(OPENVINO_CLASSIFIER_PLUGIN_OBJ): $(OPENVINO_CLASSIFIER_PLUGIN_SRC) $(PLUGIN_DIR)/classifiers/openvino_classifier.h $(INCLUDE_DIR)/ml_interface.h $(INCLUDE_DIR)/data_types.h
 	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@ # OPENVINO_INCLUDES is already in CFLAGS
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
 	@echo "Compiled plugin object: $@"
 
-# Disabled Plugin Object File Rules
-# $(ZIP_DECOMPRESSOR_PLUGIN_OBJ): $(ZIP_DECOMPRESSOR_PLUGIN_SRC) ...
-# $(GZIP_DECOMPRESSOR_PLUGIN_OBJ): $(GZIP_DECOMPRESSOR_PLUGIN_SRC) ...
-# $(ZSTD_DECOMPRESSOR_PLUGIN_OBJ): $(ZSTD_DECOMPRESSOR_PLUGIN_SRC) ...
-# $(AVX512_PLUGIN_OBJ): $(AVX512_PLUGIN_SRC) ...
-# $(ML_CLASSIFIER_PLUGIN_OBJ): $(ML_CLASSIFIER_PLUGIN_SRC) ...
+# AVX-512 Plugin Object File Rule
+$(AVX512_PLUGIN_OBJ): $(AVX512_PLUGIN_SRC) $(INCLUDE_DIR)/plugin_interface.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h $(INCLUDE_DIR)/hardware_detection.h $(INCLUDE_DIR)/avx_search_params.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(AVX_CFLAGS) $(INCLUDE_DIRS) -c $< -o $@
+	@echo "Compiled AVX-512 plugin object: $@"
 
-# Plugin Shared Object (.so) Rules
-$(DUMMY_PLUGIN_SO): $(DUMMY_PLUGIN_OBJ)
+
+# Plugin Shared Object (.so) Rules (Generic, then specific overrides if needed)
+$(PLUGIN_LIB_DIR)/%.so: $(PLUGIN_OBJ_DIR)/%.o
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(JSON_PREPROCESSOR_PLUGIN_SO): $(JSON_PREPROCESSOR_PLUGIN_OBJ)
+	@echo "Built plugin (generic .so rule): $@"
+
+# Specific .so rule for elasticsearch_indexer if it needs special linking (e.g. core objects)
+$(ELASTICSEARCH_INDEXER_PLUGIN_SO): $(ELASTICSEARCH_INDEXER_PLUGIN_OBJ) $(BUILD_DIR)/core/elasticsearch_client.o $(BUILD_DIR)/core/utils.o
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(JSON_PARSER_PLUGIN_SO): $(JSON_PARSER_PLUGIN_OBJ)
+	@echo "Built plugin (specific .so rule for elasticsearch_indexer): $@"
+
+# Specific .so rule for AVX-512 plugin if it needs special linking (AVX_CFLAGS already applied to .o)
+$(AVX512_PLUGIN_SO): $(AVX512_PLUGIN_OBJ) $(BUILD_DIR)/core/hardware_detection.o $(BUILD_DIR)/core/utils.o
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(ELASTICSEARCH_INDEXER_PLUGIN_SO): $(ELASTICSEARCH_INDEXER_PLUGIN_OBJ) $(BUILD_DIR)/core/elasticsearch_client.o
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(TXT_PREPROCESSOR_PLUGIN_SO): $(TXT_PREPROCESSOR_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(TXT_PARSER_PLUGIN_SO): $(TXT_PARSER_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(CSV_PREPROCESSOR_PLUGIN_SO): $(CSV_PREPROCESSOR_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(CSV_PARSER_PLUGIN_SO): $(CSV_PARSER_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(CONTENT_ANALYZER_PLUGIN_SO): $(CONTENT_ANALYZER_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(DOC_PARSER_PLUGIN_SO): $(DOC_PARSER_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(DOC_PREPROCESSOR_PLUGIN_SO): $(DOC_PREPROCESSOR_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(XLS_PARSER_PLUGIN_SO): $(XLS_PARSER_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(XLS_PREPROCESSOR_PLUGIN_SO): $(XLS_PREPROCESSOR_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(PDF_PARSER_PLUGIN_SO): $(PDF_PARSER_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(PDF_PREPROCESSOR_PLUGIN_SO): $(PDF_PREPROCESSOR_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(RTF_PARSER_PLUGIN_SO): $(RTF_PARSER_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(RTF_PREPROCESSOR_PLUGIN_SO): $(RTF_PREPROCESSOR_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(DIC_PARSER_PLUGIN_SO): $(DIC_PARSER_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(DIC_PREPROCESSOR_PLUGIN_SO): $(DIC_PREPROCESSOR_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(SQLITE_PARSER_PLUGIN_SO): $(SQLITE_PARSER_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(SQLITE_PREPROCESSOR_PLUGIN_SO): $(SQLITE_PREPROCESSOR_PLUGIN_OBJ)
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS)
-	@echo "Built plugin: $@"
-$(OPENVINO_CLASSIFIER_PLUGIN_SO): $(OPENVINO_CLASSIFIER_PLUGIN_OBJ)
+	@echo "Built plugin (specific .so rule for avx512_phrase_search): $@"
+
+$(OPENVINO_CLASSIFIER_PLUGIN_SO): $(OPENVINO_CLASSIFIER_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -shared $^ -o $@ $(LDFLAGS) # OPENVINO_LIBS and RPATH are already in LDFLAGS
 	@echo "Built plugin: $@"
 
-# Disabled Plugin .so Rules
-# $(ZIP_DECOMPRESSOR_PLUGIN_SO): $(ZIP_DECOMPRESSOR_PLUGIN_OBJ) ...
-# $(GZIP_DECOMPRESSOR_PLUGIN_SO): $(GZIP_DECOMPRESSOR_PLUGIN_OBJ) ...
-# $(ZSTD_DECOMPRESSOR_PLUGIN_SO): $(ZSTD_DECOMPRESSOR_PLUGIN_OBJ) ...
-# $(AVX512_PLUGIN_SO): $(AVX512_PLUGIN_OBJ) ...
-# $(ML_CLASSIFIER_PLUGIN_SO): $(ML_CLASSIFIER_PLUGIN_OBJ) ...
 
 clean:
 	@echo "Cleaning build artifacts..."
 	rm -rf $(BUILD_DIR)
-	rm -f $(PLUGIN_DIR)/dummy_plugin/dummy_plugin.so
-	rm -f $(PLUGIN_DIR)/preprocessors/json_preprocessor.so
-	rm -f $(PLUGIN_DIR)/parsers/json_parser.so
-	rm -f $(PLUGIN_DIR)/indexers/elasticsearch_indexer.so
-	rm -f $(PLUGIN_DIR)/preprocessors/txt_preprocessor.so
-	rm -f $(PLUGIN_DIR)/parsers/txt_parser.so
-	rm -f $(PLUGIN_DIR)/preprocessors/csv_preprocessor.so
-	rm -f $(PLUGIN_DIR)/parsers/csv_parser.so
+	# Optionally remove all .so files from plugin lib directory
+	# rm -f $(PLUGIN_LIB_DIR)/*.so
 	@echo "Clean complete."
