@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic
+python-jose[cryptography]
+celery
+redis
+GDAL>=3.0,<3.8 # Common version range, might need adjustment based on libgdal-dev version in OS.
+shapely>=2.0,<2.1 # Common version compatible with recent GEOS versions.
+requests>=2.25 # For geopy/Nominatim and potentially other HTTP requests
+geopy>=2.2 # For geocoding services like Nominatim

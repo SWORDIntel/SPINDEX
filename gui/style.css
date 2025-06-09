@@ -1,0 +1,518 @@
+/* General Body Styles */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    display: grid;
+    grid-template-areas:
+        "header header"
+        "sidebar main"
+        "footer footer";
+    grid-template-rows: auto 1fr auto;
+    grid-template-columns: 250px 1fr; /* Sidebar width and main content */
+    min-height: 100vh;
+    transition: grid-template-columns 0.3s ease; /* For sidebar collapse animation */
+}
+
+body.sidebar-collapsed {
+    grid-template-columns: 60px 1fr; /* Collapsed sidebar width */
+}
+
+/* Header Styles */
+#app-header {
+    grid-area: header;
+    background-color: #333;
+    color: white;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#app-header .logo { /* Adjusted to match HTML */
+    font-size: 1.5em;
+    font-weight: bold;
+}
+
+#app-header .global-nav span { /* Style for "Logged in as: ..." */
+    margin-right: 15px;
+}
+
+#app-header .global-nav button {
+    margin-left: 10px;
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+/* Sidebar Styles */
+#sidebar {
+    grid-area: sidebar;
+    background-color: #f4f4f4;
+    padding: 15px;
+    overflow-y: auto;
+    transition: width 0.3s ease;
+    position: relative; /* For positioning the toggle button */
+}
+
+#sidebar-toggle-btn {
+    background: #ddd;
+    border: none;
+    padding: 10px;
+    cursor: pointer;
+    font-size: 1.2em;
+    width: 100%;
+    text-align: left;
+    margin-bottom: 10px;
+}
+
+#sidebar nav ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#sidebar nav ul li a {
+    display: block;
+    padding: 10px;
+    text-decoration: none;
+    color: #333;
+    white-space: nowrap; /* Prevent text wrapping when sidebar is collapsed */
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#sidebar nav ul li a:hover {
+    background-color: #ddd;
+}
+
+/* Main Content Styles */
+#main-content {
+    grid-area: main;
+    padding: 20px;
+    overflow-y: auto; /* If content is too long */
+}
+
+.view-container {
+    /* Basic styling for view containers, can be expanded */
+    padding: 15px;
+    border: 1px solid #ccc;
+    margin-bottom: 20px;
+}
+
+.view-container.active {
+    display: block; /* Show active view */
+}
+
+/* Styles for active view (ensure this matches JS logic if different from .active) */
+.active-view {
+    display: block !important; /* Override display:none from .view if needed */
+}
+.view { /* Ensure inactive views are hidden */
+    display: none;
+}
+
+/* Loading Spinner */
+.loader {
+    border: 4px solid #f3f3f3; /* Light grey */
+    border-top: 4px solid #3498db; /* Blue */
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+    display: inline-block; /* Or 'block' and center with margin if needed */
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Skeleton Placeholder Styles */
+.skeleton {
+    background-color: #e0e0e0;
+    border-radius: 4px;
+    animation: pulse 1.5s infinite ease-in-out;
+    display: inline-block; /* Allow them to sit on lines with text */
+}
+
+.skeleton-text {
+    height: 1em; /* Approx height of a line of text */
+    width: 80%; /* Default width, can be overridden */
+    margin-bottom: 0.5em; /* Space between skeleton lines */
+}
+.skeleton-text.short { width: 40%; }
+.skeleton-text.medium { width: 60%; }
+.skeleton-text.long { width: 100%; }
+
+
+/* Help Tooltip Styles */
+.help-tooltip {
+    cursor: help;
+    margin-left: 5px;
+    color: #007bff; /* Blue color, can be adjusted */
+    font-weight: bold;
+    border-bottom: 1px dotted #007bff; /* Dotted underline to indicate interactivity */
+    display: inline-block; /* To keep it inline with text */
+    position: relative; /* For potential future :after/:before pseudo-element tooltips */
+}
+
+/* Basic tooltip text display on hover - can be enhanced with JS for complex tooltips */
+.help-tooltip[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    left: 100%;
+    top: -5px; /* Adjust as needed */
+    margin-left: 10px; /* Space from the '?' */
+    background-color: #333;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    white-space: nowrap; /* Keep tooltip on one line */
+    z-index: 10; /* Ensure it's above other elements */
+    font-weight: normal; /* Reset bold for tooltip text */
+}
+
+/* Query Interface View Specific Styles */
+.query-form-container, .query-results-container, .query-history-container {
+    margin-bottom: 20px;
+    padding: 15px;
+    border: 1px solid #eee;
+    border-radius: 5px;
+}
+
+.query-form-container .form-group {
+    margin-bottom: 10px;
+}
+
+.query-form-container label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.query-form-container select,
+.query-form-container input[type="text"],
+.query-form-container input[type="number"] {
+    width: calc(100% - 16px); /* Account for padding */
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+#query-params-inputs input[type="text"],
+#query-params-inputs input[type="number"] {
+    margin-bottom: 5px; /* Space between multiple param inputs */
+}
+
+.query-form-container button {
+    padding: 10px 15px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.query-form-container button:hover {
+    background-color: #0056b3;
+}
+
+#query-results-summary {
+    font-weight: bold;
+}
+
+#query-results-json {
+    white-space: pre-wrap;
+    word-break: break-all;
+    background-color: #f8f9fa; /* Light background for pre */
+    border: 1px solid #dee2e6; /* Border for pre */
+    padding: 10px;
+    border-radius: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+#query-history-list {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 4px;
+}
+
+#query-history-list li {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+#query-history-list li:last-child {
+    border-bottom: none;
+}
+
+#query-history-list li:hover {
+    background-color: #f5f5f5;
+}
+/* Index Management View Specific Styles */
+#indexes-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+#indexes-table th, #indexes-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+#indexes-table th {
+    background-color: #f2f2f2;
+}
+
+#indexes-table button {
+    padding: 5px 8px;
+    cursor: pointer;
+    margin-right: 5px;
+}
+#indexes-table button:last-child {
+    margin-right: 0;
+}
+
+#index-details-area {
+    background-color: #f9f9f9;
+    border-radius: 4px;
+}
+
+#index-details-area h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+#index-details-content {
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 400px;
+    overflow-y: auto;
+    background-color: #fff;
+    padding: 8px;
+    border: 1px solid #eee;
+}
+
+
+/* Modal Styles (for Create Index Wizard) */
+.modal {
+    position: fixed; /* Stay in place */
+    z-index: 1000; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 10% auto; /* 10% from the top and centered */
+    padding: 20px;
+    border: 1px solid #888;
+    width: 60%; /* Could be more or less, depending on screen size */
+    border-radius: 8px;
+    position: relative;
+}
+
+.close-wizard-button {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    position: absolute;
+    top: 10px;
+    right: 20px;
+}
+
+.close-wizard-button:hover,
+.close-wizard-button:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.wizard-step {
+    padding: 10px;
+}
+
+.wizard-step h3 {
+    margin-top: 0;
+    color: #333;
+}
+.wizard-step label {
+    display: block;
+    margin-top: 10px;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+.wizard-step input[type="text"],
+.wizard-step input[type="number"],
+.wizard-step select,
+.wizard-step textarea {
+    width: 95%; /* More responsive */
+    padding: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+.wizard-step button {
+    padding: 10px 15px;
+    background-color: #5cb85c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 10px;
+}
+.wizard-step button:hover {
+    background-color: #4cae4c;
+}
+.wizard-step button[onclick*="wizardNavigate(1)"],
+.wizard-step button[onclick*="wizardNavigate(2)"],
+.wizard-step button[onclick*="wizardNavigate(3)"] { /* Previous buttons */
+    background-color: #f0ad4e;
+}
+.wizard-step button[onclick*="wizardNavigate(1)"]:hover,
+.wizard-step button[onclick*="wizardNavigate(2)"]:hover,
+.wizard-step button[onclick*="wizardNavigate(3)"]:hover {
+    background-color: #ec971f;
+}
+
+#wizard-step2-next[disabled] {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+/* Ingestion View Specific Styles */
+#ingestion-view .upload-section, #ingestion-view .jobs-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    border: 1px solid #eee;
+    border-radius: 5px;
+}
+
+#ingestion-view h3 {
+    margin-top: 0;
+}
+
+#ingestion-jobs-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+#ingestion-jobs-table th, #ingestion-jobs-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+#ingestion-jobs-table th {
+    background-color: #f2f2f2;
+}
+
+#ingestion-jobs-table button {
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+.upload-status-message {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.upload-status-message.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.upload-status-message.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+#quarantine-jobs-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+#quarantine-jobs-table th, #quarantine-jobs-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+#quarantine-jobs-table th {
+    background-color: #f2f2f2;
+}
+
+#quarantine-jobs-table button {
+    padding: 5px 8px; /* Slightly smaller padding for more buttons */
+    cursor: pointer;
+    margin-right: 5px;
+}
+#quarantine-jobs-table button:last-child {
+    margin-right: 0;
+}
+
+
+#quarantine-job-details {
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    margin-top: 10px; /* Already in HTML, can be reinforced here */
+    padding: 10px; /* Already in HTML, can be reinforced here */
+    border: 1px solid #ccc; /* Already in HTML, can be reinforced here */
+}
+
+#quarantine-job-details h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+#quarantine-details-content {
+    white-space: pre-wrap; /* Ensure preformatted text wraps */
+    word-break: break-all; /* Break long strings */
+    max-height: 300px; /* Limit height and make scrollable if needed */
+    overflow-y: auto;
+    background-color: #fff;
+    padding: 8px;
+    border: 1px solid #eee;
+}
+
+
+/* Footer Styles */
+/* #app-footer was in old CSS, HTML uses #status-bar for the footer element */
+#status-bar {
+    grid-area: footer;
+    background-color: #333;
+    color: white;
+    text-align: center;
+    padding: 10px 0;
+    font-size: 0.9em;
+}
+
+#status-bar p { /* Target the p tag inside for margin reset */
+    margin: 0;
+    padding: 10px 0; /* Add padding here instead of directly on #status-bar if it contains only p */
+    font-style: italic;
+}
+
+/* Utility Classes */
+.hidden {
+    display: none;
+}
