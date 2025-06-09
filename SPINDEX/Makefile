@@ -191,6 +191,10 @@ TEST_AVX_SEARCH_SRC = $(PLUGIN_DIR)/search_algorithms/test_avx512_phrase_search.
 TEST_AVX_SEARCH_DEPS_OBJS = $(AVX512_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o $(BUILD_DIR)/core/hardware_detection.o
 TEST_AVX_SEARCH_TARGET = $(BUILD_DIR)/test_avx512_phrase_search
 
+# Test Harness for OpenVINO Hardware-Specific Validation (Manual Execution)
+TEST_OPENVINO_HW_SRC = ./tests/test_openvino_classifier_hw.c
+TEST_OPENVINO_HW_TARGET = $(BUILD_DIR)/test_openvino_classifier_hw
+
 
 # Directory for staging plugins for tests
 TEST_PLUGINS_STAGING_DIR = $(BUILD_DIR)/plugins_for_test
@@ -359,6 +363,14 @@ $(TEST_AVX_SEARCH_TARGET): $(TEST_AVX_SEARCH_SRC) $(TEST_AVX_SEARCH_DEPS_OBJS)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_AVX_SEARCH_SRC) $(TEST_AVX_SEARCH_DEPS_OBJS) -o $@ $(LDFLAGS) -lm # Add -lm if any math functions are used, good practice
 	@echo "Built test program: $@"
+
+# Rule to build the OpenVINO hardware test harness
+$(TEST_OPENVINO_HW_TARGET): $(TEST_OPENVINO_HW_SRC) # Does not depend on plugin .so, as it loads it dynamically
+	@mkdir -p $(@D)
+	# CFLAGS includes general flags and OpenVINO includes.
+	# LDFLAGS includes general flags and OpenVINO libs/rpath. We add -ldl for dynamic loading.
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_OPENVINO_HW_SRC) -o $@ $(LDFLAGS) -ldl
+	@echo "Built OpenVINO Hardware Test Harness: $@ (Run manually on target hardware)"
 
 # ... (similar updates for other test targets if their dependencies changed, ensure linking core objects)
 

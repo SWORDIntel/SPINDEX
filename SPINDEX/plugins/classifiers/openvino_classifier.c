@@ -1,9 +1,11 @@
 #include "openvino_classifier.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <string.h> // Ensure string.h is included for strncpy/snprintf if not already
 
 // OpenVINO headers are now in openvino_classifier.h
+
+static char current_target_device[32] = "AUTO"; // Default device
 
 // Struct to hold OpenVINO runtime objects
 typedef struct {
@@ -12,6 +14,7 @@ typedef struct {
     ov_compiled_model_t* compiled_model;
     ov_infer_request_t* infer_request;
     char* model_path_copy; // In case model path is needed later
+    char compiled_on_device[32]; // Store the device name it was compiled on
 } OpenVINOModel;
 
 
@@ -32,7 +35,8 @@ int create_openvino_model_interface(SpindexMLModelInterface* model_interface, co
     // model_path is passed to openvino_load_model. The model isn't loaded here.
     // strcpy(model_interface->model_description, model_path ? model_path : "No model path specified yet");
     snprintf(model_interface->model_description, sizeof(model_interface->model_description),
-             "OpenVINO model. Path to be loaded by 'load': %s", model_path ? model_path : "NULL");
+             "OpenVINO model. Path: %s. Target device (set via openvino_set_target_device): %s",
+             model_path ? model_path : "NULL", current_target_device);
 
 
     fprintf(stdout, "OpenVINO model interface configured. Call 'load' to load model: %s\n", model_path ? model_path : "NULL");
@@ -56,6 +60,7 @@ int openvino_load_model(const char* model_path, ModelHandle* model_handle_ptr) {
     ov_model->compiled_model = NULL;
     ov_model->infer_request = NULL;
     ov_model->model_path_copy = NULL;
+    ov_model->compiled_on_device[0] = '\0'; // Initialize compiled_on_device
 
 
     ov_model->model_path_copy = strdup(model_path);
@@ -96,12 +101,11 @@ int openvino_load_model(const char* model_path, ModelHandle* model_handle_ptr) {
     //    For Intel Meteor Lake 165h, this could be the NPU.
     //    To explicitly target the NPU, "NPU" can be used.
     //    Device selection could be made configurable in a future enhancement.
-    const char* device_name = "AUTO";
-    // const char* device_name = "NPU"; // Example for explicit NPU targeting
-    fprintf(stdout, "Compiling OpenVINO model for device: %s\n", device_name);
-    status = ov_core_compile_model(ov_model->core, ov_model->model, device_name, 0, &ov_model->compiled_model);
+    // const char* device_name = "AUTO"; // Old line
+    fprintf(stdout, "Compiling OpenVINO model for device: %s (from current_target_device)\n", current_target_device);
+    status = ov_core_compile_model(ov_model->core, ov_model->model, current_target_device, 0, &ov_model->compiled_model);
     if (status != OV_STATUS_SUCCESS) {
-        fprintf(stderr, "Error: Failed to compile OpenVINO model for device %s. Status: %d\n", device_name, status);
+        fprintf(stderr, "Error: Failed to compile OpenVINO model for device %s. Status: %d\n", current_target_device, status);
         ov_model_free(ov_model->model);
         ov_core_free(ov_model->core);
         free(ov_model->model_path_copy);
@@ -133,9 +137,25 @@ int openvino_load_model(const char* model_path, ModelHandle* model_handle_ptr) {
         return 1;
     }
 
+    // After successfully creating infer_request and before returning 0
+    strncpy(ov_model->compiled_on_device, current_target_device, sizeof(ov_model->compiled_on_device) - 1);
+    ov_model->compiled_on_device[sizeof(ov_model->compiled_on_device) - 1] = '\0';
+
     *model_handle_ptr = (ModelHandle)ov_model;
-    fprintf(stdout, "OpenVINO model loaded and compiled successfully. Handle: %p\n", *model_handle_ptr);
+    fprintf(stdout, "OpenVINO model loaded and compiled successfully on device '%s'. Handle: %p\n", ov_model->compiled_on_device, *model_handle_ptr);
     return 0; // Success
+}
+
+void openvino_set_target_device(const char* device) {
+    if (device && strlen(device) < sizeof(current_target_device)) {
+        strncpy(current_target_device, device, sizeof(current_target_device) - 1);
+        current_target_device[sizeof(current_target_device) - 1] = '\0';
+        fprintf(stdout, "OpenVINO target device set to: %s\n", current_target_device);
+    } else if (device) {
+        fprintf(stderr, "Error: Provided device name '%s' is too long (max %zu chars).\n", device, sizeof(current_target_device) -1);
+    } else {
+        fprintf(stderr, "Error: Provided device name is NULL. Current target device '%s' unchanged.\n", current_target_device);
+    }
 }
 
 void openvino_unload_model(ModelHandle model_handle) {
