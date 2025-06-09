@@ -42,6 +42,8 @@ class IngestionJobDB(Base):
     celery_task_id = Column(String, nullable=True, index=True, unique=True) # Celery task ID should be unique
 
     geocoding_summary = Column(JSON, nullable=True) # Summary from geocoding stage
+    complex_geometry_summary = Column(JSON, nullable=True) # Summary from complex geometry handling
+    ner_summary = Column(JSON, nullable=True) # Summary from NER processing stage
 
     # Consider adding 'created_at' and 'updated_at' managed by SQLAlchemy/database
     # For example:
@@ -53,12 +55,12 @@ class IngestionJobDB(Base):
 
 # If you had other models, they would be defined here, e.g.:
 # class IndexMetadataDB(Base):
-#     __tablename__ = "spatial_indexes"
-#     # ... columns ...
+#      __tablename__ = "spatial_indexes"
+#      # ... columns ...
 
 # class QueryHistoryDB(Base):
-#     __tablename__ = "query_history"
-#     # ... columns ...
+#      __tablename__ = "query_history"
+#      # ... columns ...
 
 # Note: To initialize these tables in your database, you will typically use Alembic migrations.
 # Ensure that `Base.metadata.create_all(bind=engine)` in `database.py` is commented out

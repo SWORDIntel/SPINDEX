@@ -24,8 +24,10 @@ def create_ingestion_job(db: Session, job_data: Dict[str, Any]) -> models.Ingest
         celery_task_id=job_data.get('celery_task_id'),
         pipeline_stages_executed_log=job_data.get('pipeline_stages_executed_log', []),
         error_log_references=job_data.get('error_log_references', []),
-        validation_summary=job_data.get('validation_summary'), # Ensure this is handled
-        geocoding_summary=job_data.get('geocoding_summary')  # Add new field
+        validation_summary=job_data.get('validation_summary'),
+        geocoding_summary=job_data.get('geocoding_summary'),
+        complex_geometry_summary=job_data.get('complex_geometry_summary'),
+        ner_summary=job_data.get('ner_summary') # Add new field
         # Add other fields as necessary, ensuring defaults or None if not provided
     )
     db.add(db_job)
@@ -65,7 +67,7 @@ def update_pipeline_log(db: Session, job_id: str, log_entry: Dict[str, Any]):
         # db.refresh(db_job)
     else:
         # Log error: job not found
-        print(f"Error in update_pipeline_log: Job {job_id} not found.")
+        print(f"Error in update_pi")peline_log: Job {job_id} not found.")
 
 
 def update_validation_summary(db: Session, job_id: str, summary_update: Dict[str, Any]):
