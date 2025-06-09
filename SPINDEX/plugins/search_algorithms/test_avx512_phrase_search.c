@@ -8,10 +8,9 @@
 #include "../../include/plugin_interface.h"
 #include "../../include/data_types.h"
 #include "../../include/avx_search_params.h"
-// For logging and CPU detection, we include the .c files directly for this test compilation.
-// In a real build system, we'd link against their compiled object files.
-#include "../../core/utils.c"
-#include "../../core/hardware_detection.c"
+// Include header files for utilities and hardware detection
+#include "../../include/utils.h"
+#include "../../include/hardware_detection.h"
 
 // Forward declare plugin functions (assuming avx512_phrase_search.c is compiled alongside)
 extern void avx512_get_info(PluginInfo *info);
