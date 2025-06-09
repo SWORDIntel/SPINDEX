@@ -55,12 +55,12 @@ class IngestionJobDB(Base):
 
 # If you had other models, they would be defined here, e.g.:
 # class IndexMetadataDB(Base):
-#     __tablename__ = "spatial_indexes"
-#     # ... columns ...
+#      __tablename__ = "spatial_indexes"
+#      # ... columns ...
 
 # class QueryHistoryDB(Base):
-#     __tablename__ = "query_history"
-#     # ... columns ...
+#      __tablename__ = "query_history"
+#      # ... columns ...
 
 # Note: To initialize these tables in your database, you will typically use Alembic migrations.
 # Ensure that `Base.metadata.create_all(bind=engine)` in `database.py` is commented out

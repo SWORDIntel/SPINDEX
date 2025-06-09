@@ -67,7 +67,7 @@ def update_pipeline_log(db: Session, job_id: str, log_entry: Dict[str, Any]):
         # db.refresh(db_job)
     else:
         # Log error: job not found
-        print(f"Error in update_pipeline_log: Job {job_id} not found.")
+        print(f"Error in update_pi")peline_log: Job {job_id} not found.")
 
 
 def update_validation_summary(db: Session, job_id: str, summary_update: Dict[str, Any]):
