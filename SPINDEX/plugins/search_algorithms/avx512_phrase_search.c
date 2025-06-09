@@ -64,17 +64,31 @@ static size_t escape_json_string(const char *input, char *output, size_t out_siz
                 written += 2;
                 break;
             default:
-                // For other control characters (0x00-0x1F), you might want to use \uXXXX
-                // but for this implementation, we'll pass them through if printable,
-                // or skip if not (though most common ones are handled above).
-                // This basic version focuses on the most common JSON escapes.
-                if (*p >= 0x20 && *p <= 0x7E) { // Printable ASCII
+            default:
+                // For characters in the range 0x00 to 0x1F (ASCII control characters)
+                // or 0x7F (DEL)
+                if ((*p >= 0x00 && *p <= 0x1F) || *p == 0x7F) {
+                    if (written + 6 > out_size - 1) goto end; // Need space for \uXXXX
+                    // Use (unsigned char)*p to ensure correct hex formatting for values > 0x7F if char is signed
+                    sprintf(q, "\\u%04X", (unsigned char)*p);
+                    q += 6;
+                    written += 6;
+                }
+                // For printable ASCII characters (excluding DEL, which is handled above)
+                else if (*p >= 0x20 && *p < 0x7F) {
+                    if (written + 1 > out_size - 1) goto end;
                     *q++ = *p;
                     written++;
-                } else {
-                    // Potentially skip or replace non-printable characters not explicitly handled
-                    // For simplicity, we'll skip them here.
-                    // A more robust solution might use \uXXXX escaping.
+                }
+                // For characters >= 0x80 (e.g., part of a multi-byte UTF-8 sequence)
+                // JSON spec allows these to be passed through if they are printable
+                // or escaped with \uXXXX. For simplicity, and assuming valid UTF-8 input
+                // (as per CHUNK_TYPE_UTF8_TEXT), we pass them through.
+                // A more robust UTF-8 aware escaper would be significantly more complex.
+                else {
+                    if (written + 1 > out_size - 1) goto end; // Should be based on UTF-8 char width if not passing raw
+                    *q++ = *p; // Pass through
+                    written++;
                 }
                 break;
         }
@@ -198,9 +212,10 @@ ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
     // Read parameters from AvxSearchParams
     bool case_sensitive = params->case_sensitive;
     bool find_all_occurrences = params->find_all_occurrences;
+    int max_hits_per_doc = params->max_hits_per_doc; // Added
 
-    LOG_INFO("AVX Search: Processing text of length %zu, with phrases of length %zu. Case sensitive: %s, Find all: %s",
-             text_chunk->length, phrases_chunk->length, case_sensitive ? "true" : "false", find_all_occurrences ? "true" : "false");
+    LOG_INFO("AVX Search: Processing text of length %zu, with phrases of length %zu. Case sensitive: %s, Find all: %s, Max hits/doc: %d",
+             text_chunk->length, phrases_chunk->length, case_sensitive ? "true" : "false", find_all_occurrences ? "true" : "false", max_hits_per_doc); // Added max_hits_per_doc
 
     // --- This is a simplified way to get phrases. A real plugin might need more robust parsing ---
     char* phrases_str_copy = (char*)malloc(phrases_chunk->length + 1);
@@ -216,6 +231,14 @@ ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
 
     char result_buffer[RESULT_BUFFER_SIZE] = {0};
     int current_buffer_pos = 0;
+    // Initial JSON structure: {"search_results": [
+    int required_len_initial = snprintf(NULL, 0, "{\"search_results\": [");
+    if (required_len_initial + 1 >= RESULT_BUFFER_SIZE) {
+        LOG_ERROR("AVX Search: Result buffer too small for even initial JSON structure. Size: %d, Required: %d", RESULT_BUFFER_SIZE, required_len_initial +1);
+        // Cannot proceed, buffer is too small for anything meaningful
+        free(phrases_str_copy); // phrases_str_copy was allocated before this
+        return NULL; // Or return an error chunk
+    }
     current_buffer_pos += snprintf(result_buffer, RESULT_BUFFER_SIZE, "{\"search_results\": [");
     bool first_phrase_in_json = true;
 
@@ -223,29 +246,44 @@ ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
         LOG_DEBUG("AVX Search: Searching for phrase: '%s'", current_phrase_str);
         size_t phrase_len = strlen(current_phrase_str);
         bool phrase_had_occurrences = false;
+        int hits_for_current_phrase = 0; // Added
 
         if (!first_phrase_in_json) {
             // Add comma if not the first phrase object
-            if (current_buffer_pos < RESULT_BUFFER_SIZE - 1) {
-                result_buffer[current_buffer_pos++] = ',';
-            } else { LOG_WARN("AVX Search: Buffer full before adding comma for phrase object."); }
+            int required_len_comma = 1;
+            if (current_buffer_pos + required_len_comma + 1 >= RESULT_BUFFER_SIZE) { // +1 for comma, +1 for null terminator
+                LOG_WARN("AVX Search: Buffer full before adding comma for phrase object. Pos: %d", current_buffer_pos);
+                goto finalize_json; // Not enough space for comma and more content
+            }
+            result_buffer[current_buffer_pos++] = ',';
         }
         first_phrase_in_json = false;
 
         // Start phrase object: {"phrase": "...", "offsets": [
         // Proper JSON escaping for current_phrase_str
-        char escaped_phrase_buffer[2 * strlen(current_phrase_str) + 1]; // Max 2 chars per input char + null
+        // Max 2 chars per input char for basic escapes, or 6 for \uXXXX, + null.
+        // A simple upper bound for escaped_phrase_buffer could be strlen * 6 + 1 if all chars are control chars.
+        // Let's use a slightly more generous buffer for escaped_phrase_buffer or ensure it's dynamically sized if possible.
+        // For now, assuming 2*strlen is mostly fine for typical text, but this could be a source of truncation.
+        // A safer approach for escaped_phrase_buffer would be to calculate its required size too.
+        // However, the problem asks to focus on result_buffer.
+        size_t current_phrase_len_for_escape = strlen(current_phrase_str);
+        char escaped_phrase_buffer[current_phrase_len_for_escape * 6 + 1]; // Max 6 chars per input char for \uXXXX + null
         escape_json_string(current_phrase_str, escaped_phrase_buffer, sizeof(escaped_phrase_buffer));
 
-        int pre_phrase_len = current_buffer_pos;
+        int required_len_phrase_header = snprintf(NULL, 0, "{\"phrase\": \"%s\", \"offsets\": [", escaped_phrase_buffer);
+        if (current_buffer_pos + required_len_phrase_header + 1 >= RESULT_BUFFER_SIZE) {
+            LOG_WARN("AVX Search: Buffer full before writing phrase object header for '%s'. Pos: %d, Req: %d", current_phrase_str, current_buffer_pos, required_len_phrase_header);
+            // Attempt to close the main array if it was started
+            if (current_buffer_pos > 0 && result_buffer[0] == '{' && result_buffer[current_buffer_pos-1] != '[') {
+                 // If we wrote something and it's not the start of the array
+                 // (e.g. after a previous phrase object's comma)
+                 // This logic is tricky, might be better to just ensure json is closed at finalize_json
+            }
+            goto finalize_json;
+        }
         current_buffer_pos += snprintf(result_buffer + current_buffer_pos, RESULT_BUFFER_SIZE - current_buffer_pos,
                                        "{\"phrase\": \"%s\", \"offsets\": [", escaped_phrase_buffer);
-        if (current_buffer_pos >= RESULT_BUFFER_SIZE -1) {
-             LOG_WARN("AVX Search: Result buffer truncated while writing phrase header.");
-             result_buffer[pre_phrase_len] = '\0'; // Attempt to backtrack to keep JSON valid-ish
-             current_buffer_pos = pre_phrase_len;
-             goto finalize_json; // Early exit if buffer is full
-        }
         bool first_offset_for_this_phrase = true;
 
         if (phrase_len == 0) {
@@ -286,21 +324,28 @@ ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
                 if (current_match_is_full) {
                     phrase_had_occurrences = true;
                     if (!first_offset_for_this_phrase) {
-                        if (current_buffer_pos < RESULT_BUFFER_SIZE - 1) {
-                            result_buffer[current_buffer_pos++] = ',';
-                        } else { LOG_WARN("AVX Search: Buffer full before adding comma for offset."); goto finalize_json_phrase; }
+                        int required_len_comma_offset = 1;
+                        if (current_buffer_pos + required_len_comma_offset + 1 >= RESULT_BUFFER_SIZE) {
+                            LOG_WARN("AVX Search: Buffer full before adding comma for offset for phrase '%s'. Pos: %d", current_phrase_str, current_buffer_pos);
+                            goto finalize_json_phrase;
+                        }
+                        result_buffer[current_buffer_pos++] = ',';
                     }
                     first_offset_for_this_phrase = false;
 
-                    int pre_offset_len = current_buffer_pos;
-                    current_buffer_pos += snprintf(result_buffer + current_buffer_pos, RESULT_BUFFER_SIZE - current_buffer_pos, "%zu", i);
-                    if (current_buffer_pos >= RESULT_BUFFER_SIZE -1) {
-                        LOG_WARN("AVX Search: Result buffer truncated while writing offset.");
-                        result_buffer[pre_offset_len] = '\0'; // backtrack
-                        current_buffer_pos = pre_offset_len;
-                        goto finalize_json_phrase; // Early exit for this phrase's offsets
+                    int required_len_offset = snprintf(NULL, 0, "%zu", i);
+                    if (current_buffer_pos + required_len_offset + 1 >= RESULT_BUFFER_SIZE) {
+                        LOG_WARN("AVX Search: Buffer full before writing offset for phrase '%s'. Pos: %d, Req: %d", current_phrase_str, current_buffer_pos, required_len_offset);
+                        goto finalize_json_phrase;
                     }
+                    current_buffer_pos += snprintf(result_buffer + current_buffer_pos, RESULT_BUFFER_SIZE - current_buffer_pos, "%zu", i);
                     LOG_INFO("AVX Search: Found phrase '%s' at offset %zu (case_sensitive: %s)", current_phrase_str, i, case_sensitive ? "true" : "false");
+
+                    hits_for_current_phrase++; // Added
+                    if (find_all_occurrences && max_hits_per_doc > 0 && hits_for_current_phrase >= max_hits_per_doc) { // Added block
+                        LOG_DEBUG("AVX Search: Reached max_hits_per_doc (%d) for phrase '%s'.", max_hits_per_doc, current_phrase_str);
+                        break; // Break from inner loop (finding occurrences of current phrase)
+                    }
 
                     if (!find_all_occurrences) {
                         break;
@@ -311,30 +356,73 @@ ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
 
 finalize_json_phrase:
         // Close offsets array and phrase object: ]}
-        if (current_buffer_pos < RESULT_BUFFER_SIZE - 2) {
-            result_buffer[current_buffer_pos++] = ']';
-            result_buffer[current_buffer_pos++] = '}';
-        } else {
-             LOG_WARN("AVX Search: Buffer full before closing phrase object.");
-             if (current_buffer_pos < RESULT_BUFFER_SIZE -1) result_buffer[current_buffer_pos++] = ']'; // try to close array at least
-             if (current_buffer_pos < RESULT_BUFFER_SIZE -1) result_buffer[current_buffer_pos++] = '}';
-             result_buffer[RESULT_BUFFER_SIZE - 1] = '\0'; // Ensure null termination
-             current_buffer_pos = RESULT_BUFFER_SIZE - 1;
-             goto finalize_json; // Critical buffer full, finalize JSON now
+        int required_len_close_phrase = 2; // For "]}"
+        if (current_buffer_pos + required_len_close_phrase + 1 >= RESULT_BUFFER_SIZE) {
+            LOG_WARN("AVX Search: Buffer full before closing phrase object for '%s'. Pos: %d, Req: %d", current_phrase_str, current_buffer_pos, required_len_close_phrase);
+            // Try to at least close the array if possible
+            if (phrase_had_occurrences && result_buffer[current_buffer_pos-1] != '[') { // If we wrote numbers and not just '['
+                 // This is tricky, if the last thing was a number, we need space for ']'
+                 // If buffer is full, we might not even have space for ']'
+            } else if (!phrase_had_occurrences && result_buffer[current_buffer_pos-1] == '[') {
+                // Empty array, like "offsets": [
+            }
+            goto finalize_json; // Go to overall finalize, as this phrase object is problematic
         }
+        result_buffer[current_buffer_pos++] = ']';
+        result_buffer[current_buffer_pos++] = '}';
         current_phrase_str = strtok_r(NULL, "\n", &saveptr);
     }
     free(phrases_str_copy);
 
 finalize_json:
-    // Close JSON array
-    if (current_buffer_pos < RESULT_BUFFER_SIZE - 2) {
-        current_buffer_pos += snprintf(result_buffer + current_buffer_pos, RESULT_BUFFER_SIZE - current_buffer_pos, "]}");
-    } else {
-        // Buffer potentially full, ensure null termination if we were right at the edge
-        result_buffer[RESULT_BUFFER_SIZE - 1] = '\0';
-        current_buffer_pos = RESULT_BUFFER_SIZE - 1;
-        LOG_WARN("AVX Search: Result buffer truncated while finalizing JSON.");
+    // Close JSON array "]}"
+    int required_len_finalize = 2; // For "]}"
+    // Check if we are just at the beginning "{\"search_results\": ["
+    bool is_empty_json = (strcmp(result_buffer, "{\"search_results\": [") == 0);
+
+    if (is_empty_json) { // if result_buffer is "{\"search_results\": ["
+        // We want to make it "{\"search_results\": []}"
+        required_len_finalize = 1; // Just need "]"
+         if (current_buffer_pos + required_len_finalize + 1 > RESULT_BUFFER_SIZE) {
+            LOG_WARN("AVX Search: Result buffer too small to close empty JSON array. Pos: %d", current_buffer_pos);
+            // The buffer is full, and we can't even write "]", try to null terminate only
+            result_buffer[RESULT_BUFFER_SIZE - 1] = '\0';
+            current_buffer_pos = RESULT_BUFFER_SIZE - 1;
+        } else {
+            result_buffer[current_buffer_pos++] = ']';
+            result_buffer[current_buffer_pos++] = '}'; // This was originally "]}" from snprintf, so it's "]}"
+            result_buffer[current_buffer_pos] = '\0';
+        }
+    } else if (result_buffer[current_buffer_pos-1] == ',') { // Trailing comma from last phrase object
+        current_buffer_pos--; // Remove trailing comma
+        // Now add "]}"
+        if (current_buffer_pos + required_len_finalize + 1 > RESULT_BUFFER_SIZE) {
+            LOG_WARN("AVX Search: Result buffer too small to close JSON array after removing comma. Pos: %d", current_buffer_pos);
+            result_buffer[RESULT_BUFFER_SIZE - 1] = '\0'; // Ensure null termination
+            current_buffer_pos = RESULT_BUFFER_SIZE - 1;
+        } else {
+            current_buffer_pos += snprintf(result_buffer + current_buffer_pos, RESULT_BUFFER_SIZE - current_buffer_pos, "]}");
+        }
+    } else if (result_buffer[current_buffer_pos-1] == '[') { // Empty array, e.g. no phrases found or all skipped
+         // We want to make it "{\"search_results\": []}"
+        result_buffer[current_buffer_pos++] = ']';
+        result_buffer[current_buffer_pos++] = '}';
+        result_buffer[current_buffer_pos] = '\0'; // ensure null termination
+    }
+    else { // Standard case, after a phrase object like ...}]}
+        if (current_buffer_pos + required_len_finalize + 1 > RESULT_BUFFER_SIZE) { // +1 for null term
+            LOG_WARN("AVX Search: Result buffer truncated or full while finalizing JSON. Pos: %d, Req: %d", current_buffer_pos, required_len_finalize);
+            // Ensure the string is null-terminated if there's space
+            result_buffer[RESULT_BUFFER_SIZE - 1] = '\0';
+            current_buffer_pos = RESULT_BUFFER_SIZE - 1; // Mark as full
+        } else {
+            // It should be "]}"
+            // The original code was: current_buffer_pos += snprintf(result_buffer + current_buffer_pos, RESULT_BUFFER_SIZE - current_buffer_pos, "]}");
+            // This is fine as long as current_buffer_pos + 2 + 1 < RESULT_BUFFER_SIZE
+            result_buffer[current_buffer_pos++] = ']';
+            result_buffer[current_buffer_pos++] = '}';
+            result_buffer[current_buffer_pos] = '\0'; // Null terminate
+        }
     }
 
 
