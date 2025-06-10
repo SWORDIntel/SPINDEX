@@ -18,4 +18,8 @@ int openvino_predict(ModelHandle model_handle,
                      const ProcessedDataChunk* input_data,
                      ProcessedDataChunk** output_data_ptr);
 
+// Sets the target device for OpenVINO model compilation (e.g., "CPU", "GPU", "NPU", "AUTO").
+// Should be called before openvino_load_model via the interface.
+void openvino_set_target_device(const char* device);
+
 #endif // OPENVINO_CLASSIFIER_H

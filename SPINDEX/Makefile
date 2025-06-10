@@ -185,6 +185,16 @@ TEST_SQLITE_PREPROCESSOR_SRC = $(PLUGIN_DIR)/preprocessors/test_sqlite_preproces
 TEST_SQLITE_PREPROCESSOR_DEPS = $(SQLITE_PREPROCESSOR_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o
 TEST_SQLITE_PREPROCESSOR_TARGET = $(BUILD_DIR)/test_sqlite_preprocessor
 
+# AVX Search Test Program
+TEST_AVX_SEARCH_SRC = $(PLUGIN_DIR)/search_algorithms/test_avx512_phrase_search.c
+# Dependencies: the plugin object itself, core utils, and core hardware detection
+TEST_AVX_SEARCH_DEPS_OBJS = $(AVX512_PLUGIN_OBJ) $(BUILD_DIR)/core/utils.o $(BUILD_DIR)/core/hardware_detection.o
+TEST_AVX_SEARCH_TARGET = $(BUILD_DIR)/test_avx512_phrase_search
+
+# Test Harness for OpenVINO Hardware-Specific Validation (Manual Execution)
+TEST_OPENVINO_HW_SRC = ./tests/test_openvino_classifier_hw.c
+TEST_OPENVINO_HW_TARGET = $(BUILD_DIR)/test_openvino_classifier_hw
+
 
 # Directory for staging plugins for tests
 TEST_PLUGINS_STAGING_DIR = $(BUILD_DIR)/plugins_for_test
@@ -342,12 +352,25 @@ $(BUILD_DIR)/core/elasticsearch_client.o: $(CORE_DIR)/elasticsearch_client.c $(I
 
 # --- Test Program Rules ---
 # ... (test rules remain largely unchanged, but ensure they link against necessary objects) ...
-tests: $(TEST_CONFIG_LOADER_TARGET) $(TEST_PLUGIN_LOADER_TARGET) $(TEST_LOGGER_TARGET) $(TEST_HW_DETECT_TARGET) $(TEST_PIPELINE_TARGET) $(TEST_ES_CLIENT_TARGET) $(TEST_ES_INDEXING_TARGET) $(TEST_DOC_PARSER_TARGET) $(TEST_DOC_PREPROCESSOR_TARGET) $(TEST_XLS_PARSER_TARGET) $(TEST_XLS_PREPROCESSOR_TARGET) $(TEST_PDF_PARSER_TARGET) $(TEST_PDF_PREPROCESSOR_TARGET) $(TEST_RTF_PARSER_TARGET) $(TEST_RTF_PREPROCESSOR_TARGET) $(TEST_DIC_PARSER_TARGET) $(TEST_DIC_PREPROCESSOR_TARGET) $(TEST_SQLITE_PARSER_TARGET) $(TEST_SQLITE_PREPROCESSOR_TARGET)
+tests: $(TEST_CONFIG_LOADER_TARGET) $(TEST_PLUGIN_LOADER_TARGET) $(TEST_LOGGER_TARGET) $(TEST_HW_DETECT_TARGET) $(TEST_PIPELINE_TARGET) $(TEST_ES_CLIENT_TARGET) $(TEST_ES_INDEXING_TARGET) $(TEST_DOC_PARSER_TARGET) $(TEST_DOC_PREPROCESSOR_TARGET) $(TEST_XLS_PARSER_TARGET) $(TEST_XLS_PREPROCESSOR_TARGET) $(TEST_PDF_PARSER_TARGET) $(TEST_PDF_PREPROCESSOR_TARGET) $(TEST_RTF_PARSER_TARGET) $(TEST_RTF_PREPROCESSOR_TARGET) $(TEST_DIC_PARSER_TARGET) $(TEST_DIC_PREPROCESSOR_TARGET) $(TEST_SQLITE_PARSER_TARGET) $(TEST_SQLITE_PREPROCESSOR_TARGET) $(TEST_AVX_SEARCH_TARGET)
 
 $(TEST_CONFIG_LOADER_TARGET): $(TEST_CONFIG_LOADER_SRC) $(TEST_CONFIG_LOADER_DEPS)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $^ -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
+
+$(TEST_AVX_SEARCH_TARGET): $(TEST_AVX_SEARCH_SRC) $(TEST_AVX_SEARCH_DEPS_OBJS)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_AVX_SEARCH_SRC) $(TEST_AVX_SEARCH_DEPS_OBJS) -o $@ $(LDFLAGS) -lm # Add -lm if any math functions are used, good practice
+	@echo "Built test program: $@"
+
+# Rule to build the OpenVINO hardware test harness
+$(TEST_OPENVINO_HW_TARGET): $(TEST_OPENVINO_HW_SRC) # Does not depend on plugin .so, as it loads it dynamically
+	@mkdir -p $(@D)
+	# CFLAGS includes general flags and OpenVINO includes.
+	# LDFLAGS includes general flags and OpenVINO libs/rpath. We add -ldl for dynamic loading.
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) $(TEST_OPENVINO_HW_SRC) -o $@ $(LDFLAGS) -ldl
+	@echo "Built OpenVINO Hardware Test Harness: $@ (Run manually on target hardware)"
 
 # ... (similar updates for other test targets if their dependencies changed, ensure linking core objects)
 
