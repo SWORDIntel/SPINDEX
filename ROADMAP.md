@@ -95,7 +95,7 @@ Status: Pending
 6.  **Task: [AEGIS-006] Implement CRS Transformation module**
     *   Description: Develop the pipeline module to auto-detect source CRS and re-project geometries to a standard internal CRS (e.g., EPSG:4326).
     *   Priority: Medium
-    *   Status: To Do
+    *   Status: DONE ✅
 7.  **Task: [AEGIS-007] Implement Geocoding Service Integration module**
     *   Description: Develop the module to identify address fields and integrate with a geocoding service to generate point geometries.
     *   Priority: Medium
