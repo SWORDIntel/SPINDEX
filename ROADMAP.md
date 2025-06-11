@@ -75,31 +75,31 @@ Status: Pending
 1.  **Task: [AEGIS-001] Design and Implement Secure Upload/Reception Endpoint**
     *   Description: Establish the API endpoint for secure file uploads, including initial validation (size, MIME type) and robust authentication/authorization.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 2.  **Task: [AEGIS-002] Implement Staging Area for raw data**
     *   Description: Set up a secure, isolated temporary storage location for uploaded raw data before processing.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 3.  **Task: [AEGIS-003] Implement Ingestion Task Trigger mechanism**
     *   Description: Integrate a message queue (e.g., RabbitMQ, Redis) to publish tasks for asynchronous processing upon successful data staging.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 4.  **Task: [AEGIS-004] Develop Pipeline Worker Execution framework**
     *   Description: Create the Celery worker (or similar) infrastructure capable of subscribing to the task queue and executing a sequence of processing modules.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 5.  **Task: [AEGIS-005] Implement Format Conversion & Abstraction module (GDAL/OGR)**
     *   Description: Develop the pipeline module to detect input vector formats and convert them to a standard interchange format like GeoJSON using GDAL/OGR.
     *   Priority: Medium
-    *   Status: To Do
+    *   Status: DONE ✅
 6.  **Task: [AEGIS-006] Implement CRS Transformation module**
     *   Description: Develop the pipeline module to auto-detect source CRS and re-project geometries to a standard internal CRS (e.g., EPSG:4326).
     *   Priority: Medium
-    *   Status: To Do
+    *   Status: DONE ✅
 7.  **Task: [AEGIS-007] Implement Geocoding Service Integration module**
     *   Description: Develop the module to identify address fields and integrate with a geocoding service to generate point geometries.
     *   Priority: Medium
-    *   Status: To Do
+    *   Status: DONE ✅
 8.  **Task: [AEGIS-008] Implement Complex Geometry Handling module**
     *   Description: Develop the module to manage datasets with mixed geometry types based on configurable strategies (split, filter, reject).
     *   Priority: Medium

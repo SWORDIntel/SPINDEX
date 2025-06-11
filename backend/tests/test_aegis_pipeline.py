@@ -10,10 +10,14 @@ from typing import Optional
 
 # Adjust paths for imports based on execution from repository root or if backend/ is a module
 # Assuming tests might be run from the repo root, and PYTHONPATH includes the root.
-from backend.main import app, get_current_user, User, Role, STAGING_AREA_PATH, ALLOWED_MIME_TYPES, MAX_FILE_SIZE, PROCESSED_AREA_PATH, TARGET_CRS_EPSG
-from backend.main import process_ingestion_job_task # Import the Celery task
+from backend.main import app, get_current_user, User, Role, STAGING_AREA_PATH, ALLOWED_MIME_TYPES, MAX_FILE_SIZE, PROCESSED_AREA_PATH, TARGET_CRS_EPSG, NOMINATIM_USER_AGENT, GEOCODING_ADDRESS_FIELDS
+from backend.main import process_ingestion_job_task, geocode_and_update_features # Import the Celery task and helper
+from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError
 # from osgeo import osr # Import for creating osr.SpatialReference mock instances if needed directly in test setup
 from backend.database import SessionLocal, get_db, Base, engine
+import json
+import time # For mocking time.sleep
+import logging
 from backend.models import IngestionJobDB
 from backend import crud
 
@@ -88,6 +92,81 @@ def test_upload_file_unsupported_mime_type():
     unsupported_mime_type = f"application/x-test-disallowed-{uuid.uuid4()}"
     response = client.post("/aegis/upload", headers={"X-Auth-Token": ADMIN_TOKEN}, files={"file": ("image.jpg", b"fakejpegcontent", unsupported_mime_type)})
     assert response.status_code == 415
+
+@patch('backend.main.process_ingestion_job_task.delay')
+def test_upload_file_celery_submission_failure(mock_celery_delay):
+    mock_celery_delay.side_effect = Exception("Celery down") # Simulate Celery task submission failure
+
+    os.makedirs(STAGING_AREA_PATH, exist_ok=True)
+    test_filename = f"test_celery_fail_{uuid.uuid4()}.txt"
+    test_content = b"Content for celery failure test."
+
+    # Create a temporary file to upload
+    with open(test_filename, "wb") as f:
+        f.write(test_content)
+
+    staged_file_path_to_delete = None
+    job_id_to_delete = None
+
+    try:
+        with open(test_filename, "rb") as f_upload:
+            response = client.post(
+                "/aegis/upload",
+                headers={"X-Auth-Token": ADMIN_TOKEN}, # User with upload permission
+                files={"file": (test_filename, f_upload, "text/plain")} # Valid file and mime type
+            )
+
+        # The upload endpoint should still succeed initially, as file is staged and job record created
+        assert response.status_code == 200
+        data = response.json()
+        assert data["filename"] == test_filename
+        assert "job_id" in data
+        job_id_to_delete = data["job_id"]
+        staged_file_path_to_delete = data["staged_filepath"]
+
+        assert os.path.exists(staged_file_path_to_delete) # File should still be staged
+
+        # Verify the database record
+        db = next(get_test_db_session())
+        try:
+            job_db = crud.get_ingestion_job(db, job_id_to_delete)
+            assert job_db is not None
+            assert job_db.original_filename == test_filename
+            assert job_db.user_id == "admin" # Based on ADMIN_TOKEN
+            assert job_db.processing_status == "failed_task_submission"
+            assert job_db.celery_task_id is None # Celery task ID should not be set
+
+            assert len(job_db.error_log_references) == 1
+            assert "Celery task submission failed: Celery down" in job_db.error_log_references[0]
+
+            assert job_db.pipeline_stages_executed_log is not None
+            upload_log_found = False
+            celery_fail_log_found = False
+            for log_entry in job_db.pipeline_stages_executed_log:
+                if log_entry["stage"] == "upload" and log_entry["status"] == "success":
+                    upload_log_found = True
+                if log_entry["stage"] == "Celery Task Submission" and log_entry["status"] == "failed":
+                    assert "Celery task submission failed: Celery down" in log_entry["message"]
+                    celery_fail_log_found = True
+            assert upload_log_found
+            assert celery_fail_log_found
+
+        finally:
+            db.close()
+
+    finally:
+        if os.path.exists(test_filename):
+            os.remove(test_filename)
+        if staged_file_path_to_delete and os.path.exists(staged_file_path_to_delete):
+            # Basic safety check to prevent accidental deletion outside STAGING_AREA_PATH
+            if STAGING_AREA_PATH in os.path.abspath(staged_file_path_to_delete):
+                os.remove(staged_file_path_to_delete)
+        if job_id_to_delete:
+            db = next(get_test_db_session())
+            try:
+                crud.remove_ingestion_job(db, job_id_to_delete)
+            finally:
+                db.close()
 
 # --- Celery Task Tests ---
 
@@ -417,3 +496,232 @@ def test_celery_task_crs_transformation_failure(mock_osr, mock_gdal, mock_ogr):
 # The test `test_celery_task_success` has been renamed to `test_celery_task_format_related_success_no_crs_transform`
 # to specifically test the case where the input is already GeoJSON and in the target CRS.
 # The test `test_celery_task_crs_detection_and_transformation_success` covers a different source CRS.
+
+
+# --- Tests for geocode_and_update_features Helper ---
+
+# Mock logger to pass to the function
+mock_logger = logging.getLogger("test_geocoding_helper")
+mock_logger.setLevel(logging.DEBUG)
+# Add a handler if you want to see logs during tests (e.g., StreamHandler)
+# if not mock_logger.handlers:
+#     mock_logger.addHandler(logging.StreamHandler())
+
+class MockNominatimLocation:
+    def __init__(self, longitude, latitude):
+        self.longitude = longitude
+        self.latitude = latitude
+
+@patch('backend.main.time.sleep', return_value=None) # Mock time.sleep to speed up tests
+@patch('geopy.geocoders.Nominatim')
+def test_geocode_helper_success(MockNominatim, mock_sleep):
+    mock_geolocator_instance = MockNominatim.return_value
+    mock_geolocator_instance.geocode.return_value = MockNominatimLocation(longitude=10.0, latitude=50.0)
+
+    features = [{"properties": {"address": "Test Address 1"}, "geometry": None}]
+    address_fields = ["address"]
+
+    updated_features, summary = geocode_and_update_features(features, address_fields, "test_agent", mock_logger)
+
+    assert summary["features_total_count"] == 1
+    assert summary["features_without_geometry_count"] == 1
+    assert summary["addresses_found_for_geocoding"] == 1
+    assert summary["geocoding_requests_sent"] == 1
+    assert summary["geocoding_successes"] == 1
+    assert summary["geocoding_failures"] == 0
+    assert updated_features[0]["geometry"] == {"type": "Point", "coordinates": [10.0, 50.0]}
+    mock_geolocator_instance.geocode.assert_called_once_with("Test Address 1")
+    mock_sleep.assert_called_once() # Ensure rate limiting sleep was called
+
+@patch('backend.main.time.sleep', return_value=None)
+@patch('geopy.geocoders.Nominatim')
+def test_geocode_helper_address_not_found(MockNominatim, mock_sleep):
+    mock_geolocator_instance = MockNominatim.return_value
+    mock_geolocator_instance.geocode.return_value = None # Simulate address not found
+
+    features = [{"properties": {"address": "Unknown Address"}, "geometry": None}]
+    address_fields = ["address"]
+
+    updated_features, summary = geocode_and_update_features(features, address_fields, "test_agent", mock_logger)
+
+    assert summary["geocoding_requests_sent"] == 1
+    assert summary["geocoding_successes"] == 0
+    assert summary["geocoding_failures"] == 1
+    assert updated_features[0]["geometry"] is None
+    mock_sleep.assert_called_once()
+
+@patch('backend.main.time.sleep', return_value=None)
+@patch('geopy.geocoders.Nominatim')
+def test_geocode_helper_service_timeout(MockNominatim, mock_sleep):
+    mock_geolocator_instance = MockNominatim.return_value
+    mock_geolocator_instance.geocode.side_effect = GeocoderTimedOut("Timeout")
+
+    features = [{"properties": {"address": "Timeout Address"}, "geometry": None}]
+    address_fields = ["address"]
+
+    updated_features, summary = geocode_and_update_features(features, address_fields, "test_agent", mock_logger)
+
+    assert summary["geocoding_requests_sent"] == 1
+    assert summary["geocoding_successes"] == 0
+    assert summary["geocoding_service_errors"] == 1
+    assert updated_features[0]["geometry"] is None
+    assert mock_sleep.call_count == 2 # geocode call +  one after timeout
+
+@patch('backend.main.time.sleep', return_value=None)
+@patch('geopy.geocoders.Nominatim')
+def test_geocode_helper_existing_geometry(MockNominatim, mock_sleep):
+    mock_geolocator_instance = MockNominatim.return_value
+
+    features = [{"properties": {"address": "Some Address"}, "geometry": {"type": "Point", "coordinates": [1.0, 1.0]}}]
+    address_fields = ["address"]
+
+    updated_features, summary = geocode_and_update_features(features, address_fields, "test_agent", mock_logger)
+
+    assert summary["features_total_count"] == 1
+    assert summary["features_without_geometry_count"] == 0 # No feature was without geometry initially
+    assert summary["geocoding_requests_sent"] == 0 # Should not attempt to geocode
+    mock_geolocator_instance.geocode.assert_not_called()
+    mock_sleep.assert_not_called()
+
+@patch('backend.main.time.sleep', return_value=None)
+@patch('geopy.geocoders.Nominatim')
+def test_geocode_helper_no_matching_address_fields(MockNominatim, mock_sleep):
+    mock_geolocator_instance = MockNominatim.return_value
+
+    features = [{"properties": {"name": "Place Name"}, "geometry": None}] # No 'address' field
+    address_fields = ["address"]
+
+    updated_features, summary = geocode_and_update_features(features, address_fields, "test_agent", mock_logger)
+
+    assert summary["features_without_geometry_count"] == 1
+    assert summary["addresses_found_for_geocoding"] == 0
+    assert summary["geocoding_requests_sent"] == 0
+    mock_geolocator_instance.geocode.assert_not_called()
+    mock_sleep.assert_not_called()
+
+# --- Tests for Geocoding Stage in Celery Task ---
+
+def setup_job_for_geocoding_test(db_session: Session, features_list: list) -> IngestionJobDB:
+    """Helper to create a job and a dummy GeoJSON file for geocoding tests."""
+    os.makedirs(PROCESSED_AREA_PATH, exist_ok=True)
+    job_id = str(uuid.uuid4())
+    # Create an intermediate GeoJSON file that this job would have produced
+    intermediate_geojson_content = {"type": "FeatureCollection", "features": features_list}
+    intermediate_geojson_path = os.path.join(PROCESSED_AREA_PATH, f"{job_id}_epsg{TARGET_CRS_EPSG}.geojson") # Typical name after CRS
+
+    with open(intermediate_geojson_path, 'w') as f:
+        json.dump(intermediate_geojson_content, f)
+
+    job_data = {
+        "job_id": job_id,
+        "original_filename": "test_for_geocoding.geojson",
+        "staged_file_path": "dummy/path/not_used_by_this_stage.geojson", # Not directly used by geocoding stage
+        "user_id": "test_user",
+        "processing_status": "completed_crs_transformation", # Prerequisite for geocoding
+        "upload_timestamp": datetime.utcnow(),
+        "intermediate_geojson_path": intermediate_geojson_path, # Critical for this stage
+        "target_crs": f"EPSG:{TARGET_CRS_EPSG}",
+        "pipeline_stages_executed_log": [ # Simulate previous successful stages
+            {"stage": "Format Detection", "status": "success"},
+            {"stage": "Format Conversion (GeoJSON)", "status": "success"},
+            {"stage": "CRS Detection", "status": "success"},
+            {"stage": "CRS Transformation", "status": "success"}
+        ]
+    }
+    job = crud.create_ingestion_job(db_session, job_data)
+    return job
+
+@patch('backend.main.geocode_and_update_features')
+def test_celery_task_geocoding_stage_success(mock_geocode_helper):
+    db_session = next(get_test_db_session())
+
+    initial_features = [{"type": "Feature", "properties": {"address": "123 Main St"}, "geometry": None}]
+    # Mock what geocode_and_update_features would return
+    mocked_geocoded_features = [{"type": "Feature", "properties": {"address": "123 Main St"}, "geometry": {"type": "Point", "coordinates": [5.0, 52.0]}}]
+    mocked_summary = {"geocoding_successes": 1, "geocoding_requests_sent":1} # Simplified
+    mock_geocode_helper.return_value = (mocked_geocoded_features, mocked_summary)
+
+    job = setup_job_for_geocoding_test(db_session, initial_features)
+    job_id = job.job_id
+    intermediate_file_path = job.intermediate_geojson_path
+
+    try:
+        result_message = process_ingestion_job_task(job_id)
+        db_session.refresh(job)
+
+        assert "Successfully processed through geocoding" in result_message
+        assert job.processing_status == "completed_geocoding"
+        assert job.geocoding_summary == mocked_summary
+
+        # Verify the intermediate file was updated
+        with open(intermediate_file_path, 'r') as f:
+            updated_geojson_data = json.load(f)
+        assert updated_geojson_data["features"] == mocked_geocoded_features
+
+        assert any(log["stage"] == "Geocoding" and log["status"] == "success" for log in job.pipeline_stages_executed_log)
+        mock_geocode_helper.assert_called_once_with(initial_features, GEOCODING_ADDRESS_FIELDS, NOMINATIM_USER_AGENT, logging.getLogger("backend.main"))
+
+    finally:
+        if intermediate_file_path and os.path.exists(intermediate_file_path):
+             if PROCESSED_AREA_PATH in os.path.abspath(intermediate_file_path):
+                os.remove(intermediate_file_path)
+        crud.remove_ingestion_job(db_session, job_id)
+        db_session.close()
+
+@patch('backend.main.geocode_and_update_features')
+def test_celery_task_geocoding_stage_failure_in_helper(mock_geocode_helper):
+    db_session = next(get_test_db_session())
+
+    initial_features = [{"type": "Feature", "properties": {"address": "Bad Address Inc"}, "geometry": None}]
+    mock_geocode_helper.side_effect = Exception("Major Geocoding Helper Failure")
+
+    job = setup_job_for_geocoding_test(db_session, initial_features)
+    job_id = job.job_id
+    intermediate_file_path = job.intermediate_geojson_path
+
+    try:
+        result_message = process_ingestion_job_task(job_id)
+        db_session.refresh(job)
+
+        assert "Failed at geocoding pipeline step" in result_message
+        assert job.processing_status == "failed_geocoding_step"
+        assert "geocoding_pipeline_error" in job.validation_summary
+        assert "Major Geocoding Helper Failure" in job.validation_summary["geocoding_pipeline_error"]
+
+        assert any(log["stage"] == "Geocoding" and log["status"] == "failed" for log in job.pipeline_stages_executed_log)
+
+    finally:
+        if intermediate_file_path and os.path.exists(intermediate_file_path):
+            if PROCESSED_AREA_PATH in os.path.abspath(intermediate_file_path):
+                os.remove(intermediate_file_path)
+        crud.remove_ingestion_job(db_session, job_id)
+        db_session.close()
+
+@patch('backend.main.json.load') # To simulate error during file loading
+def test_celery_task_geocoding_stage_failure_file_io(mock_json_load):
+    db_session = next(get_test_db_session())
+
+    initial_features = [{"type": "Feature", "properties": {"address": "123 Main St"}, "geometry": None}]
+    mock_json_load.side_effect = IOError("Cannot read file")
+
+    job = setup_job_for_geocoding_test(db_session, initial_features)
+    job_id = job.job_id
+    intermediate_file_path = job.intermediate_geojson_path
+
+    try:
+        result_message = process_ingestion_job_task(job_id)
+        db_session.refresh(job)
+
+        assert "Failed at geocoding pipeline step" in result_message
+        assert job.processing_status == "failed_geocoding_step"
+        assert "geocoding_pipeline_error" in job.validation_summary
+        assert "Cannot read file" in job.validation_summary["geocoding_pipeline_error"]
+
+        assert any(log["stage"] == "Geocoding" and log["status"] == "failed" for log in job.pipeline_stages_executed_log)
+
+    finally:
+        if intermediate_file_path and os.path.exists(intermediate_file_path):
+            if PROCESSED_AREA_PATH in os.path.abspath(intermediate_file_path):
+                os.remove(intermediate_file_path)
+        crud.remove_ingestion_job(db_session, job_id)
+        db_session.close()
