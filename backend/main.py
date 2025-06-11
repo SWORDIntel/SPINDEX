@@ -21,11 +21,11 @@ from sqlalchemy.ext.declarative import declarative_base # Will be removed if Bas
 from sqlalchemy.orm import Session # Added Session for type hinting
 # Assuming database.py and crud.py exist and are structured as implied by the FastAPI endpoints
 from backend import crud # Added import for crud
-from backend.database import Base, get_db # Added import for Base and get_db
+from backend.database import Base, get_db, SessionLocal # Added SessionLocal for Celery tasks
 from backend.models import IngestionJobDB # Added import for IngestionJobDB
 
 # --- Data Processing & Scientific Computing Imports ---
-from osgeo import ogr, osr # type: ignore
+from osgeo import gdal, ogr, osr # type: ignore
 from shapely.geometry import shape, Point as ShapelyPoint # type: ignore
 from shapely.validation import is_valid, make_valid
 import spacy # For NER
@@ -111,6 +111,7 @@ class IngestionJobMetadata(BaseModel):
     complex_geometry_summary: Optional[Dict[str, Any]] = None
     ner_summary: Optional[Dict[str, Any]] = None
     content_security_summary: Optional[Dict[str, Any]] = None
+    intermediate_geojson_path: Optional[str] = None
     class Config: orm_mode = True; json_encoders = {datetime: lambda v: v.isoformat() if v else None}
 
 class IndexCreationRequest(BaseModel): promoted_data_path: str; index_name: str; index_type: str; index_parameters: Optional[Dict[str, Any]] = None
@@ -195,6 +196,176 @@ async def get_current_user(token: Optional[str] = Depends(X_AUTH_TOKEN_SCHEME)) 
 # - create_spindex_task (@shared_task)
 # - All @app endpoints (/tasks, /upload, /metadata, /indexes, /query)
 
+# --- Celery Tasks ---
+@celery_app.task(name="process_ingestion_job")
+def process_ingestion_job_task(job_id: str):
+    logger.info(f"Celery task 'process_ingestion_job' started for job_id: {job_id}")
+
+    db = SessionLocal() # Create a new session for the task
+    try:
+        # Initial logic for fetching job and updating status will be added in the next plan step.
+        # For now, just log and confirm task invocation.
+        job = db.query(IngestionJobDB).filter(IngestionJobDB.job_id == job_id).first()
+        if not job:
+            logger.error(f"Job ID {job_id} not found in the database for task 'process_ingestion_job'.")
+            return f"Error: Job ID {job_id} not found."
+
+        logger.info(f"Starting format detection for job {job_id}, file: {job.staged_file_path}")
+
+        job.processing_status = "processing_format_detection"
+
+        # Update pipeline log
+        current_log = list(job.pipeline_stages_executed_log or [])
+        current_log.append({
+            "timestamp": datetime.utcnow().isoformat(), # Ensure datetime is imported
+            "stage": "Format Detection",
+            "status": "started",
+            "message": f"Initiated format detection for staged file: {job.staged_file_path}"
+        })
+        job.pipeline_stages_executed_log = current_log
+
+        db.commit()
+        logger.info(f"Status updated to 'processing_format_detection' for job_id: {job_id}. Proceeding with GDAL/OGR detection.")
+
+        detected_driver_name = None
+        try:
+            logger.info(f"Attempting to open file {job.staged_file_path} with GDAL/OGR for job {job_id}.")
+            dataSource = ogr.Open(job.staged_file_path, 0) # 0 means read-only
+
+            if dataSource is None:
+                job.processing_status = "failed_format_detection"
+                job.validation_summary = {"format_detection_error": "GDAL/OGR could not open the file or it's not a recognized vector format."}
+                log_message = f"GDAL/OGR failed to open or recognize file: {job.staged_file_path}"
+                logger.error(log_message + f" for job {job_id}.")
+            else:
+                driver = dataSource.GetDriver()
+                if driver:
+                    detected_driver_name = driver.GetName()
+                    job.detected_format = detected_driver_name
+                    job.processing_status = "format_detected_pending_conversion" # New status
+                    log_message = f"Detected format: {detected_driver_name} for file {job.staged_file_path}"
+                    logger.info(log_message + f" for job {job_id}.")
+                else:
+                    # This case might be rare if dataSource opened but driver is None
+                    job.processing_status = "failed_format_detection"
+                    job.validation_summary = {"format_detection_error": "GDAL/OGR opened the file but could not determine the driver."}
+                    log_message = f"GDAL/OGR could not determine driver for file: {job.staged_file_path}"
+                    logger.error(log_message + f" for job {job_id}.")
+
+                dataSource = None # Close data source
+
+            # Update pipeline log for format detection outcome
+            current_log = list(job.pipeline_stages_executed_log or [])
+            log_entry_status = "success" if detected_driver_name else "failed"
+            log_entry_message = f"Format detection {log_entry_status}."
+            if detected_driver_name:
+                log_entry_message += f" Detected format: {detected_driver_name}."
+            else:
+                log_entry_message += f" Error: {job.validation_summary.get('format_detection_error', 'Unknown GDAL/OGR error')}."
+
+            current_log.append({
+                "timestamp": datetime.utcnow().isoformat(),
+                "stage": "Format Detection",
+                "status": log_entry_status,
+                "message": log_entry_message
+            })
+            job.pipeline_stages_executed_log = current_log
+            db.commit()
+
+        except Exception as e_gdal:
+            logger.error(f"Exception during GDAL/OGR format detection for job {job_id}, file {job.staged_file_path}: {e_gdal}")
+            job.processing_status = "failed_format_detection"
+            job.validation_summary = {"format_detection_error": f"GDAL/OGR Exception: {str(e_gdal)}"}
+
+            current_log = list(job.pipeline_stages_executed_log or [])
+            current_log.append({
+                "timestamp": datetime.utcnow().isoformat(),
+                "stage": "Format Detection",
+                "status": "failed",
+                "message": f"Exception occurred: {str(e_gdal)}"
+            })
+            job.pipeline_stages_executed_log = current_log
+            db.commit()
+            return f"Job ID {job_id}: Failed at format detection stage due to GDAL/OGR error."
+
+        if detected_driver_name and job.processing_status == "format_detected_pending_conversion":
+            geojson_filename = f"{job_id}.geojson"
+            geojson_output_path = os.path.join(PROCESSED_AREA_PATH, geojson_filename)
+
+            logger.info(f"Attempting to convert file {job.staged_file_path} to GeoJSON at {geojson_output_path} for job {job_id}.")
+
+            try:
+                os.makedirs(PROCESSED_AREA_PATH, exist_ok=True)
+
+                translate_options_list = ["-f", "GeoJSON", "-skipfailures"]
+                # Example of adding CRS transformation if needed later:
+                # if job.target_crs:
+                #    translate_options_list.extend(["-t_srs", job.target_crs])
+
+                result = gdal.VectorTranslate(destName=geojson_output_path,
+                                              srcDS=job.staged_file_path,
+                                              options=translate_options_list)
+
+                if result is None: # Check if VectorTranslate indicated an issue
+                    # A more robust check might involve os.path.exists and file size
+                    if not os.path.exists(geojson_output_path) or os.path.getsize(geojson_output_path) == 0:
+                        gdal_error_msg = gdal.GetLastErrorMsg()
+                        if not gdal_error_msg or "error" not in gdal_error_msg.lower():
+                             gdal_error_msg = "GDAL VectorTranslate completed but output file is missing or empty."
+                        logger.error(f"GDAL VectorTranslate failed for job {job_id}: {gdal_error_msg}")
+                        raise Exception(gdal_error_msg)
+
+                job.processing_status = "completed_format_conversion"
+                job.intermediate_geojson_path = geojson_output_path # <-- ADDED THIS LINE
+                log_message = f"Successfully converted file to GeoJSON: {geojson_output_path}"
+                logger.info(log_message + f" for job {job_id}.")
+
+                current_log = list(job.pipeline_stages_executed_log or [])
+                current_log.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "stage": "Format Conversion (GeoJSON)",
+                    "status": "success",
+                    "message": log_message,
+                    "output_path": geojson_output_path
+                })
+                job.pipeline_stages_executed_log = current_log
+                db.commit()
+
+                return f"Job ID {job_id}: File successfully converted to GeoJSON at {geojson_output_path}."
+
+            except Exception as e_convert:
+                logger.error(f"Exception during GeoJSON conversion for job {job_id}, file {job.staged_file_path}: {e_convert}")
+                job.processing_status = "failed_format_conversion"
+                job.validation_summary = {
+                    **(job.validation_summary or {}),
+                    "format_conversion_error": f"GeoJSON Conversion Exception: {str(e_convert)}"
+                }
+
+                current_log = list(job.pipeline_stages_executed_log or [])
+                current_log.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "stage": "Format Conversion (GeoJSON)",
+                    "status": "failed",
+                    "message": f"Exception: {str(e_convert)}"
+                })
+                job.pipeline_stages_executed_log = current_log
+                db.commit()
+                return f"Job ID {job_id}: Failed at GeoJSON conversion stage."
+
+        elif detected_driver_name: # Format was detected, but status was not "format_detected_pending_conversion"
+             logger.info(f"Format detection was successful for job {job_id} (Detected: {detected_driver_name}), but conversion step skipped due to status: {job.processing_status}.")
+             return f"Job ID {job_id}: Format detection complete. Detected format: {detected_driver_name}. Conversion step skipped."
+        else: # detected_driver_name is None
+            return f"Job ID {job_id}: Format detection failed. Cannot proceed to conversion."
+
+    except Exception as e:
+        logger.error(f"Error processing job ID {job_id} in Celery task: {e}")
+        db.rollback() # Rollback in case of error during DB operations
+        # Optionally, re-raise or handle specific exceptions if task should be retried
+        # For now, just log and return error message
+        return f"Error processing job ID {job_id}: {str(e)}"
+    finally:
+        db.close() # Ensure session is closed
 
 # --- AEGIS Pipeline Endpoints ---
 
@@ -275,6 +446,21 @@ async def aegis_secure_upload_file(
         db_job = crud.create_ingestion_job(db=db, job_data=job_data_dict)
         created_job_id = db_job.job_id
         logger.info(f"Ingestion job created with ID: {created_job_id} for file '{original_filename}'.")
+
+        try:
+            task_submission = process_ingestion_job_task.delay(job_id=created_job_id)
+            logger.info(f"Celery task 'process_ingestion_job_task' submitted for job_id: {created_job_id}. Celery task ID: {task_submission.id}")
+
+            db_job.celery_task_id = task_submission.id
+            db.commit()
+            logger.info(f"Celery task ID {task_submission.id} saved to job {created_job_id}.")
+
+        except Exception as e_celery:
+            logger.error(f"Failed to submit Celery task for job_id {created_job_id}: {e_celery}")
+            # For now, just log and continue. The job record exists, celery_task_id will be None.
+            # A more robust solution might update job status to 'failed_task_submission'.
+            pass
+
     except Exception as e:
         logger.error(f"Failed to create ingestion job for file '{original_filename}': {e}")
         if os.path.exists(staged_file_path):

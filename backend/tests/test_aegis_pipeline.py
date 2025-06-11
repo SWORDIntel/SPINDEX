@@ -4,10 +4,15 @@ import uuid
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 import pytest # For potential fixtures or advanced testing patterns later
+from unittest.mock import patch, MagicMock
+from datetime import datetime
+from typing import Optional
+
 
 # Adjust paths for imports based on execution from repository root or if backend/ is a module
 # Assuming tests might be run from the repo root, and PYTHONPATH includes the root.
-from backend.main import app, get_current_user, User, Role, STAGING_AREA_PATH, ALLOWED_MIME_TYPES, MAX_FILE_SIZE
+from backend.main import app, get_current_user, User, Role, STAGING_AREA_PATH, ALLOWED_MIME_TYPES, MAX_FILE_SIZE, PROCESSED_AREA_PATH
+from backend.main import process_ingestion_job_task # Import the Celery task
 from backend.database import SessionLocal, get_db, Base, engine
 from backend.models import IngestionJobDB
 from backend import crud
@@ -80,6 +85,7 @@ def test_upload_file_success():
         assert job_db.staged_file_path == staged_file_path_to_delete
         assert job_db.user_id == "admin" # From ADMIN_TOKEN mapping in main.py
         assert job_db.processing_status == "pending_staging"
+        assert job_db.celery_task_id is not None # Check if celery task ID was set
 
     finally:
         # Clean up created file and staged file
@@ -120,20 +126,10 @@ def test_upload_file_permission_denied():
     assert response.status_code == 403
 
 def test_upload_file_too_large():
-    # Create a dummy file larger than MAX_FILE_SIZE
-    # This assumes MAX_FILE_SIZE is small enough for a memory/local disk test file
-    # If MAX_FILE_SIZE is very large, this test might need adjustment or mocking `MAX_FILE_SIZE`
-
-    # Check if 'application/octet-stream' is an allowed type, if not, use one that is.
-    # For this test, the content itself matters more than strict type adherence if type is not main variable.
     mime_type_for_large_file = "application/octet-stream"
     if ALLOWED_MIME_TYPES and mime_type_for_large_file not in ALLOWED_MIME_TYPES:
-        mime_type_for_large_file = ALLOWED_MIME_TYPES[0] # Use the first allowed type
+        mime_type_for_large_file = ALLOWED_MIME_TYPES[0]
 
-    # MAX_FILE_SIZE could be large, so creating a file that size could be slow/problematic.
-    # For unit tests, it's common to test the boundary condition logic,
-    # possibly by temporarily patching MAX_FILE_SIZE or ensuring it's set to a small value for tests.
-    # The prompt's version checks MAX_FILE_SIZE < 10000. Let's honor that.
     if MAX_FILE_SIZE < 10000:
         large_content = b"a" * (MAX_FILE_SIZE + 1)
         response = client.post(
@@ -143,17 +139,13 @@ def test_upload_file_too_large():
         )
         assert response.status_code == 413
     else:
-        # Consider using pytest.skip or adjusting how large files are tested
-        # For now, just printing a message as per original prompt's logic
         print(f"Skipping file_too_large test as MAX_FILE_SIZE ({MAX_FILE_SIZE}) is large.")
         pytest.skip(f"Skipping file_too_large test as MAX_FILE_SIZE ({MAX_FILE_SIZE}) is too large for practical testing here.")
 
 
 def test_upload_file_unsupported_mime_type():
-    # Ensure we pick a MIME type that is definitely not in ALLOWED_MIME_TYPES
     unsupported_mime_type = "application/x-definitely-not-allowed"
     if unsupported_mime_type in ALLOWED_MIME_TYPES:
-        # If by some chance it is allowed, find one that isn't or make one up
         unsupported_mime_type = f"application/x-test-disallowed-{uuid.uuid4()}"
 
     response = client.post(
@@ -162,3 +154,142 @@ def test_upload_file_unsupported_mime_type():
         files={"file": ("image.jpg", b"fakejpegcontent", unsupported_mime_type)}
     )
     assert response.status_code == 415
+
+# --- Celery Task Tests ---
+
+def create_dummy_job_for_task(db_session: Session, staged_file_path: str, job_id_val: Optional[str] = None) -> IngestionJobDB:
+    if job_id_val is None:
+        job_id_val = str(uuid.uuid4())
+
+    job_data = {
+        "job_id": job_id_val,
+        "original_filename": "test_file.zip", # Example
+        "staged_file_path": staged_file_path,
+        "user_id": "test_user",
+        "processing_status": "pending_task_execution", # Initial status before task runs
+        "upload_timestamp": datetime.utcnow()
+    }
+    return crud.create_ingestion_job(db_session, job_data)
+
+@patch('backend.main.ogr') # Mock ogr in the module where the task uses it
+@patch('backend.main.gdal') # Mock gdal in the module where the task uses it
+def test_celery_task_success(mock_gdal, mock_ogr):
+    db_session = next(get_test_db_session())
+
+    mock_datasource = MagicMock()
+    mock_driver = MagicMock()
+    mock_driver.GetName.return_value = "ESRI Shapefile"
+    mock_datasource.GetDriver.return_value = mock_driver
+    mock_ogr.Open.return_value = mock_datasource
+
+    mock_gdal.VectorTranslate.return_value = True
+
+    os.makedirs(PROCESSED_AREA_PATH, exist_ok=True)
+    os.makedirs(STAGING_AREA_PATH, exist_ok=True) # Ensure staging also exists
+
+    dummy_staged_filename = f"dummy_staged_{uuid.uuid4()}.shp"
+    dummy_staged_filepath = os.path.join(STAGING_AREA_PATH, dummy_staged_filename)
+    with open(dummy_staged_filepath, "wb") as f:
+        f.write(b"dummy shapefile content")
+
+    job = create_dummy_job_for_task(db_session, dummy_staged_filepath)
+    job_id = job.job_id
+
+    try:
+        result_message = process_ingestion_job_task(job_id)
+        db_session.refresh(job)
+
+        assert "File successfully converted to GeoJSON" in result_message
+        assert job.processing_status == "completed_format_conversion"
+        assert job.detected_format == "ESRI Shapefile"
+        expected_geojson_path = os.path.join(PROCESSED_AREA_PATH, f"{job_id}.geojson")
+        assert job.intermediate_geojson_path == expected_geojson_path
+
+        assert len(job.pipeline_stages_executed_log) >= 2
+        assert job.pipeline_stages_executed_log[-1]["stage"] == "Format Conversion (GeoJSON)"
+        assert job.pipeline_stages_executed_log[-1]["status"] == "success"
+        assert job.pipeline_stages_executed_log[-1]["output_path"] == expected_geojson_path
+        assert job.pipeline_stages_executed_log[-2]["stage"] == "Format Detection"
+        assert job.pipeline_stages_executed_log[-2]["status"] == "success"
+
+    finally:
+        if os.path.exists(dummy_staged_filepath):
+            os.remove(dummy_staged_filepath)
+        # No real GeoJSON file created by mock, so no need to delete job.intermediate_geojson_path
+        crud.remove_ingestion_job(db_session, job_id)
+        db_session.close()
+
+@patch('backend.main.ogr')
+def test_celery_task_format_detection_failure(mock_ogr):
+    db_session = next(get_test_db_session())
+
+    mock_ogr.Open.return_value = None
+
+    os.makedirs(STAGING_AREA_PATH, exist_ok=True)
+    dummy_staged_filename = f"dummy_unrecog_{uuid.uuid4()}.dat"
+    dummy_staged_filepath = os.path.join(STAGING_AREA_PATH, dummy_staged_filename)
+    with open(dummy_staged_filepath, "wb") as f:
+        f.write(b"unknown content")
+
+    job = create_dummy_job_for_task(db_session, dummy_staged_filepath)
+    job_id = job.job_id
+
+    try:
+        result_message = process_ingestion_job_task(job_id)
+        db_session.refresh(job)
+
+        assert "Format detection failed" in result_message
+        assert job.processing_status == "failed_format_detection"
+        assert job.detected_format is None
+        assert job.intermediate_geojson_path is None
+        assert "format_detection_error" in job.validation_summary
+        assert job.pipeline_stages_executed_log[-1]["stage"] == "Format Detection"
+        assert job.pipeline_stages_executed_log[-1]["status"] == "failed"
+
+    finally:
+        if os.path.exists(dummy_staged_filepath):
+            os.remove(dummy_staged_filepath)
+        crud.remove_ingestion_job(db_session, job_id)
+        db_session.close()
+
+@patch('backend.main.ogr')
+@patch('backend.main.gdal')
+def test_celery_task_format_conversion_failure(mock_gdal, mock_ogr):
+    db_session = next(get_test_db_session())
+
+    mock_datasource = MagicMock()
+    mock_driver = MagicMock()
+    mock_driver.GetName.return_value = "ESRI Shapefile"
+    mock_datasource.GetDriver.return_value = mock_driver
+    mock_ogr.Open.return_value = mock_datasource
+
+    mock_gdal.VectorTranslate.side_effect = Exception("GDAL conversion error")
+
+    os.makedirs(STAGING_AREA_PATH, exist_ok=True)
+    os.makedirs(PROCESSED_AREA_PATH, exist_ok=True)
+
+    dummy_staged_filename = f"dummy_staged_badconv_{uuid.uuid4()}.shp"
+    dummy_staged_filepath = os.path.join(STAGING_AREA_PATH, dummy_staged_filename)
+    with open(dummy_staged_filepath, "wb") as f:
+        f.write(b"dummy shapefile content for bad conversion")
+
+    job = create_dummy_job_for_task(db_session, dummy_staged_filepath)
+    job_id = job.job_id
+
+    try:
+        result_message = process_ingestion_job_task(job_id)
+        db_session.refresh(job)
+
+        assert "Failed at GeoJSON conversion stage" in result_message
+        assert job.processing_status == "failed_format_conversion"
+        assert job.detected_format == "ESRI Shapefile"
+        assert job.intermediate_geojson_path is None
+        assert "format_conversion_error" in job.validation_summary
+        assert job.pipeline_stages_executed_log[-1]["stage"] == "Format Conversion (GeoJSON)"
+        assert job.pipeline_stages_executed_log[-1]["status"] == "failed"
+
+    finally:
+        if os.path.exists(dummy_staged_filepath):
+            os.remove(dummy_staged_filepath)
+        crud.remove_ingestion_job(db_session, job_id)
+        db_session.close()
