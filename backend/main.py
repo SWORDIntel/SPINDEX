@@ -56,7 +56,7 @@ MAX_FILE_SIZE = 100 * 1024 * 1024 # 100 MB
 ALLOWED_MIME_TYPES = [
     "application/geo+json", "application/json", "application/zip",
     "application/vnd.google-earth.kml+xml", "application/gml+xml",
-    "text/xml", "application/octet-stream"
+    "text/xml", "application/octet-stream", "text/plain"
 ]
 
 # --- Logging Configuration ---
