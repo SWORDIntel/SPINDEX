@@ -91,11 +91,11 @@ Status: Pending
 5.  **Task: [AEGIS-005] Implement Format Conversion & Abstraction module (GDAL/OGR)**
     *   Description: Develop the pipeline module to detect input vector formats and convert them to a standard interchange format like GeoJSON using GDAL/OGR.
     *   Priority: Medium
-    *   Status: To Do
+    *   Status: DONE ✅
 6.  **Task: [AEGIS-006] Implement CRS Transformation module**
     *   Description: Develop the pipeline module to auto-detect source CRS and re-project geometries to a standard internal CRS (e.g., EPSG:4326).
     *   Priority: Medium
-    *   Status: To Do
+    *   Status: DONE ✅
 7.  **Task: [AEGIS-007] Implement Geocoding Service Integration module**
     *   Description: Develop the module to identify address fields and integrate with a geocoding service to generate point geometries.
     *   Priority: Medium
