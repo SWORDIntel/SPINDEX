@@ -27,8 +27,18 @@ def create_ingestion_job(db: Session, job_data: Dict[str, Any]) -> models.Ingest
         validation_summary=job_data.get('validation_summary'),
         geocoding_summary=job_data.get('geocoding_summary'),
         complex_geometry_summary=job_data.get('complex_geometry_summary'),
-        ner_summary=job_data.get('ner_summary') # Add new field
-        # Add other fields as necessary, ensuring defaults or None if not provided
+    ner_summary=job_data.get('ner_summary'),
+    # Ensure all fields from the model are handled, defaulting to None if not applicable at creation
+    detected_format=job_data.get('detected_format', None),
+    original_crs=job_data.get('original_crs', None),
+    target_crs=job_data.get('target_crs', None),
+    location_of_promoted_data=job_data.get('location_of_promoted_data', None),
+    location_of_quarantined_data=job_data.get('location_of_quarantined_data', None),
+    promotion_timestamp=job_data.get('promotion_timestamp', None),
+    quarantine_timestamp=job_data.get('quarantine_timestamp', None),
+    data_hash_original=job_data.get('data_hash_original', None),
+    data_hash_processed=job_data.get('data_hash_processed', None),
+    content_security_summary=job_data.get('content_security_summary', None)
     )
     db.add(db_job)
     db.commit()

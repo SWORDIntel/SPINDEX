@@ -5,6 +5,10 @@ import uuid # For job_id default
 from datetime import datetime
 
 class IngestionJobDB(Base):
+    """
+    SQLAlchemy ORM model for an ingestion job. This table tracks the state and
+    metadata of each data file uploaded and processed by the AEGIS pipeline.
+    """
     __tablename__ = "ingestion_jobs"
 
     # Using String for UUIDs that are generated as strings.
@@ -22,16 +26,14 @@ class IngestionJobDB(Base):
 
     processing_status = Column(String, index=True, default="pending_staging")
 
-    staged_file_path = Column(String, nullable=True, unique=True) # Path should be unique if files are not deleted post-staging
+    staged_file_path = Column(String, nullable=True, unique=True)
+    location_of_promoted_data = Column(String, nullable=True, unique=True)
+    location_of_quarantined_data = Column(String, nullable=True, unique=True)
 
     promotion_timestamp = Column(DateTime, nullable=True)
     quarantine_timestamp = Column(DateTime, nullable=True)
 
-    location_of_promoted_data = Column(String, nullable=True, unique=True) # Path should be unique
-    location_of_quarantined_data = Column(String, nullable=True, unique=True) # Path should be unique
-
     # For JSON fields, SQLAlchemy's JSON type is appropriate.
-    # It handles JSON decoding/encoding. For SQLite, it's often stored as TEXT.
     pipeline_stages_executed_log = Column(JSON, nullable=True) # List of dicts
     validation_summary = Column(JSON, nullable=True) # Dict
     error_log_references = Column(JSON, nullable=True) # List of strings
@@ -39,16 +41,14 @@ class IngestionJobDB(Base):
     data_hash_original = Column(String, nullable=True)
     data_hash_processed = Column(String, nullable=True)
 
-    celery_task_id = Column(String, nullable=True, index=True, unique=True) # Celery task ID should be unique
+    celery_task_id = Column(String, nullable=True, index=True, unique=True)
 
-    geocoding_summary = Column(JSON, nullable=True) # Summary from geocoding stage
-    complex_geometry_summary = Column(JSON, nullable=True) # Summary from complex geometry handling
-    ner_summary = Column(JSON, nullable=True) # Summary from NER processing stage
+    # Summaries from specific pipeline stages
+    geocoding_summary = Column(JSON, nullable=True)
+    complex_geometry_summary = Column(JSON, nullable=True)
+    ner_summary = Column(JSON, nullable=True)
+    content_security_summary = Column(JSON, nullable=True) # This was the key missing field
 
-    # Consider adding 'created_at' and 'updated_at' managed by SQLAlchemy/database
-    # For example:
-    # created_at = Column(DateTime, default=datetime.utcnow)
-    # updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):
         return f"<IngestionJobDB(job_id='{self.job_id}', filename='{self.original_filename}', status='{self.processing_status}')>"
