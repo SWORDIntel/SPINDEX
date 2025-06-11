@@ -89,6 +89,81 @@ def test_upload_file_unsupported_mime_type():
     response = client.post("/aegis/upload", headers={"X-Auth-Token": ADMIN_TOKEN}, files={"file": ("image.jpg", b"fakejpegcontent", unsupported_mime_type)})
     assert response.status_code == 415
 
+@patch('backend.main.process_ingestion_job_task.delay')
+def test_upload_file_celery_submission_failure(mock_celery_delay):
+    mock_celery_delay.side_effect = Exception("Celery down") # Simulate Celery task submission failure
+
+    os.makedirs(STAGING_AREA_PATH, exist_ok=True)
+    test_filename = f"test_celery_fail_{uuid.uuid4()}.txt"
+    test_content = b"Content for celery failure test."
+
+    # Create a temporary file to upload
+    with open(test_filename, "wb") as f:
+        f.write(test_content)
+
+    staged_file_path_to_delete = None
+    job_id_to_delete = None
+
+    try:
+        with open(test_filename, "rb") as f_upload:
+            response = client.post(
+                "/aegis/upload",
+                headers={"X-Auth-Token": ADMIN_TOKEN}, # User with upload permission
+                files={"file": (test_filename, f_upload, "text/plain")} # Valid file and mime type
+            )
+
+        # The upload endpoint should still succeed initially, as file is staged and job record created
+        assert response.status_code == 200
+        data = response.json()
+        assert data["filename"] == test_filename
+        assert "job_id" in data
+        job_id_to_delete = data["job_id"]
+        staged_file_path_to_delete = data["staged_filepath"]
+
+        assert os.path.exists(staged_file_path_to_delete) # File should still be staged
+
+        # Verify the database record
+        db = next(get_test_db_session())
+        try:
+            job_db = crud.get_ingestion_job(db, job_id_to_delete)
+            assert job_db is not None
+            assert job_db.original_filename == test_filename
+            assert job_db.user_id == "admin" # Based on ADMIN_TOKEN
+            assert job_db.processing_status == "failed_task_submission"
+            assert job_db.celery_task_id is None # Celery task ID should not be set
+
+            assert len(job_db.error_log_references) == 1
+            assert "Celery task submission failed: Celery down" in job_db.error_log_references[0]
+
+            assert job_db.pipeline_stages_executed_log is not None
+            upload_log_found = False
+            celery_fail_log_found = False
+            for log_entry in job_db.pipeline_stages_executed_log:
+                if log_entry["stage"] == "upload" and log_entry["status"] == "success":
+                    upload_log_found = True
+                if log_entry["stage"] == "Celery Task Submission" and log_entry["status"] == "failed":
+                    assert "Celery task submission failed: Celery down" in log_entry["message"]
+                    celery_fail_log_found = True
+            assert upload_log_found
+            assert celery_fail_log_found
+
+        finally:
+            db.close()
+
+    finally:
+        if os.path.exists(test_filename):
+            os.remove(test_filename)
+        if staged_file_path_to_delete and os.path.exists(staged_file_path_to_delete):
+            # Basic safety check to prevent accidental deletion outside STAGING_AREA_PATH
+            if STAGING_AREA_PATH in os.path.abspath(staged_file_path_to_delete):
+                os.remove(staged_file_path_to_delete)
+        if job_id_to_delete:
+            db = next(get_test_db_session())
+            try:
+                crud.remove_ingestion_job(db, job_id_to_delete)
+            finally:
+                db.close()
+
 # --- Celery Task Tests ---
 
 def create_dummy_job_for_task(db_session: Session, staged_file_path: str, job_id_val: Optional[str] = None) -> IngestionJobDB:
