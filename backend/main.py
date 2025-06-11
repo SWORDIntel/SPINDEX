@@ -42,6 +42,10 @@ from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceErro
 # --- Application Setup & Pydantic Models (from 'jules_wip' branch) ---
 
 # --- Constants ---
+# Note: For production, ensure that the STAGING_AREA_PATH directory
+# has appropriate OS-level permissions to restrict access and protect
+# sensitive uploaded data. It should be writable by the application user
+# but not unnecessarily exposed.
 STAGING_AREA_PATH = "staging_area"
 PROCESSED_AREA_PATH = "processed_area"
 TARGET_CRS_EPSG = 4326
