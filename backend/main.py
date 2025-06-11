@@ -1,5 +1,6 @@
 # --- Core Application & Framework Imports ---
 from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
+from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field as PydanticField
 from typing import List, Optional, Dict, Any, Union
@@ -16,11 +17,12 @@ from collections import defaultdict
 from sqlalchemy import (
     create_engine, Column, Integer, String, DateTime, JSON, Text, Boolean, ForeignKey
 )
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship, Session
+from sqlalchemy.ext.declarative import declarative_base # Will be removed if Base is imported
+from sqlalchemy.orm import Session # Added Session for type hinting
 # Assuming database.py and crud.py exist and are structured as implied by the FastAPI endpoints
-# from backend import crud, database
-# from backend.database import Base # This will be defined locally for this example
+from backend import crud # Added import for crud
+from backend.database import Base, get_db # Added import for Base and get_db
+from backend.models import IngestionJobDB # Added import for IngestionJobDB
 
 # --- Data Processing & Scientific Computing Imports ---
 from osgeo import ogr, osr # type: ignore
@@ -35,67 +37,6 @@ from celery.result import AsyncResult
 import requests # type: ignore
 from geopy.geocoders import Nominatim # type: ignore
 from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError # type: ignore
-
-
-# --- Database Model Definition (from 'main' branch) ---
-# In a larger application, this would be in a separate models.py file.
-# For this resolution, it's integrated here.
-Base = declarative_base()
-
-class IngestionJobDB(Base):
-    """
-    SQLAlchemy ORM model for an ingestion job. This table tracks the state and
-    metadata of each data file uploaded and processed by the AEGIS pipeline.
-    """
-    __tablename__ = "ingestion_jobs"
-
-    # Using String for UUIDs that are generated as strings.
-    # For actual UUID type, some DBs need `sqlalchemy.dialects.postgresql.UUID` or similar.
-    job_id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-
-    original_filename = Column(String, nullable=True)
-    upload_timestamp = Column(DateTime, default=datetime.utcnow)
-    user_id = Column(String, nullable=True, index=True) # Assuming user_id is a string
-    source_type = Column(String, default="file_upload")
-
-    detected_format = Column(String, nullable=True)
-    original_crs = Column(Text, nullable=True) # WKT can be long
-    target_crs = Column(String, nullable=True)
-
-    processing_status = Column(String, index=True, default="pending_staging")
-
-    staged_file_path = Column(String, nullable=True, unique=True)
-    location_of_promoted_data = Column(String, nullable=True, unique=True)
-    location_of_quarantined_data = Column(String, nullable=True, unique=True)
-
-    promotion_timestamp = Column(DateTime, nullable=True)
-    quarantine_timestamp = Column(DateTime, nullable=True)
-
-    # For JSON fields, SQLAlchemy's JSON type is appropriate.
-    pipeline_stages_executed_log = Column(JSON, nullable=True) # List of dicts
-    validation_summary = Column(JSON, nullable=True) # Dict
-    error_log_references = Column(JSON, nullable=True) # List of strings
-
-    data_hash_original = Column(String, nullable=True)
-    data_hash_processed = Column(String, nullable=True)
-
-    celery_task_id = Column(String, nullable=True, index=True, unique=True)
-
-    # Summaries from specific pipeline stages
-    geocoding_summary = Column(JSON, nullable=True)
-    complex_geometry_summary = Column(JSON, nullable=True)
-    ner_summary = Column(JSON, nullable=True)
-    content_security_summary = Column(JSON, nullable=True)
-
-
-    def __repr__(self):
-        return f"<IngestionJobDB(job_id='{self.job_id}', filename='{self.original_filename}', status='{self.processing_status}')>"
-
-# Note on Database Management (from 'main' branch):
-# To initialize these tables in your database, you will typically use Alembic migrations.
-# Ensure that `Base.metadata.create_all(bind=engine)` in a `database.py` file is
-# commented out or removed if you are exclusively using Alembic for schema management,
-# to avoid conflicts.
 
 
 # --- Application Setup & Pydantic Models (from 'jules_wip' branch) ---
@@ -203,7 +144,21 @@ dummy_users_db = {
     "viewer": User(username="viewer", roles=[dummy_viewer_role]),
 }
 X_AUTH_TOKEN_SCHEME = APIKeyHeader(name="X-Auth-Token", auto_error=False)
-app = FastAPI(title="SPINDEX Backend", version="0.1.0")
+
+# --- OpenAPI Tags Metadata ---
+tags_metadata = [
+    {
+        "name": "AEGIS Pipeline",
+        "description": "Endpoints for the AEGIS data ingestion and processing pipeline.",
+    },
+    # Potentially other tags could be defined here or were already here
+]
+
+app = FastAPI(
+    title="SPINDEX Backend",
+    version="0.1.0",
+    openapi_tags=tags_metadata  # Add tags metadata to FastAPI app
+)
 SECURE_PLACEHOLDER_TOKEN_ADMIN = "secure-placeholder-token-admin"
 SECURE_PLACEHOLDER_TOKEN_ANALYST = "secure-placeholder-token-analyst"
 SECURE_PLACEHOLDER_TOKEN_VIEWER = "secure-placeholder-token-viewer"
@@ -239,6 +194,103 @@ async def get_current_user(token: Optional[str] = Depends(X_AUTH_TOKEN_SCHEME)) 
 # - process_staged_file_task (@shared_task)
 # - create_spindex_task (@shared_task)
 # - All @app endpoints (/tasks, /upload, /metadata, /indexes, /query)
+
+
+# --- AEGIS Pipeline Endpoints ---
+
+@app.post("/aegis/upload", response_model=FileUploadResponse, tags=["AEGIS Pipeline"])
+async def aegis_secure_upload_file(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    logger.info(f"User '{current_user.username}' attempting to upload file: {file.filename}")
+
+    # Check for 'upload_data' permission
+    has_upload_permission = False
+    for role in current_user.roles:
+        if "upload_data" in role.permissions:
+            has_upload_permission = True
+            break
+
+    if not has_upload_permission:
+        logger.warning(f"User '{current_user.username}' lacks 'upload_data' permission for file '{file.filename}'.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User does not have permission to upload data."
+        )
+
+    # Validate file size
+    file.file.seek(0, 2) # Move to the end of the file
+    file_size = file.file.tell() # Get the position, which is the size
+    file.file.seek(0) # Reset cursor to the beginning for any subsequent reads
+
+    if file_size > MAX_FILE_SIZE:
+        logger.warning(f"Upload attempt by '{current_user.username}' for file '{file.filename}' failed: File size {file_size} exceeds limit {MAX_FILE_SIZE}.")
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File size {file_size} exceeds maximum allowed size of {MAX_FILE_SIZE} bytes."
+        )
+
+    # Validate MIME type
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        logger.warning(f"Upload attempt by '{current_user.username}' for file '{file.filename}' failed: Invalid MIME type '{file.content_type}'.")
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Unsupported file type: '{file.content_type}'. Allowed types: {', '.join(ALLOWED_MIME_TYPES)}."
+        )
+
+    logger.info(f"File '{file.filename}' (type: {file.content_type}, size: {file_size} bytes) by user '{current_user.username}' passed all validations.")
+
+    original_filename = file.filename
+    file_extension = ""
+    if '.' in original_filename:
+        file_extension = original_filename.rsplit('.', 1)[1]
+
+    unique_filename = f"{uuid.uuid4()}.{file_extension}" if file_extension else str(uuid.uuid4())
+    staged_file_path = os.path.join(STAGING_AREA_PATH, unique_filename)
+
+    try:
+        with open(staged_file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        logger.info(f"File '{original_filename}' successfully saved as '{unique_filename}' in staging area: {staged_file_path}")
+    except Exception as e:
+        logger.error(f"Error saving file {original_filename} to {staged_file_path}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not save uploaded file.")
+    finally:
+        file.file.close() # Ensure the temporary file is closed
+
+    job_data_dict = {
+        "original_filename": original_filename,
+        "staged_file_path": staged_file_path,
+        "user_id": current_user.username,
+        "processing_status": "pending_staging",
+        "source_type": "aegis_secure_upload_v1",
+        "pipeline_stages_executed_log": [{"timestamp": datetime.utcnow().isoformat(), "stage": "upload", "status": "success", "message": f"File staged at {staged_file_path}"}],
+        "error_log_references": [],
+        "upload_timestamp": datetime.utcnow()
+    }
+
+    try:
+        db_job = crud.create_ingestion_job(db=db, job_data=job_data_dict)
+        created_job_id = db_job.job_id
+        logger.info(f"Ingestion job created with ID: {created_job_id} for file '{original_filename}'.")
+    except Exception as e:
+        logger.error(f"Failed to create ingestion job for file '{original_filename}': {e}")
+        if os.path.exists(staged_file_path):
+            try:
+                os.remove(staged_file_path)
+                logger.info(f"Cleaned up staged file {staged_file_path} after DB error.")
+            except OSError as ose:
+                logger.error(f"Error cleaning up staged file {staged_file_path}: {ose}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create ingestion job record.")
+
+    return FileUploadResponse(
+        job_id=created_job_id, # Use the actual job_id from the DB
+        filename=original_filename,
+        message="File uploaded and validated successfully. Ingestion job created.",
+        staged_filepath=staged_file_path
+    )
 
 # --- Main Application Runner ---
 if __name__ == "__main__":
