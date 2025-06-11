@@ -612,9 +612,22 @@ async def aegis_secure_upload_file(
 
         except Exception as e_celery:
             logger.error(f"Failed to submit Celery task for job_id {created_job_id}: {e_celery}")
-            # For now, just log and continue. The job record exists, celery_task_id will be None.
-            # A more robust solution might update job status to 'failed_task_submission'.
-            pass
+            db_job.processing_status = "failed_task_submission"
+            error_message = f"Celery task submission failed: {str(e_celery)}"
+            db_job.error_log_references = (db_job.error_log_references or []) + [error_message]
+
+            current_log = list(db_job.pipeline_stages_executed_log or [])
+            current_log.append({
+                "timestamp": datetime.utcnow().isoformat(),
+                "stage": "Celery Task Submission",
+                "status": "failed",
+                "message": error_message
+            })
+            db_job.pipeline_stages_executed_log = current_log
+            db.commit()
+            logger.warning(f"Job ID {created_job_id} processing_status updated to 'failed_task_submission' due to Celery error.")
+            # The upload itself was successful, but the async task submission failed.
+            # The job record reflects this. The user is still informed of successful upload.
 
     except Exception as e:
         logger.error(f"Failed to create ingestion job for file '{original_filename}': {e}")

@@ -75,7 +75,7 @@ Status: Pending
 1.  **Task: [AEGIS-001] Design and Implement Secure Upload/Reception Endpoint**
     *   Description: Establish the API endpoint for secure file uploads, including initial validation (size, MIME type) and robust authentication/authorization.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 2.  **Task: [AEGIS-002] Implement Staging Area for raw data**
     *   Description: Set up a secure, isolated temporary storage location for uploaded raw data before processing.
     *   Priority: High
