@@ -49,6 +49,8 @@ class IngestionJobDB(Base):
     ner_summary = Column(JSON, nullable=True)
     content_security_summary = Column(JSON, nullable=True) # This was the key missing field
 
+    intermediate_geojson_path = Column(String, nullable=True, unique=True) # Path to intermediate GeoJSON
+
 
     def __repr__(self):
         return f"<IngestionJobDB(job_id='{self.job_id}', filename='{self.original_filename}', status='{self.processing_status}')>"

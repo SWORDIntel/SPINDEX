@@ -21,11 +21,11 @@ from sqlalchemy.ext.declarative import declarative_base # Will be removed if Bas
 from sqlalchemy.orm import Session # Added Session for type hinting
 # Assuming database.py and crud.py exist and are structured as implied by the FastAPI endpoints
 from backend import crud # Added import for crud
-from backend.database import Base, get_db # Added import for Base and get_db
+from backend.database import Base, get_db, SessionLocal # Added SessionLocal for Celery tasks
 from backend.models import IngestionJobDB # Added import for IngestionJobDB
 
 # --- Data Processing & Scientific Computing Imports ---
-from osgeo import ogr, osr # type: ignore
+from osgeo import gdal, ogr, osr # type: ignore
 from shapely.geometry import shape, Point as ShapelyPoint # type: ignore
 from shapely.validation import is_valid, make_valid
 import spacy # For NER
@@ -56,7 +56,7 @@ MAX_FILE_SIZE = 100 * 1024 * 1024 # 100 MB
 ALLOWED_MIME_TYPES = [
     "application/geo+json", "application/json", "application/zip",
     "application/vnd.google-earth.kml+xml", "application/gml+xml",
-    "text/xml", "application/octet-stream"
+    "text/xml", "application/octet-stream", "text/plain"
 ]
 
 # --- Logging Configuration ---
@@ -111,6 +111,7 @@ class IngestionJobMetadata(BaseModel):
     complex_geometry_summary: Optional[Dict[str, Any]] = None
     ner_summary: Optional[Dict[str, Any]] = None
     content_security_summary: Optional[Dict[str, Any]] = None
+    intermediate_geojson_path: Optional[str] = None
     class Config: orm_mode = True; json_encoders = {datetime: lambda v: v.isoformat() if v else None}
 
 class IndexCreationRequest(BaseModel): promoted_data_path: str; index_name: str; index_type: str; index_parameters: Optional[Dict[str, Any]] = None
@@ -195,6 +196,331 @@ async def get_current_user(token: Optional[str] = Depends(X_AUTH_TOKEN_SCHEME)) 
 # - create_spindex_task (@shared_task)
 # - All @app endpoints (/tasks, /upload, /metadata, /indexes, /query)
 
+# --- Celery Tasks ---
+@celery_app.task(name="process_ingestion_job")
+def process_ingestion_job_task(job_id: str):
+    logger.info(f"Celery task 'process_ingestion_job' started for job_id: {job_id}")
+
+    db = SessionLocal() # Create a new session for the task
+    try:
+        # Initial logic for fetching job and updating status will be added in the next plan step.
+        # For now, just log and confirm task invocation.
+        job = db.query(IngestionJobDB).filter(IngestionJobDB.job_id == job_id).first()
+        if not job:
+            logger.error(f"Job ID {job_id} not found in the database for task 'process_ingestion_job'.")
+            return f"Error: Job ID {job_id} not found."
+
+        logger.info(f"Starting format detection for job {job_id}, file: {job.staged_file_path}")
+
+        job.processing_status = "processing_format_detection"
+
+        # Update pipeline log
+        current_log = list(job.pipeline_stages_executed_log or [])
+        current_log.append({
+            "timestamp": datetime.utcnow().isoformat(), # Ensure datetime is imported
+            "stage": "Format Detection",
+            "status": "started",
+            "message": f"Initiated format detection for staged file: {job.staged_file_path}"
+        })
+        job.pipeline_stages_executed_log = current_log
+
+        db.commit()
+        logger.info(f"Status updated to 'processing_format_detection' for job_id: {job_id}. Proceeding with GDAL/OGR detection.")
+
+        detected_driver_name = None
+        try:
+            logger.info(f"Attempting to open file {job.staged_file_path} with GDAL/OGR for job {job_id}.")
+            dataSource = ogr.Open(job.staged_file_path, 0) # 0 means read-only
+
+            if dataSource is None:
+                job.processing_status = "failed_format_detection"
+                job.validation_summary = {"format_detection_error": "GDAL/OGR could not open the file or it's not a recognized vector format."}
+                log_message = f"GDAL/OGR failed to open or recognize file: {job.staged_file_path}"
+                logger.error(log_message + f" for job {job_id}.")
+            else:
+                driver = dataSource.GetDriver()
+                if driver:
+                    detected_driver_name = driver.GetName()
+                    job.detected_format = detected_driver_name
+                    job.processing_status = "format_detected_pending_conversion" # New status
+                    log_message = f"Detected format: {detected_driver_name} for file {job.staged_file_path}"
+                    logger.info(log_message + f" for job {job_id}.")
+                else:
+                    # This case might be rare if dataSource opened but driver is None
+                    job.processing_status = "failed_format_detection"
+                    job.validation_summary = {"format_detection_error": "GDAL/OGR opened the file but could not determine the driver."}
+                    log_message = f"GDAL/OGR could not determine driver for file: {job.staged_file_path}"
+                    logger.error(log_message + f" for job {job_id}.")
+
+                dataSource = None # Close data source
+
+            # Update pipeline log for format detection outcome
+            current_log = list(job.pipeline_stages_executed_log or [])
+            log_entry_status = "success" if detected_driver_name else "failed"
+            log_entry_message = f"Format detection {log_entry_status}."
+            if detected_driver_name:
+                log_entry_message += f" Detected format: {detected_driver_name}."
+            else:
+                log_entry_message += f" Error: {job.validation_summary.get('format_detection_error', 'Unknown GDAL/OGR error')}."
+
+            current_log.append({
+                "timestamp": datetime.utcnow().isoformat(),
+                "stage": "Format Detection",
+                "status": log_entry_status,
+                "message": log_entry_message
+            })
+            job.pipeline_stages_executed_log = current_log
+            db.commit()
+
+        except Exception as e_gdal:
+            logger.error(f"Exception during GDAL/OGR format detection for job {job_id}, file {job.staged_file_path}: {e_gdal}")
+            job.processing_status = "failed_format_detection"
+            job.validation_summary = {"format_detection_error": f"GDAL/OGR Exception: {str(e_gdal)}"}
+
+            current_log = list(job.pipeline_stages_executed_log or [])
+            current_log.append({
+                "timestamp": datetime.utcnow().isoformat(),
+                "stage": "Format Detection",
+                "status": "failed",
+                "message": f"Exception occurred: {str(e_gdal)}"
+            })
+            job.pipeline_stages_executed_log = current_log
+            db.commit()
+            return f"Job ID {job_id}: Failed at format detection stage due to GDAL/OGR error."
+
+        if detected_driver_name and job.processing_status == "format_detected_pending_conversion":
+            geojson_filename = f"{job_id}.geojson"
+            geojson_output_path = os.path.join(PROCESSED_AREA_PATH, geojson_filename)
+
+            logger.info(f"Attempting to convert file {job.staged_file_path} to GeoJSON at {geojson_output_path} for job {job_id}.")
+
+            try:
+                os.makedirs(PROCESSED_AREA_PATH, exist_ok=True)
+                translate_options_list = ["-f", "GeoJSON", "-skipfailures"]
+                result = gdal.VectorTranslate(destName=geojson_output_path,
+                                              srcDS=job.staged_file_path,
+                                              options=translate_options_list)
+
+                if result is None:
+                    if not os.path.exists(geojson_output_path) or os.path.getsize(geojson_output_path) == 0:
+                        gdal_error_msg = gdal.GetLastErrorMsg()
+                        if not gdal_error_msg or "error" not in gdal_error_msg.lower():
+                             gdal_error_msg = "GDAL VectorTranslate completed but output file is missing or empty."
+                        logger.error(f"GDAL VectorTranslate failed for job {job_id}: {gdal_error_msg}")
+                        raise Exception(gdal_error_msg)
+
+                job.processing_status = "completed_format_conversion"
+                job.intermediate_geojson_path = geojson_output_path
+                log_message = f"Successfully converted file to GeoJSON: {geojson_output_path}"
+                logger.info(log_message + f" for job {job_id}.")
+
+                current_log = list(job.pipeline_stages_executed_log or [])
+                current_log.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "stage": "Format Conversion (GeoJSON)",
+                    "status": "success",
+                    "message": log_message,
+                    "output_path": geojson_output_path
+                })
+                job.pipeline_stages_executed_log = current_log
+                db.commit()
+                # Conversion successful, status is "completed_format_conversion", proceed to CRS detection
+                logger.info(f"Job ID {job_id}: File successfully converted to GeoJSON. Proceeding to CRS detection.")
+
+            except Exception as e_convert:
+                logger.error(f"Exception during GeoJSON conversion for job {job_id}, file {job.staged_file_path}: {e_convert}")
+                job.processing_status = "failed_format_conversion"
+                job.validation_summary = {
+                    **(job.validation_summary or {}),
+                    "format_conversion_error": f"GeoJSON Conversion Exception: {str(e_convert)}"
+                }
+                current_log = list(job.pipeline_stages_executed_log or [])
+                current_log.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "stage": "Format Conversion (GeoJSON)",
+                    "status": "failed",
+                    "message": f"Exception: {str(e_convert)}"
+                })
+                job.pipeline_stages_executed_log = current_log
+                db.commit()
+                return f"Job ID {job_id}: Failed at GeoJSON conversion stage." # End task if conversion fails
+
+        # CRS Detection Stage (only if format conversion was successful)
+        if job.processing_status == "completed_format_conversion":
+            logger.info(f"Starting CRS detection for job {job_id}, file: {job.intermediate_geojson_path}")
+            job.processing_status = "processing_crs_detection"
+            db.commit()
+
+            detected_crs_wkt = None
+            try:
+                datasource = ogr.Open(job.intermediate_geojson_path, 0)
+                if datasource is None:
+                    raise Exception("GDAL/OGR could not open the intermediate GeoJSON file.")
+                if datasource.GetLayerCount() == 0:
+                    raise Exception("Intermediate GeoJSON file contains no layers.")
+
+                layer = datasource.GetLayer()
+                spatial_ref = layer.GetSpatialRef()
+
+                if spatial_ref is not None:
+                    detected_crs_wkt = spatial_ref.ExportToWkt()
+                    job.original_crs = detected_crs_wkt
+                    job.processing_status = "crs_detected_pending_transformation"
+                    log_message = f"Detected CRS for {job.intermediate_geojson_path}: {detected_crs_wkt[:100]}..."
+                    logger.info(log_message + f" for job {job_id}")
+                else:
+                    job.processing_status = "failed_crs_detection"
+                    log_message = "CRS not found or not interpretable in the GeoJSON file."
+                    logger.warning(log_message + f" for job {job_id}, file: {job.intermediate_geojson_path}")
+                    job.validation_summary = {**(job.validation_summary or {}), "crs_detection_error": log_message}
+
+                datasource = None
+
+                current_log = list(job.pipeline_stages_executed_log or [])
+                log_status = "success" if job.processing_status == "crs_detected_pending_transformation" else "failed"
+                current_log.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "stage": "CRS Detection",
+                    "status": log_status,
+                    "message": log_message,
+                    "detected_crs_wkt": detected_crs_wkt if detected_crs_wkt else "N/A"
+                })
+                job.pipeline_stages_executed_log = current_log
+                db.commit()
+
+                if job.processing_status == "failed_crs_detection":
+                    return f"Job ID {job_id}: Failed at CRS detection stage. {log_message}"
+                # If CRS detection was successful (status is crs_detected_pending_transformation), proceed to transformation
+                # No specific return here, flow continues if crs_detected_pending_transformation
+
+            except Exception as e_crs_detect:
+                logger.error(f"Exception during CRS detection for job {job_id}: {e_crs_detect}")
+                job.processing_status = "failed_crs_detection"
+                job.original_crs = None
+                job.validation_summary = {
+                    **(job.validation_summary or {}),
+                    "crs_detection_error": f"CRS Detection Exception: {str(e_crs_detect)}"
+                }
+                current_log = list(job.pipeline_stages_executed_log or [])
+                current_log.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "stage": "CRS Detection",
+                    "status": "failed",
+                    "message": f"Exception: {str(e_crs_detect)}"
+                })
+                job.pipeline_stages_executed_log = current_log
+                db.commit()
+                return f"Job ID {job_id}: Failed at CRS detection stage due to exception." # End task
+
+        # CRS Transformation Stage (only if CRS detection was successful and needs transformation)
+        if job.processing_status == "crs_detected_pending_transformation":
+            logger.info(f"Starting CRS transformation for job {job_id}, file: {job.intermediate_geojson_path}")
+            job.processing_status = "processing_crs_transformation"
+            db.commit()
+
+            source_srs_wkt = job.original_crs
+            target_srs_epsg_code_str = str(TARGET_CRS_EPSG)
+
+            source_srs = osr.SpatialReference()
+            source_srs.ImportFromWkt(source_srs_wkt)
+
+            target_srs = osr.SpatialReference()
+            target_srs.ImportFromEPSG(TARGET_CRS_EPSG)
+
+            needs_reprojection = True
+            source_auth_name = source_srs.GetAuthorityName(None)
+            source_auth_code = source_srs.GetAuthorityCode(None)
+
+            if source_auth_name == "EPSG" and str(source_auth_code) == target_srs_epsg_code_str:
+                needs_reprojection = False
+                logger.info(f"Job {job_id}: Source CRS ({source_auth_name}:{source_auth_code}) is already the target CRS (EPSG:{target_srs_epsg_code_str}). No reprojection needed.")
+                job.processing_status = "completed_crs_transformation"
+                job.target_crs = f"EPSG:{target_srs_epsg_code_str}"
+                log_message = f"CRS is already {job.target_crs}. No transformation performed."
+
+                current_log = list(job.pipeline_stages_executed_log or [])
+                current_log.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "stage": "CRS Transformation",
+                    "status": "success",
+                    "message": log_message,
+                    "source_crs_wkt_snippet": job.original_crs[:100] + "...",
+                    "target_crs": job.target_crs
+                })
+                job.pipeline_stages_executed_log = current_log
+                db.commit()
+
+            if needs_reprojection:
+                original_geojson_path = job.intermediate_geojson_path
+                reprojected_filename = f"{job_id}_epsg{target_srs_epsg_code_str}.geojson"
+                reprojected_geojson_path = os.path.join(PROCESSED_AREA_PATH, reprojected_filename)
+
+                logger.info(f"Attempting to reproject file {original_geojson_path} to EPSG:{target_srs_epsg_code_str} at {reprojected_geojson_path} for job {job_id}.")
+
+                try:
+                    translate_options_list = ["-f", "GeoJSON", "-skipfailures", "-t_srs", f"EPSG:{target_srs_epsg_code_str}"]
+                    result = gdal.VectorTranslate(destName=reprojected_geojson_path, srcDS=original_geojson_path, options=translate_options_list)
+
+                    if result is None or (not os.path.exists(reprojected_geojson_path) or os.path.getsize(reprojected_geojson_path) == 0):
+                        gdal_error_msg = gdal.GetLastErrorMsg()
+                        if not gdal_error_msg or "error" not in gdal_error_msg.lower():
+                             gdal_error_msg = "GDAL VectorTranslate for reprojection completed but output file is missing or empty."
+                        logger.error(f"GDAL VectorTranslate for reprojection failed for job {job_id}: {gdal_error_msg}")
+                        raise Exception(gdal_error_msg)
+
+                    job.intermediate_geojson_path = reprojected_geojson_path
+                    job.target_crs = f"EPSG:{target_srs_epsg_code_str}"
+                    job.processing_status = "completed_crs_transformation"
+                    log_message = f"Successfully reprojected to {job.target_crs}. New file: {reprojected_geojson_path}"
+                    logger.info(log_message + f" for job {job_id}.")
+
+                    current_log = list(job.pipeline_stages_executed_log or [])
+                    current_log.append({
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "stage": "CRS Transformation",
+                        "status": "success",
+                        "message": log_message,
+                        "source_crs_wkt_snippet": job.original_crs[:100] + "...",
+                        "target_crs": job.target_crs,
+                        "output_path": reprojected_geojson_path
+                    })
+                    job.pipeline_stages_executed_log = current_log
+                    db.commit()
+
+                except Exception as e_crs_transform:
+                    logger.error(f"Exception during CRS transformation for job {job_id}: {e_crs_transform}")
+                    job.processing_status = "failed_crs_transformation"
+                    job.target_crs = None
+                    job.validation_summary = {**(job.validation_summary or {}), "crs_transformation_error": f"CRS Transformation Exception: {str(e_crs_transform)}"}
+                    current_log = list(job.pipeline_stages_executed_log or [])
+                    current_log.append({
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "stage": "CRS Transformation",
+                        "status": "failed",
+                        "message": f"Exception: {str(e_crs_transform)}"
+                    })
+                    job.pipeline_stages_executed_log = current_log
+                    db.commit()
+                    return f"Job ID {job_id}: Failed at CRS transformation stage." # End task
+
+        # Final success message if all relevant stages passed
+        if job.processing_status == "completed_crs_transformation":
+            return f"Job ID {job_id}: Successfully processed through CRS transformation. Final file: {job.intermediate_geojson_path}"
+        elif job.processing_status == "failed_crs_detection" or job.processing_status == "failed_format_conversion" or job.processing_status == "failed_format_detection":
+             # This case is already handled by earlier returns, but as a safeguard:
+            return f"Job ID {job_id}: Processing failed at {job.processing_status}."
+        # Fallback for unexpected status, or if prior steps already returned.
+        return f"Job ID {job_id}: Task ended with status {job.processing_status}."
+
+
+    except Exception as e:
+        logger.error(f"Error processing job ID {job_id} in Celery task: {e}")
+        db.rollback() # Rollback in case of error during DB operations
+        # Optionally, re-raise or handle specific exceptions if task should be retried
+        # For now, just log and return error message
+        return f"Error processing job ID {job_id}: {str(e)}"
+    finally:
+        db.close() # Ensure session is closed
 
 # --- AEGIS Pipeline Endpoints ---
 
@@ -275,6 +601,21 @@ async def aegis_secure_upload_file(
         db_job = crud.create_ingestion_job(db=db, job_data=job_data_dict)
         created_job_id = db_job.job_id
         logger.info(f"Ingestion job created with ID: {created_job_id} for file '{original_filename}'.")
+
+        try:
+            task_submission = process_ingestion_job_task.delay(job_id=created_job_id)
+            logger.info(f"Celery task 'process_ingestion_job_task' submitted for job_id: {created_job_id}. Celery task ID: {task_submission.id}")
+
+            db_job.celery_task_id = task_submission.id
+            db.commit()
+            logger.info(f"Celery task ID {task_submission.id} saved to job {created_job_id}.")
+
+        except Exception as e_celery:
+            logger.error(f"Failed to submit Celery task for job_id {created_job_id}: {e_celery}")
+            # For now, just log and continue. The job record exists, celery_task_id will be None.
+            # A more robust solution might update job status to 'failed_task_submission'.
+            pass
+
     except Exception as e:
         logger.error(f"Failed to create ingestion job for file '{original_filename}': {e}")
         if os.path.exists(staged_file_path):

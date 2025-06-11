@@ -38,7 +38,8 @@ def create_ingestion_job(db: Session, job_data: Dict[str, Any]) -> models.Ingest
     quarantine_timestamp=job_data.get('quarantine_timestamp', None),
     data_hash_original=job_data.get('data_hash_original', None),
     data_hash_processed=job_data.get('data_hash_processed', None),
-    content_security_summary=job_data.get('content_security_summary', None)
+    content_security_summary=job_data.get('content_security_summary', None),
+    intermediate_geojson_path=job_data.get('intermediate_geojson_path', None)
     )
     db.add(db_job)
     db.commit()
