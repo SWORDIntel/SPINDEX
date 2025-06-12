@@ -103,7 +103,7 @@ Status: Pending
 8.  **Task: [AEGIS-008] Implement Complex Geometry Handling module**
     *   Description: Develop the module to manage datasets with mixed geometry types based on configurable strategies (split, filter, reject).
     *   Priority: Medium
-    *   Status: To Do
+    *   Status: DONE ✅
 9.  **Task: [AEGIS-009] Implement Unstructured Text Parsing (NLP/NER) module**
     *   Description: Develop the module to use NER for extracting location names from text, integrating with the geocoding module.
     *   Priority: Medium
