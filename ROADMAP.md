@@ -99,7 +99,7 @@ Status: Pending
 7.  **Task: [AEGIS-007] Implement Geocoding Service Integration module**
     *   Description: Develop the module to identify address fields and integrate with a geocoding service to generate point geometries.
     *   Priority: Medium
-    *   Status: To Do
+    *   Status: DONE ✅
 8.  **Task: [AEGIS-008] Implement Complex Geometry Handling module**
     *   Description: Develop the module to manage datasets with mixed geometry types based on configurable strategies (split, filter, reject).
     *   Priority: Medium

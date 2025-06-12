@@ -62,6 +62,14 @@ ALLOWED_MIME_TYPES = [
     "application/vnd.google-earth.kml+xml", "application/gml+xml",
     "text/xml", "application/octet-stream", "text/plain"
 ]
+NOMINATIM_USER_AGENT = "spindex-aegis-pipeline/0.1 (developer.contact@example.org)"
+GEOCODING_ADDRESS_FIELDS = [
+    "address", "Address", "ADDRESS",
+    "location", "Location", "LOCATION",
+    "street_address", "full_address", "addr",
+    "שדה כתובת" # Example: Hebrew for "address field"
+]
+
 
 # --- Logging Configuration ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -199,6 +207,81 @@ async def get_current_user(token: Optional[str] = Depends(X_AUTH_TOKEN_SCHEME)) 
 # - process_staged_file_task (@shared_task)
 # - create_spindex_task (@shared_task)
 # - All @app endpoints (/tasks, /upload, /metadata, /indexes, /query)
+
+# --- Helper Functions for Pipeline Stages ---
+
+def geocode_and_update_features(features: list, address_fields: list, nominatim_user_agent: str, logger_instance) -> tuple[list, dict]:
+    """
+    Geocodes features that lack geometry using specified address fields.
+    Updates features in-place with new Point geometries if geocoding is successful.
+    """
+    summary = {
+        "features_total_count": 0,
+        "features_without_geometry_count": 0,
+        "addresses_found_for_geocoding": 0,
+        "geocoding_requests_sent": 0,
+        "geocoding_successes": 0,
+        "geocoding_failures": 0, # Address not found by geocoder
+        "geocoding_service_errors": 0, # Errors like timeout, service unavailable
+        "geocoding_unexpected_errors": 0 # Other exceptions during geocoding attempt
+    }
+
+    geolocator = Nominatim(user_agent=nominatim_user_agent, timeout=10)
+
+    for feature in features:
+        summary["features_total_count"] += 1
+
+        # Check if geometry is None or an empty dictionary
+        current_geometry = feature.get("geometry")
+        if current_geometry is not None and (not isinstance(current_geometry, dict) or current_geometry): # Skips if valid geometry object/dict exists
+            continue
+
+        summary["features_without_geometry_count"] += 1
+
+        address_to_geocode = None
+        for field_name in address_fields:
+            potential_address = feature.get("properties", {}).get(field_name)
+            if potential_address and isinstance(potential_address, str) and potential_address.strip():
+                address_to_geocode = potential_address.strip()
+                summary["addresses_found_for_geocoding"] += 1
+                break # Found an address field to try for this feature
+
+        if address_to_geocode:
+            logger_instance.info(f"Attempting to geocode address: '{address_to_geocode}'")
+            summary["geocoding_requests_sent"] += 1
+            try:
+                location = geolocator.geocode(address_to_geocode)
+                time.sleep(1.0) # Respect Nominatim's usage policy (1 request per second)
+
+                if location:
+                    summary["geocoding_successes"] += 1
+                    new_geometry = {"type": "Point", "coordinates": [location.longitude, location.latitude]}
+                    feature["geometry"] = new_geometry
+                    logger_instance.info(f"Geocoding successful for '{address_to_geocode}': {new_geometry['coordinates']}")
+                else:
+                    summary["geocoding_failures"] += 1
+                    logger_instance.warning(f"Geocoding failed (address not found) for: '{address_to_geocode}'")
+
+            except GeocoderTimedOut:
+                summary["geocoding_service_errors"] += 1
+                logger_instance.error(f"Geocoding service timed out for address: '{address_to_geocode}'")
+                time.sleep(1.0) # Wait after a timeout as well
+            except GeocoderUnavailable:
+                summary["geocoding_service_errors"] += 1
+                logger_instance.error(f"Geocoding service unavailable for address: '{address_to_geocode}'")
+                time.sleep(1.0) # Wait after a service error
+            except GeocoderServiceError as e_service:
+                summary["geocoding_service_errors"] += 1
+                logger_instance.error(f"Geocoding service error for address '{address_to_geocode}': {e_service}")
+                time.sleep(1.0) # Wait after a service error
+            except Exception as e_generic:
+                summary["geocoding_unexpected_errors"] += 1
+                logger_instance.error(f"Unexpected error during geocoding for address '{address_to_geocode}': {e_generic}")
+                # No time.sleep here as it's an unexpected client-side or unknown error.
+        else:
+            logger_instance.info(f"No address found in specified fields for feature {feature.get('id', '(no ID)')} to attempt geocoding.")
+
+    return features, summary
 
 # --- Celery Tasks ---
 @celery_app.task(name="process_ingestion_job")
@@ -507,19 +590,100 @@ def process_ingestion_job_task(job_id: str):
                     db.commit()
                     return f"Job ID {job_id}: Failed at CRS transformation stage." # End task
 
-        # Final success message if all relevant stages passed
+        # Geocoding Stage (only if CRS transformation was successful)
         if job.processing_status == "completed_crs_transformation":
-            return f"Job ID {job_id}: Successfully processed through CRS transformation. Final file: {job.intermediate_geojson_path}"
-        elif job.processing_status == "failed_crs_detection" or job.processing_status == "failed_format_conversion" or job.processing_status == "failed_format_detection":
-             # This case is already handled by earlier returns, but as a safeguard:
-            return f"Job ID {job_id}: Processing failed at {job.processing_status}."
-        # Fallback for unexpected status, or if prior steps already returned.
-        return f"Job ID {job_id}: Task ended with status {job.processing_status}."
+            logger.info(f"Starting geocoding for job {job_id}, file: {job.intermediate_geojson_path}")
+            job.processing_status = "processing_geocoding"
+            current_log = list(job.pipeline_stages_executed_log or [])
+            current_log.append({
+                "timestamp": datetime.utcnow().isoformat(),
+                "stage": "Geocoding",
+                "status": "started",
+                "message": f"Initiated geocoding for features in {job.intermediate_geojson_path}"
+            })
+            job.pipeline_stages_executed_log = current_log
+            db.commit()
 
+            try:
+                if not job.intermediate_geojson_path or not os.path.exists(job.intermediate_geojson_path):
+                    raise FileNotFoundError(f"Intermediate GeoJSON file not found at {job.intermediate_geojson_path} for geocoding.")
+
+                with open(job.intermediate_geojson_path, 'r') as f:
+                    geojson_data = json.load(f)
+
+                if 'features' not in geojson_data or not isinstance(geojson_data['features'], list):
+                    raise ValueError("GeoJSON data does not contain a valid 'features' list.")
+
+                features = geojson_data['features']
+
+                # Call the helper function (logger is globally available as logger_instance in this file)
+                updated_features, geocoding_summary_dict = geocode_and_update_features(
+                    features,
+                    GEOCODING_ADDRESS_FIELDS, # Use the defined constant
+                    NOMINATIM_USER_AGENT,     # Use the defined constant
+                    logger # Use the global logger instance
+                )
+
+                job.geocoding_summary = geocoding_summary_dict
+                geojson_data['features'] = updated_features # Update features in the loaded data
+
+                with open(job.intermediate_geojson_path, 'w') as f:
+                    json.dump(geojson_data, f)
+
+                job.processing_status = "completed_geocoding"
+                log_message = f"Geocoding completed for job {job_id}. Summary: {geocoding_summary_dict}"
+                logger.info(log_message)
+                current_log = list(job.pipeline_stages_executed_log or [])
+                current_log.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "stage": "Geocoding",
+                    "status": "success",
+                    "message": log_message,
+                    "summary": geocoding_summary_dict
+                })
+                job.pipeline_stages_executed_log = current_log
+                db.commit()
+
+            except Exception as e_geocode_step:
+                logger.error(f"Exception during geocoding pipeline step for job {job_id}: {e_geocode_step}")
+                job.processing_status = "failed_geocoding_step"
+                error_info = {"geocoding_pipeline_error": str(e_geocode_step)}
+                job.validation_summary = {**(job.validation_summary or {}), **error_info}
+                current_log = list(job.pipeline_stages_executed_log or [])
+                current_log.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "stage": "Geocoding",
+                    "status": "failed",
+                    "message": f"Geocoding step failed: {str(e_geocode_step)}"
+                })
+                job.pipeline_stages_executed_log = current_log
+                db.commit()
+                return f"Job ID {job_id}: Failed at geocoding pipeline step."
+
+        # Final success message if all relevant stages passed, including geocoding
+        if job.processing_status == "completed_geocoding":
+            return f"Job ID {job_id}: Successfully processed through geocoding. Final file: {job.intermediate_geojson_path}"
+        elif job.processing_status == "completed_crs_transformation": # If geocoding was skipped or is the last step
+             return f"Job ID {job_id}: Successfully processed through CRS transformation. Final file: {job.intermediate_geojson_path}"
+        elif job.processing_status in ["failed_crs_detection", "failed_format_conversion", "failed_format_detection", "failed_crs_transformation", "failed_geocoding_step"]:
+            return f"Job ID {job_id}: Processing failed at {job.processing_status}."
+
+        # Fallback for unexpected status
+        return f"Job ID {job_id}: Task ended with status {job.processing_status}."
 
     except Exception as e:
         logger.error(f"Error processing job ID {job_id} in Celery task: {e}")
-        db.rollback() # Rollback in case of error during DB operations
+        # Attempt to update job status to a generic failure if not already set to a specific failure
+        if job and hasattr(job, 'processing_status') and "failed" not in job.processing_status:
+            try:
+                job.processing_status = "failed_unknown_task_error"
+                job.validation_summary = {**(job.validation_summary or {}), "unknown_task_error": str(e)}
+                db.commit()
+            except Exception as db_error:
+                logger.error(f"Failed to update job status to failed_unknown_task_error for job {job_id} after initial error: {db_error}")
+                db.rollback() # Rollback this specific attempt to update status
+        else:
+            db.rollback() # Rollback any changes if job object wasn't available or status was already a failure
         # Optionally, re-raise or handle specific exceptions if task should be retried
         # For now, just log and return error message
         return f"Error processing job ID {job_id}: {str(e)}"
