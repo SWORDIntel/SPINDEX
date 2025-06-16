@@ -6,6 +6,9 @@
 #include "plugin_interface.h" // For SpindexPlugin
 #include "threading.h"        // For ThreadPool
 +#include "nlp_ner_parser.h"   // For NlpNerParserConfig
++#include "geometric_validator.h" // For GeometricValidatorConfig
++#include "complex_geometry_handler.h" // For ComplexGeometryHandlerConfig
++// geojson_processor.h is mainly for the .c file, not directly needed in pipeline struct
 #include <pthread.h>          // For pthread_mutex_t
 
 /**
@@ -28,6 +31,8 @@ typedef struct {
     // - Caches for frequently used plugins
     ThreadPool thread_pool;        // Thread pool for parallel processing
 +    NlpNerParserConfig ner_config; // Configuration for the NLP/NER module
++    ComplexGeometryHandlerConfig cg_config; // Configuration for Complex Geometry Handler
++    GeometricValidatorConfig validator_config; // Configuration for Geometric Validator
     pthread_mutex_t indexer_mutex; // To protect calls to non-thread-safe indexer plugins
     // - Statistics on processed files/data
 } SpindexIngestionPipeline;
