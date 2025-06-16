@@ -59,12 +59,12 @@ ifeq ($(OPENVINO_FOUND),1)
   ifeq ($(wildcard $(OPENVINO_INCLUDE_PATH_RUNTIME)/openvino/c/openvino.h),)
     ifeq ($(wildcard $(OPENVINO_INCLUDE_PATH_DEV)/openvino/c/openvino.h),) # Check for older C API path
         ifeq ($(wildcard $(OPENVINO_INCLUDE_PATH_DEV)/inference_engine.hpp),) # Check for older C++ API path as a proxy
-            $(warning Could not find OpenVINO headers in expected locations: $(OPENVINO_INCLUDE_PATH_RUNTIME) or $(OPENVINO_INCLUDE_PATH_DEV))
+          $(warning Could not find OpenVINO headers in expected locations: $(OPENVINO_INCLUDE_PATH_RUNTIME) or $(OPENVINO_INCLUDE_PATH_DEV))
         else
-            OPENVINO_INCLUDES := -I$(OPENVINO_INCLUDE_PATH_DEV)
+          OPENVINO_INCLUDES := -I$(OPENVINO_INCLUDE_PATH_DEV)
         endif
     else # Found C API in dev path
-        OPENVINO_INCLUDES := -I$(OPENVINO_INCLUDE_PATH_DEV)
+      OPENVINO_INCLUDES := -I$(OPENVINO_INCLUDE_PATH_DEV)
     endif
   else # Found C API in runtime path
     OPENVINO_INCLUDES := -I$(OPENVINO_INCLUDE_PATH_RUNTIME)
@@ -130,8 +130,8 @@ TEST_HW_DETECT_TARGET = $(BUILD_DIR)/test_hardware_detection
 
 TEST_PIPELINE_SRC = $(CORE_DIR)/test_ingestion_pipeline.c
 TEST_PIPELINE_DEPS = $(BUILD_DIR)/core/ingestion_pipeline.o $(BUILD_DIR)/core/plugin_loader.o \
-                     $(BUILD_DIR)/core/config_manager.o $(BUILD_DIR)/core/utils.o $(BUILD_DIR)/core/hardware_detection.o \
-                     $(BUILD_DIR)/core/threading.o $(AEGIS_MODULE_OBJS) plugins
+                      $(BUILD_DIR)/core/config_manager.o $(BUILD_DIR)/core/utils.o $(BUILD_DIR)/core/hardware_detection.o \
+                      $(BUILD_DIR)/core/threading.o $(AEGIS_MODULE_OBJS) plugins
 TEST_PIPELINE_TARGET = $(BUILD_DIR)/test_ingestion_pipeline
 
 TEST_ES_CLIENT_SRC = $(CORE_DIR)/test_elasticsearch_client.c

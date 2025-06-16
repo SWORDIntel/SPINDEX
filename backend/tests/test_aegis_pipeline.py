@@ -10,14 +10,17 @@ from typing import Optional
 
 # Adjust paths for imports based on execution from repository root or if backend/ is a module
 # Assuming tests might be run from the repo root, and PYTHONPATH includes the root.
-from backend.main import app, get_current_user, User, Role, STAGING_AREA_PATH, ALLOWED_MIME_TYPES, MAX_FILE_SIZE, PROCESSED_AREA_PATH, TARGET_CRS_EPSG, NOMINATIM_USER_AGENT, GEOCODING_ADDRESS_FIELDS
-from backend.main import process_ingestion_job_task, geocode_and_update_features # Import the Celery task and helper
+from backend.main import app, get_current_user, User, Role, STAGING_AREA_PATH, ALLOWED_MIME_TYPES, MAX_FILE_SIZE, PROCESSED_AREA_PATH, TARGET_CRS_EPSG, NOMINATIM_USER_AGENT, GEOCODING_ADDRESS_FIELDS, COMPLEX_GEOMETRY_STRATEGY, CGH_FILTER_TYPES_TO_KEEP, CGH_REJECT_IF_TYPES_FOUND
+from backend.main import process_ingestion_job_task, geocode_and_update_features, handle_complex_geometries
 from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError
+from shapely.geometry import Point, LineString, Polygon, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection, mapping as shapely_mapping
 # from osgeo import osr # Import for creating osr.SpatialReference mock instances if needed directly in test setup
 from backend.database import SessionLocal, get_db, Base, engine
 import json
 import time # For mocking time.sleep
 import logging
+import copy
+from collections import defaultdict
 from backend.models import IngestionJobDB
 from backend import crud
 
@@ -704,7 +707,7 @@ def test_celery_task_geocoding_stage_failure_file_io(mock_json_load):
     initial_features = [{"type": "Feature", "properties": {"address": "123 Main St"}, "geometry": None}]
     mock_json_load.side_effect = IOError("Cannot read file")
 
-    job = setup_job_for_geocoding_test(db_session, initial_features)
+    job = setup_job_for_geocoding_test(db_session, initial_features) # Uses the same setup as successful geocoding
     job_id = job.job_id
     intermediate_file_path = job.intermediate_geojson_path
 
@@ -725,3 +728,251 @@ def test_celery_task_geocoding_stage_failure_file_io(mock_json_load):
                 os.remove(intermediate_file_path)
         crud.remove_ingestion_job(db_session, job_id)
         db_session.close()
+
+
+# --- Tests for handle_complex_geometries Helper ---
+mock_cgh_logger = logging.getLogger("test_cgh_helper")
+# if not mock_cgh_logger.handlers:
+#     mock_cgh_logger.addHandler(logging.StreamHandler()) # To see logs
+
+def test_cgh_strategy_pass_through():
+    features = [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [0,0]}, "properties": {}}]
+    processed, summary = handle_complex_geometries(copy.deepcopy(features), "pass_through", {}, mock_cgh_logger)
+    assert processed == features
+    assert summary["feature_count_before"] == 1
+    assert summary["feature_count_after"] == 1
+    assert summary["geometries_by_type_before"]["Point"] == 1
+    assert summary["geometries_by_type_after"]["Point"] == 1
+
+def test_cgh_strategy_filter_types():
+    features = [
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [0,0]}, "properties": {"id": 1}},
+        {"type": "Feature", "geometry": {"type": "LineString", "coordinates": [[0,0],[1,1]]}, "properties": {"id": 2}},
+        {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[0,0],[1,1],[1,0],[0,0]]]}, "properties": {"id": 3}},
+        {"type": "Feature", "geometry": None, "properties": {"id": 4}} # Feature with no geometry
+    ]
+    config = {'filter_types_kept': ["Point", "Polygon"]}
+    processed, summary = handle_complex_geometries(copy.deepcopy(features), "filter_types", config, mock_cgh_logger)
+    assert len(processed) == 3 # Point, Polygon, and NoGeometry feature
+    assert processed[0]["properties"]["id"] == 1
+    assert processed[1]["properties"]["id"] == 3
+    assert processed[2]["properties"]["id"] == 4 # NoGeometry feature should pass
+    assert summary["features_filtered_out_count"] == 1
+    assert summary["geometries_by_type_before"]["LineString"] == 1
+    assert summary["geometries_by_type_after"]["LineString"] == 0
+    assert summary["geometries_by_type_after"]["Point"] == 1
+    assert summary["geometries_by_type_after"]["Polygon"] == 1
+    assert summary["geometries_by_type_after"]["None"] == 1
+
+
+def test_cgh_strategy_reject_on_types():
+    features = [
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [0,0]}, "properties": {"id": 1}},
+        {"type": "Feature", "geometry": {"type": "GeometryCollection", "geometries": [{"type":"Point", "coordinates":[0,0]}]}, "properties": {"id": 2}}
+    ]
+    config = {'reject_if_types_found': ["GeometryCollection"]}
+    processed, summary = handle_complex_geometries(copy.deepcopy(features), "reject_on_types", config, mock_cgh_logger)
+    assert summary["job_failed_due_to_rejected_type"] is True
+    assert len(processed) == 0 # Features should be cleared on rejection
+
+    # Test no rejected types found
+    config_no_reject = {'reject_if_types_found': ["Polygon"]} # Polygon not present
+    processed_ok, summary_ok = handle_complex_geometries(copy.deepcopy(features), "reject_on_types", config_no_reject, mock_cgh_logger)
+    assert summary_ok["job_failed_due_to_rejected_type"] is False
+    assert len(processed_ok) == 2
+
+
+def test_cgh_strategy_explode_collections():
+    features = [
+        {"type": "Feature", "id": "gc1", "geometry": {
+            "type": "GeometryCollection",
+            "geometries": [
+                {"type": "Point", "coordinates": [0,0]},
+                {"type": "LineString", "coordinates": [[1,1],[2,2]]}
+            ]}, "properties": {"name": "Collection1"}
+        },
+        {"type": "Feature", "id": "p1", "geometry": {"type": "Point", "coordinates": [3,3]}, "properties": {"name": "Point1"}}
+    ]
+    processed, summary = handle_complex_geometries(copy.deepcopy(features), "explode_collections", {}, mock_cgh_logger)
+    assert len(processed) == 3 # GC explodes into 2, plus the original Point
+    assert summary["geometry_collections_exploded_count"] == 1
+    assert summary["new_features_from_splits"] == 2
+    assert processed[0]["geometry"]["type"] == "Point"
+    assert processed[0]["properties"]["original_feature_id"] == "gc1"
+    assert processed[1]["geometry"]["type"] == "LineString"
+    assert processed[1]["properties"]["original_feature_id"] == "gc1"
+    assert processed[2]["id"] == "p1"
+
+def test_cgh_strategy_split_multi():
+    features = [
+        {"type": "Feature", "id": "mp1", "geometry": {"type": "MultiPoint", "coordinates": [[0,0],[1,1]]}, "properties": {"name": "MultiPoint1"}},
+        {"type": "Feature", "id": "p1", "geometry": {"type": "Point", "coordinates": [2,2]}, "properties": {"name": "Point1"}}
+    ]
+    processed, summary = handle_complex_geometries(copy.deepcopy(features), "split_multi", {}, mock_cgh_logger)
+    assert len(processed) == 3 # MultiPoint splits into 2, plus the original Point
+    assert summary["multi_geometries_split_count"] == 1
+    assert summary["new_features_from_splits"] == 2
+    assert processed[0]["geometry"]["type"] == "Point"
+    assert processed[0]["properties"]["original_feature_id"] == "mp1"
+    assert processed[1]["geometry"]["type"] == "Point"
+    assert processed[1]["properties"]["original_feature_id"] == "mp1"
+    assert processed[2]["id"] == "p1"
+
+def test_cgh_malformed_geometry():
+    features = [{"type": "Feature", "geometry": {"type": "NotARealType", "coordinates": "blah"}, "properties": {}}]
+    processed, summary = handle_complex_geometries(copy.deepcopy(features), "pass_through", {}, mock_cgh_logger)
+    assert summary["malformed_geometries_encountered"] == 1
+    assert summary["geometries_by_type_before"]["Malformed/Invalid"] == 1
+    assert summary["geometries_by_type_after"]["Malformed/Invalid"] == 1 # Passed through
+    assert len(processed) == 1
+
+@patch.object(logging.getLogger("test_cgh_helper"), 'warning')
+def test_cgh_unsupported_strategy(mock_logger_warning):
+    features = [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [0,0]}, "properties": {}}]
+    processed, summary = handle_complex_geometries(copy.deepcopy(features), "unknown_strategy", {}, mock_cgh_logger)
+    assert summary["unsupported_strategy_used"] is True
+    assert processed == features # Should default to pass_through
+    mock_logger_warning.assert_called_once_with("Unsupported geometry handling strategy: unknown_strategy. Applying 'pass_through'.")
+
+
+# --- Tests for Complex Geometry Stage in Celery Task ---
+
+def setup_job_for_cgh_test(db_session: Session, features_list: list, job_status_prereq="completed_geocoding") -> IngestionJobDB:
+    os.makedirs(PROCESSED_AREA_PATH, exist_ok=True)
+    job_id = str(uuid.uuid4())
+    intermediate_geojson_content = {"type": "FeatureCollection", "features": features_list}
+    # Path depends on whether geocoding step ran and potentially renamed the file (it doesn't currently)
+    # or if CRS was the last step that named it.
+    # For now, assume geocoding ran, so path is just job_id.geojson. If not, it's job_id_epsg4326.geojson
+    filename = f"{job_id}.geojson" if job_status_prereq == "completed_geocoding" else f"{job_id}_epsg{TARGET_CRS_EPSG}.geojson"
+    intermediate_geojson_path = os.path.join(PROCESSED_AREA_PATH, filename)
+
+    with open(intermediate_geojson_path, 'w') as f:
+        json.dump(intermediate_geojson_content, f)
+
+    job_data = {
+        "job_id": job_id, "original_filename": "test_cgh.geojson",
+        "staged_file_path": "dummy/staged.geojson", "user_id": "cgh_user",
+        "processing_status": job_status_prereq, "upload_timestamp": datetime.utcnow(),
+        "intermediate_geojson_path": intermediate_geojson_path,
+        "pipeline_stages_executed_log": [{"stage": job_status_prereq, "status": "success"}]
+    }
+    if job_status_prereq == "completed_geocoding":
+        job_data["geocoding_summary"] = {"info": "mock geocoding done"}
+    if job_status_prereq == "completed_crs_transformation":
+         job_data["target_crs"] = f"EPSG:{TARGET_CRS_EPSG}"
+
+    job = crud.create_ingestion_job(db_session, job_data)
+    return job
+
+@patch('backend.main.COMPLEX_GEOMETRY_STRATEGY', "split_all")
+@patch('backend.main.handle_complex_geometries')
+def test_celery_cgh_stage_successful_split_all(mock_handle_complex_geometries):
+    db_session = next(get_test_db_session())
+    initial_features = [{"type": "Feature", "id":"gc1", "geometry": {"type": "GeometryCollection", "geometries": [{"type": "MultiPoint", "coordinates": [[0,0],[1,1]]}]}, "properties": {}}]
+
+    # Side effect for two calls
+    exploded_features = [{"type": "Feature", "id":"gc1_part1", "geometry": {"type": "MultiPoint", "coordinates": [[0,0],[1,1]]}, "properties": {"original_feature_id":"gc1"}}]
+    summary_explode = {"strategy_applied": "explode_collections", "feature_count_before":1, "feature_count_after":1, "geometry_collections_exploded_count":1, "new_features_from_splits":1, "geometries_by_type_before":defaultdict(int, {"GeometryCollection":1}), "geometries_by_type_after":defaultdict(int, {"MultiPoint":1})}
+
+    final_split_features = [
+        {"type": "Feature", "id":"gc1_part1_part1", "geometry": {"type": "Point", "coordinates": [0,0]}, "properties": {"original_feature_id":"gc1_part1"}},
+        {"type": "Feature", "id":"gc1_part1_part2", "geometry": {"type": "Point", "coordinates": [1,1]}, "properties": {"original_feature_id":"gc1_part1"}}
+    ]
+    summary_split = {"strategy_applied": "split_multi", "feature_count_before":1, "feature_count_after":2, "multi_geometries_split_count":1, "new_features_from_splits":2, "geometries_by_type_before":defaultdict(int, {"MultiPoint":1}), "geometries_by_type_after":defaultdict(int, {"Point":2})}
+
+    mock_handle_complex_geometries.side_effect = [
+        (exploded_features, summary_explode),
+        (final_split_features, summary_split)
+    ]
+
+    job = setup_job_for_cgh_test(db_session, initial_features)
+    job_id = job.job_id
+    intermediate_file_path = job.intermediate_geojson_path
+
+    try:
+        result_message = process_ingestion_job_task(job_id)
+        db_session.refresh(job)
+
+        assert "Successfully processed through complex geometry handling" in result_message
+        assert job.processing_status == "completed_complex_geometry"
+        assert job.complex_geometry_summary["strategy_applied"] == "split_all"
+        assert job.complex_geometry_summary["geometry_collections_exploded_count"] == 1
+        assert job.complex_geometry_summary["multi_geometries_split_count"] == 1
+        assert job.complex_geometry_summary["feature_count_after"] == 2
+
+        with open(intermediate_file_path, 'r') as f:
+            updated_data = json.load(f)
+        assert updated_data["features"] == final_split_features
+
+        assert mock_handle_complex_geometries.call_count == 2
+    finally:
+        if intermediate_file_path and os.path.exists(intermediate_file_path): os.remove(intermediate_file_path)
+        crud.remove_ingestion_job(db_session, job_id)
+        db_session.close()
+
+@patch('backend.main.COMPLEX_GEOMETRY_STRATEGY', "filter_types")
+@patch('backend.main.CGH_FILTER_TYPES_TO_KEEP', ["Point"])
+@patch('backend.main.handle_complex_geometries')
+def test_celery_cgh_stage_successful_single_strategy_filter(mock_cgh_helper):
+    db_session = next(get_test_db_session())
+    initial_features = [
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [0,0]}, "properties": {"id": "p1"}},
+        {"type": "Feature", "geometry": {"type": "LineString", "coordinates": [[0,0],[1,1]]}, "properties": {"id": "ls1"}}
+    ]
+    filtered_features = [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [0,0]}, "properties": {"id": "p1"}}]
+    mock_summary = {"strategy_applied": "filter_types", "features_filtered_out_count": 1, "feature_count_after":1}
+    mock_cgh_helper.return_value = (filtered_features, mock_summary)
+
+    job = setup_job_for_cgh_test(db_session, initial_features)
+    job_id = job.job_id; intermediate_file_path = job.intermediate_geojson_path
+    try:
+        process_ingestion_job_task(job_id)
+        db_session.refresh(job)
+        assert job.processing_status == "completed_complex_geometry"
+        assert job.complex_geometry_summary == mock_summary
+        with open(intermediate_file_path, 'r') as f: data = json.load(f)
+        assert data["features"] == filtered_features
+    finally:
+        if intermediate_file_path and os.path.exists(intermediate_file_path): os.remove(intermediate_file_path)
+        crud.remove_ingestion_job(db_session, job_id); db_session.close()
+
+@patch('backend.main.COMPLEX_GEOMETRY_STRATEGY', "reject_on_types")
+@patch('backend.main.CGH_REJECT_IF_TYPES_FOUND', ["GeometryCollection"])
+@patch('backend.main.handle_complex_geometries')
+def test_celery_cgh_stage_failure_reject_on_types(mock_cgh_helper):
+    db_session = next(get_test_db_session())
+    initial_features = [{"type": "Feature", "geometry": {"type": "GeometryCollection", "geometries": []}}]
+    mock_summary = {"strategy_applied": "reject_on_types", "job_failed_due_to_rejected_type": True}
+    # When job_failed_due_to_rejected_type is true, the helper returns the original features list (or empty if it clears it)
+    # The task logic then uses this flag to fail the job.
+    mock_cgh_helper.return_value = ([], mock_summary)
+
+    job = setup_job_for_cgh_test(db_session, initial_features)
+    job_id = job.job_id; intermediate_file_path = job.intermediate_geojson_path
+    try:
+        process_ingestion_job_task(job_id)
+        db_session.refresh(job)
+        assert job.processing_status == "failed_complex_geometry_rejected"
+        assert job.complex_geometry_summary["job_failed_due_to_rejected_type"] is True
+    finally:
+        if intermediate_file_path and os.path.exists(intermediate_file_path): os.remove(intermediate_file_path)
+        crud.remove_ingestion_job(db_session, job_id); db_session.close()
+
+@patch('backend.main.handle_complex_geometries')
+def test_celery_cgh_stage_failure_exception_in_helper(mock_cgh_helper):
+    db_session = next(get_test_db_session())
+    initial_features = [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [0,0]}}]
+    mock_cgh_helper.side_effect = Exception("CGH Helper Exception")
+
+    job = setup_job_for_cgh_test(db_session, initial_features)
+    job_id = job.job_id; intermediate_file_path = job.intermediate_geojson_path
+    try:
+        process_ingestion_job_task(job_id)
+        db_session.refresh(job)
+        assert job.processing_status == "failed_complex_geometry_step"
+        assert "complex_geometry_pipeline_error" in job.validation_summary
+        assert "CGH Helper Exception" in job.validation_summary["complex_geometry_pipeline_error"]
+    finally:
+        if intermediate_file_path and os.path.exists(intermediate_file_path): os.remove(intermediate_file_path)
+        crud.remove_ingestion_job(db_session, job_id); db_session.close()
