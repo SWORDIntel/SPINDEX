@@ -5,6 +5,7 @@
 #include "config.h"           // For SpindexConfig
 #include "plugin_interface.h" // For SpindexPlugin
 #include "threading.h"        // For ThreadPool
++#include "nlp_ner_parser.h"   // For NlpNerParserConfig
 #include <pthread.h>          // For pthread_mutex_t
 
 /**
@@ -26,6 +27,7 @@ typedef struct {
     // Future fields might include:
     // - Caches for frequently used plugins
     ThreadPool thread_pool;        // Thread pool for parallel processing
++    NlpNerParserConfig ner_config; // Configuration for the NLP/NER module
     pthread_mutex_t indexer_mutex; // To protect calls to non-thread-safe indexer plugins
     // - Statistics on processed files/data
 } SpindexIngestionPipeline;
