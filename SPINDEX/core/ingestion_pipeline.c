@@ -2,6 +2,7 @@
 #include "threading.h" // For thread pool
 #include "ingestion_pipeline.h" // Now ThreadPool type should be known
 #include "utils.h" // For logging
+ #include "nlp_ner_parser.h" // For NLP/NER functionality
 #include <pthread.h>   // For pthread_self in task wrapper, and mutex ops
 #include <stdio.h>
 #include <stdlib.h>
@@ -107,6 +108,15 @@ void free_processed_data_chunk(ProcessedDataChunk *chunk) {
     free(chunk);
 }
 
+static void initialize_ner_config(SpindexIngestionPipeline *pipeline) {
+    if (load_nlp_ner_parser_config(pipeline->app_config, &pipeline->ner_config) != 0) {
+        LOG_WARN("Failed to load NLP/NER parser configuration. NLP/NER will be unavailable.");
+        pipeline->ner_config.enabled = 0; // Ensure it's marked as disabled
+    } else {
+        LOG_INFO("NLP/NER parser configuration loaded. Enabled: %d", pipeline->ner_config.enabled);
+    }
+}
+
 // --- Thread Pool Task Definitions ---
 
 // Argument structure for file processing tasks
@@ -204,6 +214,9 @@ int pipeline_init(SpindexIngestionPipeline *pipeline,
     } else {
         LOG_INFO("No active indexer configured.");
     }
+
+    // Initialize NLP/NER configuration
+    initialize_ner_config(pipeline); // Call the new helper here
 
     LOG_INFO("Ingestion pipeline initialized. Aware of %d loaded plugins. Active indexer: %s",
         num_plugins,
@@ -326,6 +339,44 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
         current_chunk = chunk_after_parser;
     }
 
+    // NLP/NER Processing Stage
+    if (pipeline->ner_config.enabled && current_chunk && current_chunk->data_type == CHUNK_TYPE_UTF8_TEXT && current_chunk->length > 0) {
+        LOG_INFO("Thread %lu: Invoking NLP/NER location extraction for %s", thread_id_for_log, file_path);
+        char** extracted_locs = NULL;
+        int num_extracted_locs = 0;
+
+        // Assuming current_chunk->data is a null-terminated UTF-8 string
+        AEGIS_PROCESSING_STATUS ner_status = extract_locations_from_text(
+            (char*)current_chunk->data,
+            &pipeline->ner_config,
+            &extracted_locs,
+            &num_extracted_locs
+        );
+
+        if (ner_status == AEGIS_PROCESSING_SUCCESS && num_extracted_locs > 0) {
+            LOG_INFO("Thread %lu: NLP/NER extracted %d locations from %s.", thread_id_for_log, num_extracted_locs, file_path);
+            for (int i = 0; i < num_extracted_locs; ++i) {
+                LOG_INFO("Thread %lu: NER Location %d for %s: %s", thread_id_for_log, i + 1, file_path, extracted_locs[i]);
+                // TODO: Call Geocoding Module [AEGIS-007] with extracted_locs[i] or the full list.
+                // Example: geocode_single_location(extracted_locs[i], pipeline->app_config);
+                // Or: add_locations_to_geocoding_queue(extracted_locs, num_extracted_locs);
+                // The results of geocoding might be stored in current_chunk->metadata or a related structure.
+            }
+
+            // Placeholder: If current_chunk had a metadata field (e.g., a cJSON object)
+            // for (int i = 0; i < num_extracted_locs; ++i) {
+            //    add_string_to_metadata_array(current_chunk->metadata, "ner_locations", extracted_locs[i]);
+            // }
+
+            free_extracted_locations(extracted_locs, num_extracted_locs);
+        } else if (ner_status != AEGIS_PROCESSING_SUCCESS && ner_status != AEGIS_PROCESSING_NLP_NER_DISABLED) {
+            LOG_WARN("Thread %lu: NLP/NER processing for %s failed with status %d.", thread_id_for_log, file_path, ner_status);
+        } else {
+            LOG_DEBUG("Thread %lu: NLP/NER for %s: no locations found, module disabled, or empty text.",thread_id_for_log, file_path);
+        }
+    }
+
+
     LOG_INFO("Thread %lu: File %s processing stages completed. Final data length: %zu.",
              thread_id_for_log, file_path, current_chunk ? current_chunk->length : 0);
 
@@ -395,6 +446,13 @@ int pipeline_submit_file_for_processing(SpindexIngestionPipeline* pipeline, cons
      if (pipeline->thread_pool.shutdown) {
         LOG_WARN("Attempted to submit task for file '%s' but thread pool is shutting down.", file_path);
         return -1;
+    }
+
+    // Ensure NER config is loaded. This is slightly redundant if pipeline_init always does it,
+    // but safe if submit can be called after a config reload that pipeline_init didn't see.
+    // A better pattern might be a dedicated reconfigure function.
+    if(pipeline->app_config && pipeline->ner_config.python_executable[0] == '\0') { // Crude check if not initialized
+        initialize_ner_config(pipeline);
     }
 
     FileProcessingTaskArgs* task_args = (FileProcessingTaskArgs*)malloc(sizeof(FileProcessingTaskArgs));

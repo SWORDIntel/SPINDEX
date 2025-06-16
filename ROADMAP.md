@@ -107,7 +107,7 @@ Status: Pending
 9.  **Task: [AEGIS-009] Implement Unstructured Text Parsing (NLP/NER) module**
     *   Description: Develop the module to use NER for extracting location names from text, integrating with the geocoding module.
     *   Priority: Medium
-    *   Status: To Do
+    *   Status: DONE ✅
 10. **Task: [AEGIS-010] Implement Geometric Validation module**
     *   Description: Develop the pipeline module to check for and optionally repair invalid geometries (e.g., using Shapely).
     *   Priority: Medium

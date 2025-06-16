@@ -196,6 +196,11 @@ TEST_COMPLEX_GEOMETRY_SRC = $(CORE_DIR)/test_complex_geometry_handler.c
 TEST_COMPLEX_GEOMETRY_DEPS_OBJS = $(COMPLEX_GEOMETRY_HANDLER_OBJ) $(BUILD_DIR)/core/config_manager.o $(BUILD_DIR)/core/utils.o
 TEST_COMPLEX_GEOMETRY_TARGET = $(BUILD_DIR)/test_complex_geometry_handler
 
+TEST_NLP_NER_PARSER_SRC = $(CORE_DIR)/test_nlp_ner_parser.c
+# Dependencies: the nlp_ner_parser.o itself, config_manager.o, utils.o, and jansson for the test's own parsing if any (though nlp_ner_parser.o links jansson)
+TEST_NLP_NER_PARSER_DEPS_OBJS = $(BUILD_DIR)/plugins/aegis_modules/nlp_ner_parser.o $(BUILD_DIR)/core/config_manager.o $(BUILD_DIR)/core/utils.o
+TEST_NLP_NER_PARSER_TARGET = $(BUILD_DIR)/test_nlp_ner_parser
+
 # AVX Search Test Program
 TEST_AVX_SEARCH_SRC = $(PLUGIN_DIR)/search_algorithms/test_avx512_phrase_search.c
 # Dependencies: the plugin object itself, core utils, and core hardware detection
@@ -214,10 +219,10 @@ PLUGIN_LIB_DIR = $(BUILD_DIR)/plugins/lib
 
 # AEGIS Module Definitions
 AEGIS_MODULES_DIR = $(PLUGIN_DIR)/aegis_modules
-COMPLEX_GEOMETRY_HANDLER_SRC = $(AEGIS_MODULES_DIR)/complex_geometry_handler.c
-COMPLEX_GEOMETRY_HANDLER_OBJ = $(BUILD_DIR)/plugins/aegis_modules/complex_geometry_handler.o
 # Add other AEGIS module objects here if they are created later
-AEGIS_MODULE_OBJS = $(COMPLEX_GEOMETRY_HANDLER_OBJ)
+AEGIS_MODULE_OBJS = \
+    $(BUILD_DIR)/plugins/aegis_modules/complex_geometry_handler.o \
+    $(BUILD_DIR)/plugins/aegis_modules/nlp_ner_parser.o
 
 # Plugin definitions (Enabled ones first)
 DUMMY_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/dummy_plugin
@@ -364,7 +369,7 @@ $(BUILD_DIR)/core/%.o: $(CORE_DIR)/%.c
 	@echo "Compiled core object: $@"
 
 # Rule to compile AEGIS module C files to object files
-$(BUILD_DIR)/plugins/aegis_modules/%.o: $(AEGIS_MODULES_DIR)/%.c $(INCLUDE_DIR)/config_manager.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h $(AEGIS_MODULES_DIR)/complex_geometry_handler.h
+$(BUILD_DIR)/plugins/aegis_modules/%.o: $(AEGIS_MODULES_DIR)/%.c $(INCLUDE_DIR)/config_manager.h $(INCLUDE_DIR)/data_types.h $(INCLUDE_DIR)/utils.h
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -I$(AEGIS_MODULES_DIR) -c $< -o $@
 	@echo "Compiled AEGIS module object: $@"
@@ -377,7 +382,7 @@ $(BUILD_DIR)/core/elasticsearch_client.o: $(CORE_DIR)/elasticsearch_client.c $(I
 
 # --- Test Program Rules ---
 # ... (test rules remain largely unchanged, but ensure they link against necessary objects) ...
-tests: $(TEST_CONFIG_LOADER_TARGET) $(TEST_PLUGIN_LOADER_TARGET) $(TEST_LOGGER_TARGET) $(TEST_HW_DETECT_TARGET) $(TEST_PIPELINE_TARGET) $(TEST_ES_CLIENT_TARGET) $(TEST_ES_INDEXING_TARGET) $(TEST_DOC_PARSER_TARGET) $(TEST_DOC_PREPROCESSOR_TARGET) $(TEST_XLS_PARSER_TARGET) $(TEST_XLS_PREPROCESSOR_TARGET) $(TEST_PDF_PARSER_TARGET) $(TEST_PDF_PREPROCESSOR_TARGET) $(TEST_RTF_PARSER_TARGET) $(TEST_RTF_PREPROCESSOR_TARGET) $(TEST_DIC_PARSER_TARGET) $(TEST_DIC_PREPROCESSOR_TARGET) $(TEST_SQLITE_PARSER_TARGET) $(TEST_SQLITE_PREPROCESSOR_TARGET) $(TEST_AVX_SEARCH_TARGET) $(TEST_COMPLEX_GEOMETRY_TARGET)
+tests: $(TEST_CONFIG_LOADER_TARGET) $(TEST_PLUGIN_LOADER_TARGET) $(TEST_LOGGER_TARGET) $(TEST_HW_DETECT_TARGET) $(TEST_PIPELINE_TARGET) $(TEST_ES_CLIENT_TARGET) $(TEST_ES_INDEXING_TARGET) $(TEST_DOC_PARSER_TARGET) $(TEST_DOC_PREPROCESSOR_TARGET) $(TEST_XLS_PARSER_TARGET) $(TEST_XLS_PREPROCESSOR_TARGET) $(TEST_PDF_PARSER_TARGET) $(TEST_PDF_PREPROCESSOR_TARGET) $(TEST_RTF_PARSER_TARGET) $(TEST_RTF_PREPROCESSOR_TARGET) $(TEST_DIC_PARSER_TARGET) $(TEST_DIC_PREPROCESSOR_TARGET) $(TEST_SQLITE_PARSER_TARGET) $(TEST_SQLITE_PREPROCESSOR_TARGET) $(TEST_AVX_SEARCH_TARGET) $(TEST_COMPLEX_GEOMETRY_TARGET) $(TEST_NLP_NER_PARSER_TARGET)
 
 $(TEST_CONFIG_LOADER_TARGET): $(TEST_CONFIG_LOADER_SRC) $(TEST_CONFIG_LOADER_DEPS)
 	@mkdir -p $(@D)
@@ -392,6 +397,11 @@ $(TEST_AVX_SEARCH_TARGET): $(TEST_AVX_SEARCH_SRC) $(TEST_AVX_SEARCH_DEPS_OBJS)
 $(TEST_COMPLEX_GEOMETRY_TARGET): $(TEST_COMPLEX_GEOMETRY_SRC) $(TEST_COMPLEX_GEOMETRY_DEPS_OBJS)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -I$(AEGIS_MODULES_DIR) $(TEST_COMPLEX_GEOMETRY_SRC) $(TEST_COMPLEX_GEOMETRY_DEPS_OBJS) -o $@ $(LDFLAGS)
+	@echo "Built test program: $@"
+
+$(TEST_NLP_NER_PARSER_TARGET): $(TEST_NLP_NER_PARSER_SRC) $(TEST_NLP_NER_PARSER_DEPS_OBJS) $(AEGIS_MODULES_DIR)/nlp_ner_parser.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -I$(AEGIS_MODULES_DIR) $(TEST_NLP_NER_PARSER_SRC) $(TEST_NLP_NER_PARSER_DEPS_OBJS) -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
 
 # Rule to build the OpenVINO hardware test harness
