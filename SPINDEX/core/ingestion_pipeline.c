@@ -1,13 +1,17 @@
 #define _GNU_SOURCE // For strdup
-#include "threading.h" // For thread pool
-#include "ingestion_pipeline.h" // Now ThreadPool type should be known
+#include "threading.h"
+#include "ingestion_pipeline.h"
 #include "utils.h" // For logging
- #include "nlp_ner_parser.h" // For NLP/NER functionality
-#include <pthread.h>   // For pthread_self in task wrapper, and mutex ops
+#include "nlp_ner_parser.h"           // For NLP/NER functionality
+#include "geometric_validator.h"      // For geometric validation
+#include "complex_geometry_handler.h" // For complex geometry handling
+#include "geojson_processor.h"        // For the new GeoJSON processing orchestrator
+#include <pthread.h>                  // For pthread_self in task wrapper, and mutex ops
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h> // For checking file existence/size
+#include <errno.h>    // For errno
 
 // Helper function to get file extension (very basic)
 static const char *get_file_extension(const char *filename) {
@@ -30,7 +34,7 @@ static const char* get_compression_type_from_extension(const char *filename) {
 static SpindexPlugin* find_decompressor_plugin(const char *compression_type, SpindexPlugin *plugins, int num_plugins) {
     if (!compression_type) return NULL;
     for (int i = 0; i < num_plugins; i++) {
-        if (plugins[i].info.type == SPINDEX_PLUGIN_TYPE_DECOMPRESSOR) { 
+        if (plugins[i].info.type == SPINDEX_PLUGIN_TYPE_DECOMPRESSOR) {
             if (strstr(plugins[i].info.name, compression_type) != NULL) {
                 LOG_DEBUG("Found decompressor plugin '%s' for type '%s'", plugins[i].info.name, compression_type);
                 return &plugins[i];
@@ -134,9 +138,9 @@ static void process_file_task_wrapper(void* arg) {
         LOG_ERROR("process_file_task_wrapper: Invalid task arguments received by thread %lu.", (unsigned long)pthread_self());
         if (task_args) {
             if (task_args->file_path) {
-                 strncpy(log_file_path_buffer, task_args->file_path, sizeof(log_file_path_buffer) - 1);
-                 log_file_path_buffer[sizeof(log_file_path_buffer) - 1] = '\0'; // Ensure null termination
-                 free(task_args->file_path);
+                strncpy(log_file_path_buffer, task_args->file_path, sizeof(log_file_path_buffer) - 1);
+                log_file_path_buffer[sizeof(log_file_path_buffer) - 1] = '\0'; // Ensure null termination
+                free(task_args->file_path);
             }
             free(task_args);
         }
@@ -216,7 +220,22 @@ int pipeline_init(SpindexIngestionPipeline *pipeline,
     }
 
     // Initialize NLP/NER configuration
-    initialize_ner_config(pipeline); // Call the new helper here
+    initialize_ner_config(pipeline);
+
+    // Initialize Geometric Validator
+    if (geometric_validator_init() != 0) {
+        LOG_ERROR("Failed to initialize geometric validator. Validation will be unavailable.");
+        // Decide if this is a fatal error for the pipeline or if it can continue with validation disabled.
+        // For now, assume it can continue, GeometricValidatorConfig.enabled will control actual use.
+    }
+    // Load configurations for sub-modules that need it from the main app_config
+    if (load_complex_geometry_handler_config(pipeline->app_config, &pipeline->cg_config) != 0) {
+        LOG_WARN("Failed to load Complex Geometry Handler config. Defaults may apply or functionality may be impaired.");
+    }
+    if (load_geometric_validator_config(pipeline->app_config, &pipeline->validator_config) != 0) {
+        LOG_WARN("Failed to load Geometric Validator config. Defaults may apply or validation may be disabled.");
+        pipeline->validator_config.enabled = 0; // Ensure disabled if config load fails
+    }
 
     LOG_INFO("Ingestion pipeline initialized. Aware of %d loaded plugins. Active indexer: %s",
         num_plugins,
@@ -239,10 +258,46 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
     SpindexPlugin *parser = NULL;
     char preproc_name[256] = {0};
     char parser_name[256] = {0};
+    ProcessedDataChunk *current_chunk = NULL;
 
-    if (strcmp(extension, "json") == 0) {
-        strcpy(preproc_name, "JSONPreprocessor");
-        strcpy(parser_name, "JSONParser");
+
+    if (strcmp(extension, "json") == 0 || strcmp(extension, "geojson") == 0) {
+        // For GeoJSON, we first read the raw chunk, then pass it to the geojson_processor
+        current_chunk = read_file_to_chunk(file_path);
+        if (!current_chunk) {
+            LOG_ERROR("Thread %lu: Failed to read initial GeoJSON file %s into chunk.", thread_id_for_log, file_path);
+            return NULL;
+        }
+        // Define a base temporary directory for geojson processing artifacts
+        const char* geojson_temp_base = "./temp_geojson_processing";
+        struct stat st_temp_base = {0};
+        if (stat(geojson_temp_base, &st_temp_base) == -1) {
+            if (mkdir(geojson_temp_base, 0700) != 0 && errno != EEXIST) {
+                LOG_ERROR("Thread %lu: Failed to create base temp directory for GeoJSON: %s. Error: %s", thread_id_for_log, geojson_temp_base, strerror(errno));
+                free_processed_data_chunk(current_chunk);
+                return NULL;
+            }
+        }
+
+        LOG_INFO("Thread %lu: Processing GeoJSON file %s with geojson_processor.", thread_id_for_log, file_path);
+        AEGIS_PROCESSING_STATUS geo_status = process_geojson_chunk(
+            &current_chunk,
+            pipeline->app_config,
+            &pipeline->cg_config,
+            &pipeline->validator_config,
+            geojson_temp_base
+        );
+
+        if (geo_status != AEGIS_PROCESSING_SUCCESS && geo_status != AEGIS_PROCESSING_WARNING_GEOMETRY_INVALID) {
+            LOG_ERROR("Thread %lu: geojson_processor failed for %s with status %d.", thread_id_for_log, file_path, geo_status);
+            free_processed_data_chunk(current_chunk); // current_chunk might be NULL if process_geojson_chunk freed it on error
+            return NULL;
+        }
+        // If geo_status is SUCCESS or WARNING_GEOMETRY_INVALID, current_chunk is now the (potentially) modified chunk.
+        // Preprocessor and parser names are not used for this path as geojson_processor handles it.
+        preproc_name[0] = '\0';
+        parser_name[0] = '\0';
+
     } else if (strcmp(extension, "txt") == 0) {
         strcpy(preproc_name, "TXTPreprocessor");
         strcpy(parser_name, "TXTParser");
@@ -253,28 +308,33 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
         LOG_ERROR("Thread %lu: Unsupported file extension: .%s for file %s.", thread_id_for_log, extension, file_path);
         return NULL;
     }
-    LOG_DEBUG("Thread %lu: Determined preprocessor '%s' and parser '%s' for %s", thread_id_for_log, preproc_name, parser_name, file_path);
 
-    ProcessedDataChunk *original_chunk = read_file_to_chunk(file_path);
-    if (!original_chunk) {
-        LOG_ERROR("Thread %lu: Failed to read file content from %s", thread_id_for_log, file_path);
-        return NULL;
+    // If not GeoJSON, or if GeoJSON processing already prepared current_chunk:
+    if (!current_chunk) { // This means it wasn't a GeoJSON path, so read the file now.
+        LOG_DEBUG("Thread %lu: Reading non-GeoJSON file %s into chunk.", thread_id_for_log, file_path);
+        current_chunk = read_file_to_chunk(file_path);
+        if (!current_chunk) {
+            LOG_ERROR("Thread %lu: Failed to read file content from %s", thread_id_for_log, file_path);
+            return NULL;
+        }
     }
-    ProcessedDataChunk *current_chunk = original_chunk;
 
-    const char *compression_type = get_compression_type_from_extension(file_path);
-    if (compression_type && current_chunk) {
-        LOG_INFO("Thread %lu: File %s detected as potentially %s compressed.", thread_id_for_log, file_path, compression_type);
-        SpindexPlugin *decompressor = find_decompressor_plugin(compression_type, pipeline->all_loaded_plugins, pipeline->num_all_plugins);
-        if (decompressor && decompressor->process_data) {
-            LOG_INFO("Thread %lu: Invoking decompressor '%s' for file %s", thread_id_for_log, decompressor->info.name, file_path);
-            ProcessedDataChunk *chunk_after_decompression = decompressor->process_data(current_chunk);
-            if (chunk_after_decompression) {
-                if (current_chunk != chunk_after_decompression) free_processed_data_chunk(current_chunk);
-                current_chunk = chunk_after_decompression;
-            } else {
-                LOG_ERROR("Thread %lu: Decompressor plugin '%s' failed for %s.", thread_id_for_log, decompressor->info.name, file_path);
-                free_processed_data_chunk(current_chunk); return NULL;
+    // Apply decompression if applicable, only if not already handled by GeoJSON path or if it's a non-geojson file
+    if (strcmp(extension, "json") != 0 && strcmp(extension, "geojson") != 0) {
+        const char *compression_type = get_compression_type_from_extension(file_path);
+        if (compression_type && current_chunk) {
+            LOG_INFO("Thread %lu: File %s detected as potentially %s compressed.", thread_id_for_log, file_path, compression_type);
+            SpindexPlugin *decompressor = find_decompressor_plugin(compression_type, pipeline->all_loaded_plugins, pipeline->num_all_plugins);
+            if (decompressor && decompressor->process_data) {
+                LOG_INFO("Thread %lu: Invoking decompressor '%s' for file %s", thread_id_for_log, decompressor->info.name, file_path);
+                ProcessedDataChunk *chunk_after_decompression = decompressor->process_data(current_chunk);
+                if (chunk_after_decompression) {
+                    if (current_chunk != chunk_after_decompression) free_processed_data_chunk(current_chunk);
+                    current_chunk = chunk_after_decompression;
+                } else {
+                    LOG_ERROR("Thread %lu: Decompressor plugin '%s' failed for %s.", thread_id_for_log, decompressor->info.name, file_path);
+                    free_processed_data_chunk(current_chunk); return NULL;
+                }
             }
         }
     }
@@ -292,12 +352,13 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
     }
 
     if (strlen(preproc_name) == 0 && strlen(parser_name) == 0) {
-        LOG_ERROR("Thread %lu: No preprocessor/parser determined for %s (extension .%s)", thread_id_for_log, file_path, extension);
+        LOG_DEBUG("Thread %lu: No preprocessor/parser determined for %s (extension .%s)", thread_id_for_log, file_path, extension);
         if (pipeline->active_indexer_plugin && pipeline->active_indexer_plugin->process_data && current_chunk) {
-             LOG_INFO("Thread %lu: Passing raw/decompressed data of file type '%s' to indexer '%s'.", thread_id_for_log, extension, pipeline->active_indexer_plugin->info.name);
-        } else {
-            LOG_INFO("Thread %lu: No indexer for file type '%s', or data processing failed. Discarding chunk.", thread_id_for_log, extension);
-            free_processed_data_chunk(current_chunk); return NULL;
+             LOG_INFO("Thread %lu: Passing raw/decompressed/geoprocessed data of file type '%s' to indexer '%s'.", thread_id_for_log, extension, pipeline->active_indexer_plugin->info.name);
+        } else if (current_chunk) {
+             LOG_INFO("Thread %lu: No indexer for file type '%s', or data processing failed. Discarding chunk.", thread_id_for_log, extension);
+             free_processed_data_chunk(current_chunk); 
+             return NULL;
         }
     }
 
@@ -358,16 +419,7 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
             for (int i = 0; i < num_extracted_locs; ++i) {
                 LOG_INFO("Thread %lu: NER Location %d for %s: %s", thread_id_for_log, i + 1, file_path, extracted_locs[i]);
                 // TODO: Call Geocoding Module [AEGIS-007] with extracted_locs[i] or the full list.
-                // Example: geocode_single_location(extracted_locs[i], pipeline->app_config);
-                // Or: add_locations_to_geocoding_queue(extracted_locs, num_extracted_locs);
-                // The results of geocoding might be stored in current_chunk->metadata or a related structure.
             }
-
-            // Placeholder: If current_chunk had a metadata field (e.g., a cJSON object)
-            // for (int i = 0; i < num_extracted_locs; ++i) {
-            //    add_string_to_metadata_array(current_chunk->metadata, "ner_locations", extracted_locs[i]);
-            // }
-
             free_extracted_locations(extracted_locs, num_extracted_locs);
         } else if (ner_status != AEGIS_PROCESSING_SUCCESS && ner_status != AEGIS_PROCESSING_NLP_NER_DISABLED) {
             LOG_WARN("Thread %lu: NLP/NER processing for %s failed with status %d.", thread_id_for_log, file_path, ner_status);
@@ -399,7 +451,7 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
         }
         free_processed_data_chunk(current_chunk);
         LOG_DEBUG("Thread %lu: Finished processing for file: %s. Data passed to indexer.", thread_id_for_log, file_path);
-        return NULL; 
+        return NULL;
     } else if (current_chunk) {
         LOG_DEBUG("Thread %lu: Finished processing for file: %s. No active indexer. Returning final chunk.", thread_id_for_log, file_path);
         return current_chunk;
@@ -424,6 +476,9 @@ void pipeline_shutdown(SpindexIngestionPipeline *pipeline) {
     } else {
         LOG_INFO("Thread pool destroyed successfully.");
     }
+
+    // Shutdown Geometric Validator
+    geometric_validator_shutdown();
 
     LOG_DEBUG("Destroying indexer mutex.");
     if (pthread_mutex_destroy(&pipeline->indexer_mutex) != 0) {

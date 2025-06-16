@@ -1,12 +1,15 @@
 #ifndef INGESTION_PIPELINE_H
 #define INGESTION_PIPELINE_H
 
-#include "data_types.h"       // For ProcessedDataChunk
-#include "config.h"           // For SpindexConfig
-#include "plugin_interface.h" // For SpindexPlugin
-#include "threading.h"        // For ThreadPool
-+#include "nlp_ner_parser.h"   // For NlpNerParserConfig
-#include <pthread.h>          // For pthread_mutex_t
+#include "data_types.h"               // For ProcessedDataChunk
+#include "config.h"                   // For SpindexConfig
+#include "plugin_interface.h"         // For SpindexPlugin
+#include "threading.h"                // For ThreadPool
+#include "nlp_ner_parser.h"           // For NlpNerParserConfig
+#include "geometric_validator.h"      // For GeometricValidatorConfig
+#include "complex_geometry_handler.h" // For ComplexGeometryHandlerConfig
+// geojson_processor.h is mainly for the .c file, not directly needed in pipeline struct
+#include <pthread.h>                  // For pthread_mutex_t
 
 /**
  * @brief Represents the ingestion pipeline manager.
@@ -20,15 +23,17 @@ typedef struct {
     const SpindexConfig *app_config;   // Reference to the application configuration
 
     // Active indexer details
-    SpindexPlugin *active_indexer_plugin;     // Pointer to the active indexer plugin instance
-    void* active_indexer_plugin_data;         // Data specific to the active indexer instance (managed by plugin)
-                                              // NOTE: Current plugin_loader needs enhancement to support this properly.
+    SpindexPlugin *active_indexer_plugin;      // Pointer to the active indexer plugin instance
+    void* active_indexer_plugin_data;          // Data specific to the active indexer instance (managed by plugin)
+                                               // NOTE: Current plugin_loader needs enhancement to support this properly.
 
     // Future fields might include:
     // - Caches for frequently used plugins
-    ThreadPool thread_pool;        // Thread pool for parallel processing
-+    NlpNerParserConfig ner_config; // Configuration for the NLP/NER module
-    pthread_mutex_t indexer_mutex; // To protect calls to non-thread-safe indexer plugins
+    ThreadPool thread_pool;                    // Thread pool for parallel processing
+    NlpNerParserConfig ner_config;             // Configuration for the NLP/NER module
+    ComplexGeometryHandlerConfig cg_config;    // Configuration for Complex Geometry Handler
+    GeometricValidatorConfig validator_config; // Configuration for Geometric Validator
+    pthread_mutex_t indexer_mutex;             // To protect calls to non-thread-safe indexer plugins
     // - Statistics on processed files/data
 } SpindexIngestionPipeline;
 
@@ -58,8 +63,8 @@ int pipeline_init(SpindexIngestionPipeline *pipeline,
  * @param pipeline Pointer to the initialized SpindexIngestionPipeline.
  * @param file_path Path to the file to be processed.
  * @return ProcessedDataChunk* on success (caller must free this chunk),
- *         NULL on failure (e.g., file not found, unsupported file type,
- *         preprocessor/parser failed). Errors are logged internally.
+ * NULL on failure (e.g., file not found, unsupported file type,
+ * preprocessor/parser failed). Errors are logged internally.
  */
 ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, const char *file_path);
 
@@ -83,7 +88,7 @@ void free_processed_data_chunk(ProcessedDataChunk *chunk);
  * @param pipeline Pointer to the initialized SpindexIngestionPipeline.
  * @param file_path Path to the file to be processed.
  * @return 0 on successful submission, -1 on failure (e.g., memory allocation error,
- *         thread pool submission error). Errors are logged internally.
+ * thread pool submission error). Errors are logged internally.
  */
 int pipeline_submit_file_for_processing(SpindexIngestionPipeline* pipeline, const char* file_path);
 

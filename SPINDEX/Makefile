@@ -16,6 +16,13 @@ JANSSON_LIBS = $(shell pkg-config --libs jansson || echo "-ljansson")
 CFLAGS += $(JANSSON_CFLAGS)
 LDFLAGS += $(JANSSON_LIBS)
 
+# GEOS Library Flags (using geos-config)
+GEOS_CFLAGS = $(shell geos-config --cflags)
+GEOS_LIBS = $(shell geos-config --libs)
+
+CFLAGS += $(GEOS_CFLAGS)
+LDFLAGS += $(GEOS_LIBS)
+
 # Attempt to find OpenVINO
 OPENVINO_DIR ?= $(INTEL_OPENVINO_DIR)
 ifeq ($(OPENVINO_DIR),)
@@ -52,12 +59,12 @@ ifeq ($(OPENVINO_FOUND),1)
   ifeq ($(wildcard $(OPENVINO_INCLUDE_PATH_RUNTIME)/openvino/c/openvino.h),)
     ifeq ($(wildcard $(OPENVINO_INCLUDE_PATH_DEV)/openvino/c/openvino.h),) # Check for older C API path
         ifeq ($(wildcard $(OPENVINO_INCLUDE_PATH_DEV)/inference_engine.hpp),) # Check for older C++ API path as a proxy
-            $(warning Could not find OpenVINO headers in expected locations: $(OPENVINO_INCLUDE_PATH_RUNTIME) or $(OPENVINO_INCLUDE_PATH_DEV))
+          $(warning Could not find OpenVINO headers in expected locations: $(OPENVINO_INCLUDE_PATH_RUNTIME) or $(OPENVINO_INCLUDE_PATH_DEV))
         else
-            OPENVINO_INCLUDES := -I$(OPENVINO_INCLUDE_PATH_DEV)
+          OPENVINO_INCLUDES := -I$(OPENVINO_INCLUDE_PATH_DEV)
         endif
     else # Found C API in dev path
-        OPENVINO_INCLUDES := -I$(OPENVINO_INCLUDE_PATH_DEV)
+      OPENVINO_INCLUDES := -I$(OPENVINO_INCLUDE_PATH_DEV)
     endif
   else # Found C API in runtime path
     OPENVINO_INCLUDES := -I$(OPENVINO_INCLUDE_PATH_RUNTIME)
@@ -123,8 +130,8 @@ TEST_HW_DETECT_TARGET = $(BUILD_DIR)/test_hardware_detection
 
 TEST_PIPELINE_SRC = $(CORE_DIR)/test_ingestion_pipeline.c
 TEST_PIPELINE_DEPS = $(BUILD_DIR)/core/ingestion_pipeline.o $(BUILD_DIR)/core/plugin_loader.o \
-                     $(BUILD_DIR)/core/config_manager.o $(BUILD_DIR)/core/utils.o $(BUILD_DIR)/core/hardware_detection.o \
-                     $(BUILD_DIR)/core/threading.o $(AEGIS_MODULE_OBJS) plugins
+                      $(BUILD_DIR)/core/config_manager.o $(BUILD_DIR)/core/utils.o $(BUILD_DIR)/core/hardware_detection.o \
+                      $(BUILD_DIR)/core/threading.o $(AEGIS_MODULE_OBJS) plugins
 TEST_PIPELINE_TARGET = $(BUILD_DIR)/test_ingestion_pipeline
 
 TEST_ES_CLIENT_SRC = $(CORE_DIR)/test_elasticsearch_client.c
@@ -201,6 +208,15 @@ TEST_NLP_NER_PARSER_SRC = $(CORE_DIR)/test_nlp_ner_parser.c
 TEST_NLP_NER_PARSER_DEPS_OBJS = $(BUILD_DIR)/plugins/aegis_modules/nlp_ner_parser.o $(BUILD_DIR)/core/config_manager.o $(BUILD_DIR)/core/utils.o
 TEST_NLP_NER_PARSER_TARGET = $(BUILD_DIR)/test_nlp_ner_parser
 
+TEST_GEOMETRIC_VALIDATOR_SRC = $(CORE_DIR)/test_geometric_validator.c
+# Dependencies: geometric_validator.o, config_manager.o, utils.o.
+# Jansson and GEOS libs are linked via global LDFLAGS.
+TEST_GEOMETRIC_VALIDATOR_DEPS_OBJS = \
+    $(BUILD_DIR)/plugins/aegis_modules/geometric_validator.o \
+    $(BUILD_DIR)/core/config_manager.o \
+    $(BUILD_DIR)/core/utils.o
+TEST_GEOMETRIC_VALIDATOR_TARGET = $(BUILD_DIR)/test_geometric_validator
+
 # AVX Search Test Program
 TEST_AVX_SEARCH_SRC = $(PLUGIN_DIR)/search_algorithms/test_avx512_phrase_search.c
 # Dependencies: the plugin object itself, core utils, and core hardware detection
@@ -222,7 +238,9 @@ AEGIS_MODULES_DIR = $(PLUGIN_DIR)/aegis_modules
 # Add other AEGIS module objects here if they are created later
 AEGIS_MODULE_OBJS = \
     $(BUILD_DIR)/plugins/aegis_modules/complex_geometry_handler.o \
-    $(BUILD_DIR)/plugins/aegis_modules/nlp_ner_parser.o
+    $(BUILD_DIR)/plugins/aegis_modules/nlp_ner_parser.o \
+    $(BUILD_DIR)/plugins/aegis_modules/geometric_validator.o \
+    $(BUILD_DIR)/plugins/aegis_modules/geojson_processor.o
 
 # Plugin definitions (Enabled ones first)
 DUMMY_PLUGIN_SRC_DIR = $(PLUGIN_DIR)/dummy_plugin
@@ -382,7 +400,7 @@ $(BUILD_DIR)/core/elasticsearch_client.o: $(CORE_DIR)/elasticsearch_client.c $(I
 
 # --- Test Program Rules ---
 # ... (test rules remain largely unchanged, but ensure they link against necessary objects) ...
-tests: $(TEST_CONFIG_LOADER_TARGET) $(TEST_PLUGIN_LOADER_TARGET) $(TEST_LOGGER_TARGET) $(TEST_HW_DETECT_TARGET) $(TEST_PIPELINE_TARGET) $(TEST_ES_CLIENT_TARGET) $(TEST_ES_INDEXING_TARGET) $(TEST_DOC_PARSER_TARGET) $(TEST_DOC_PREPROCESSOR_TARGET) $(TEST_XLS_PARSER_TARGET) $(TEST_XLS_PREPROCESSOR_TARGET) $(TEST_PDF_PARSER_TARGET) $(TEST_PDF_PREPROCESSOR_TARGET) $(TEST_RTF_PARSER_TARGET) $(TEST_RTF_PREPROCESSOR_TARGET) $(TEST_DIC_PARSER_TARGET) $(TEST_DIC_PREPROCESSOR_TARGET) $(TEST_SQLITE_PARSER_TARGET) $(TEST_SQLITE_PREPROCESSOR_TARGET) $(TEST_AVX_SEARCH_TARGET) $(TEST_COMPLEX_GEOMETRY_TARGET) $(TEST_NLP_NER_PARSER_TARGET)
+tests: $(TEST_CONFIG_LOADER_TARGET) $(TEST_PLUGIN_LOADER_TARGET) $(TEST_LOGGER_TARGET) $(TEST_HW_DETECT_TARGET) $(TEST_PIPELINE_TARGET) $(TEST_ES_CLIENT_TARGET) $(TEST_ES_INDEXING_TARGET) $(TEST_DOC_PARSER_TARGET) $(TEST_DOC_PREPROCESSOR_TARGET) $(TEST_XLS_PARSER_TARGET) $(TEST_XLS_PREPROCESSOR_TARGET) $(TEST_PDF_PARSER_TARGET) $(TEST_PDF_PREPROCESSOR_TARGET) $(TEST_RTF_PARSER_TARGET) $(TEST_RTF_PREPROCESSOR_TARGET) $(TEST_DIC_PARSER_TARGET) $(TEST_DIC_PREPROCESSOR_TARGET) $(TEST_SQLITE_PARSER_TARGET) $(TEST_SQLITE_PREPROCESSOR_TARGET) $(TEST_AVX_SEARCH_TARGET) $(TEST_COMPLEX_GEOMETRY_TARGET) $(TEST_NLP_NER_PARSER_TARGET) $(TEST_GEOMETRIC_VALIDATOR_TARGET)
 
 $(TEST_CONFIG_LOADER_TARGET): $(TEST_CONFIG_LOADER_SRC) $(TEST_CONFIG_LOADER_DEPS)
 	@mkdir -p $(@D)
@@ -402,6 +420,11 @@ $(TEST_COMPLEX_GEOMETRY_TARGET): $(TEST_COMPLEX_GEOMETRY_SRC) $(TEST_COMPLEX_GEO
 $(TEST_NLP_NER_PARSER_TARGET): $(TEST_NLP_NER_PARSER_SRC) $(TEST_NLP_NER_PARSER_DEPS_OBJS) $(AEGIS_MODULES_DIR)/nlp_ner_parser.h
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -I$(AEGIS_MODULES_DIR) $(TEST_NLP_NER_PARSER_SRC) $(TEST_NLP_NER_PARSER_DEPS_OBJS) -o $@ $(LDFLAGS)
+	@echo "Built test program: $@"
+
+$(TEST_GEOMETRIC_VALIDATOR_TARGET): $(TEST_GEOMETRIC_VALIDATOR_SRC) $(TEST_GEOMETRIC_VALIDATOR_DEPS_OBJS) $(AEGIS_MODULES_DIR)/geometric_validator.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE_DIRS) -I$(AEGIS_MODULES_DIR) $(TEST_GEOMETRIC_VALIDATOR_SRC) $(TEST_GEOMETRIC_VALIDATOR_DEPS_OBJS) -o $@ $(LDFLAGS)
 	@echo "Built test program: $@"
 
 # Rule to build the OpenVINO hardware test harness
