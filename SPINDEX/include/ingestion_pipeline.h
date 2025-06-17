@@ -46,6 +46,10 @@ typedef struct {
  * @param num_plugins Number of plugins in the loaded_plugins array.
  * @return 0 on success, -1 on failure.
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 int pipeline_init(SpindexIngestionPipeline *pipeline,
                   const SpindexConfig *config,
                   SpindexPlugin *loaded_plugins,
@@ -102,5 +106,9 @@ int pipeline_submit_file_for_processing(SpindexIngestionPipeline* pipeline, cons
  * @param pipeline Pointer to the SpindexIngestionPipeline struct.
  */
 void pipeline_shutdown(SpindexIngestionPipeline *pipeline);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // INGESTION_PIPELINE_H

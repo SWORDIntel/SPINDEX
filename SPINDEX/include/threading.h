@@ -20,6 +20,10 @@ typedef struct ThreadPool ThreadPool;
  * @param num_threads The number of worker threads to create in the pool.
  * @return ThreadPool* A pointer to the created thread pool, or NULL if an error occurred.
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 ThreadPool* thread_pool_create(size_t num_threads);
 
 /**
@@ -44,5 +48,9 @@ bool thread_pool_submit_task(ThreadPool* pool, void (*function)(void*), void* ar
  * @param pool The thread pool to destroy.
  */
 void thread_pool_destroy(ThreadPool* pool);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // SPINDEX_INCLUDE_THREADING_H

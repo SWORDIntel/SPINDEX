@@ -16,6 +16,10 @@
  *                     If the file cannot be opened, logs to stderr.
  * @param min_level The minimum log level to record. Messages below this level will be ignored.
  */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void spindex_log_init(const char *log_filepath, LogLevel min_level);
 
 /**
@@ -41,6 +45,10 @@ void spindex_set_log_level(LogLevel min_level);
  * @param ... Additional arguments for the format string.
  */
 void spindex_log_message(LogLevel level, const char *file, int line, const char *fmt, ...);
+
+#ifdef __cplusplus
+}
+#endif
 
 // Logging macros to simplify usage
 #define LOG_ERROR(fmt, ...) spindex_log_message(LOG_LEVEL_ERROR, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
