@@ -5,42 +5,23 @@
 #include <string.h>
 #include <jansson.h> // For parsing JSON output from the script
 
-// Default paths/values if not found in config - adjust as necessary
-#define DEFAULT_NLP_NER_PYTHON_EXECUTABLE "python3"
-#define DEFAULT_NLP_NER_SCRIPT_PATH "scripts/ner_spacy.py" // Relative to SPINDEX execution dir or an absolute path
-
-int load_nlp_ner_parser_config(const Config* global_config, NlpNerParserConfig* ner_config) {
+int load_nlp_ner_parser_config(const SpindexConfig* global_config, NlpNerParserConfig* ner_config) {
     if (!global_config || !ner_config) {
         LOG_ERROR("NLP_NER: Null config provided to load_nlp_ner_parser_config");
         return -1;
     }
 
-    const char* enabled_str = get_config_value(global_config, "NLP_NER_ENABLED");
-    ner_config->enabled = (enabled_str && (strcmp(enabled_str, "true") == 0 || strcmp(enabled_str, "1") == 0));
-    // log_info("NLP_NER: Module enabled status: %d", ner_config->enabled);
+    ner_config->enabled = global_config->nlp_ner_enabled;
+    // LOG_INFO("NLP_NER: Module enabled status: %d", ner_config->enabled); // Optional: uncomment for debug
 
+    strncpy(ner_config->python_executable, global_config->nlp_ner_python_executable, MAX_PATH_LEN - 1);
+    ner_config->python_executable[MAX_PATH_LEN - 1] = '\0';
 
-    const char* python_exe = get_config_value(global_config, "NLP_NER_PYTHON_EXECUTABLE");
-    if (python_exe) {
-        strncpy(ner_config->python_executable, python_exe, MAX_PATH_LEN - 1);
-        ner_config->python_executable[MAX_PATH_LEN - 1] = '\0';
-    } else {
-        LOG_WARN("NLP_NER: NLP_NER_PYTHON_EXECUTABLE not found in config, using default: %s", DEFAULT_NLP_NER_PYTHON_EXECUTABLE);
-        strncpy(ner_config->python_executable, DEFAULT_NLP_NER_PYTHON_EXECUTABLE, MAX_PATH_LEN - 1);
-        ner_config->python_executable[MAX_PATH_LEN - 1] = '\0';
-    }
+    strncpy(ner_config->script_path, global_config->nlp_ner_script_path, MAX_PATH_LEN - 1);
+    ner_config->script_path[MAX_PATH_LEN - 1] = '\0';
 
-    const char* script_path_str = get_config_value(global_config, "NLP_NER_SCRIPT_PATH");
-    if (script_path_str) {
-        strncpy(ner_config->script_path, script_path_str, MAX_PATH_LEN - 1);
-        ner_config->script_path[MAX_PATH_LEN - 1] = '\0';
-    } else {
-        LOG_WARN("NLP_NER: NLP_NER_SCRIPT_PATH not found in config, using default: %s", DEFAULT_NLP_NER_SCRIPT_PATH);
-        strncpy(ner_config->script_path, DEFAULT_NLP_NER_SCRIPT_PATH, MAX_PATH_LEN - 1);
-        ner_config->script_path[MAX_PATH_LEN - 1] = '\0';
-    }
-    // LOG_DEBUG("NLP_NER: Python executable: %s", ner_config->python_executable);
-    // LOG_DEBUG("NLP_NER: Script path: %s", ner_config->script_path);
+    // LOG_DEBUG("NLP_NER: Python executable: %s", ner_config->python_executable); // Optional
+    // LOG_DEBUG("NLP_NER: Script path: %s", ner_config->script_path); // Optional
     return 0;
 }
 
