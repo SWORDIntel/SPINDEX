@@ -71,6 +71,13 @@ void set_default_config(SpindexConfig *config) {
     if (config->active_indexer_name) free(config->active_indexer_name);
     config->active_indexer_name = strdup("ElasticsearchIndexer"); // Default active indexer
 
+    // Default NLP NER settings
+    config->nlp_ner_enabled = 0; // Disabled by default
+    strncpy(config->nlp_ner_python_executable, "python3", MAX_CONFIG_STR_LEN - 1);
+    config->nlp_ner_python_executable[MAX_CONFIG_STR_LEN - 1] = '\0';
+    strncpy(config->nlp_ner_script_path, "plugins/aegis_modules/scripts/ner_spacy.py", MAX_CONFIG_STR_LEN - 1); // Adjusted default path
+    config->nlp_ner_script_path[MAX_CONFIG_STR_LEN - 1] = '\0';
+
     if (!config->elasticsearch_url || !config->elasticsearch_index_name || !config->active_indexer_name) {
         // Handle strdup failure, though simple for this context
         fprintf(stderr, "set_default_config: strdup failed for ES or Indexer settings.\n");
@@ -152,6 +159,14 @@ int parse_config_file(const char *filepath, SpindexConfig *config) {
             LOG_WARN("Config key 'active_parser_name' found but not used by SpindexConfig directly yet.");
             // if (config->active_parser_name) free(config->active_parser_name);
             // config->active_parser_name = strdup(value);
+        } else if (strcmp(key, "NLP_NER_ENABLED") == 0) {
+            config->nlp_ner_enabled = atoi(value);
+        } else if (strcmp(key, "NLP_NER_PYTHON_EXECUTABLE") == 0) {
+            strncpy(config->nlp_ner_python_executable, value, MAX_CONFIG_STR_LEN - 1);
+            config->nlp_ner_python_executable[MAX_CONFIG_STR_LEN - 1] = '\0';
+        } else if (strcmp(key, "NLP_NER_SCRIPT_PATH") == 0) {
+            strncpy(config->nlp_ner_script_path, value, MAX_CONFIG_STR_LEN - 1);
+            config->nlp_ner_script_path[MAX_CONFIG_STR_LEN - 1] = '\0';
         } else {
             fprintf(stderr, "parse_config_file: Unknown configuration key on line %d: %s\n", line_number, key);
         }
@@ -195,5 +210,8 @@ void print_config(const SpindexConfig *config) {
     printf("Elasticsearch URL:    %s\n", config->elasticsearch_url ? config->elasticsearch_url : "N/A");
     printf("Elasticsearch Index:  %s\n", config->elasticsearch_index_name ? config->elasticsearch_index_name : "N/A");
     printf("Active Indexer Name:  %s\n", config->active_indexer_name ? config->active_indexer_name : "N/A");
+    printf("NLP NER Enabled:      %d\n", config->nlp_ner_enabled);
+    printf("NLP NER Python Exec:  %s\n", config->nlp_ner_python_executable);
+    printf("NLP NER Script Path:  %s\n", config->nlp_ner_script_path);
     printf("---------------------------\n");
 }
