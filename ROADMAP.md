@@ -64,7 +64,17 @@ Status: **DONE ✅**
 
 **Phase 5: Decompressors**
 Status: **DONE ✅**
-*(No changes in this phase)*
+## **Phase 5.A — Foundational Build & Dependency Refactoring (NEW)**
+
+**Status:** Pending
+*Purpose:* Modernise the build tool‑chain and external‑library handling before heavy new‑feature work begins.
+
+|  #  |  Task‑Code          |  Description                                                                                                                                    |  Priority  |  Status  |
+| --- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- |
+|  1  |  **BUILD‑ARC‑001**  |  **Migrate build system from legacy *Make* to modern, cross‑platform *CMake*. Improves automatic dependency detection & multi‑config builds.**  |  High      |  To Do   |
+|  2  |  **BUILD‑ARC‑002**  |  **Introduce a C/C++ package‑manager (Conan or vcpkg) to pin exact versions of external libraries (libcurl, libzip, OpenVINO, …).**             |  High      |  To Do   |
+
+---
 
 1.  Tasks [DECOMP-001] to [BUILD-005] remain as is with their existing priorities.
 
@@ -136,7 +146,19 @@ Status: Pending
     *   Description: Conduct comprehensive testing of the full AEGIS-ECHO pipeline with various data types, sizes, and potential error conditions.
     *   Priority: High
     *   Status: To Do
+    *   ## **Phase 6 — AEGIS‑ECHO Data Ingestion Pipeline**
 
+**Status:** Pending
+*Major change:* Pipeline is now **message‑queue‑driven** (Kafka / NATS) with metadata persisted in PostgreSQL.
+
+### Completed (from v1.9)
+
+### New & Modified Work
+|  16  |  **AEGIS‑ARC‑001**  |  **Architect message‑queue‑based ingestion (decoupled producer/worker, PostgreSQL metadata).**  |  High      |  To Do   |  —              |
+|  17  |  **AEGIS‑003‑R1**   |  **Refactor ingestion trigger to *publish* job messages to MQ.**                                |  High      |  To Do   |  AEGIS‑ARC‑001  |
+|  18  |  **AEGIS‑004‑R1**   |  **Refactor pipeline worker to *consume* jobs from MQ, run stateless chain.**                   |  High      |  To Do   |  AEGIS‑ARC‑001  |
+
+---
 **Phase 7: Advanced C Plugin Features - AVX-512 & Machine Learning** (Previously Phase 6)
 Status: In Progress
 
@@ -292,6 +314,16 @@ Status: Pending
 5.  **Task: [TEST-003] Execute comprehensive system and performance testing**
     *   Priority: Medium
     *   Status: To Do
+|  #  |  Task‑Code       |  Description                                                               |  Priority  |  Status       |  Depends On  |
+| --- | ---------------- | -------------------------------------------------------------------------- | ---------- | ------------- | ------------ |
+|  1  |  **CORE‑009**    |  **Enhance plugin loader with versioning & dependency‑graph resolution.**  |  Medium    |  To Do        |  —           |
+|  2  |  **DEPLOY‑001**  |  **Dockerfile for SPINDEX worker (C side).**                               |  High      |  To Do        |  —           |
+|  3  |  **DEPLOY‑002**  |  **Docker Swarm stack/compose files (services, networks, scaling).**       |  Medium    |  To Do        |  DEPLOY‑001  |
+|  4  |  CORE‑008        |  Threading model (`threading.c`).                                          |  Medium    |  To Do        |  —           |
+|  5  |  OPT‑001         |  General hardware‑optimisation plugins.                                    |  Low       |  To Do        |  —           |
+|  6  |  SEC‑001         |  C‑level security‑analysis plugins.                                        |  Low       |  To Do        |  —           |
+|  7  |  DOCS‑001        |  README & usage docs (ongoing).                                            |  Medium    |  In Progress  |  —           |
+|  8  |  TEST‑003        |  Comprehensive system & perf testing.                                      |  Medium    |  To Do        |  1‑7         |
 
 **Phase 11: Developer Documentation**
 Status: Pending
@@ -362,6 +394,20 @@ Status: **Pending**
 **Chunk 9: Developer Documentation** (Phase 11 - New)
 Status: **Pending**
 *   Key Tasks: [DEV-DOC-001] Core Arch (High), [DEV-DOC-002] AEGIS Pipeline Doc (High), [DEV-DOC-003] Backend API Doc (High). Others (Medium).
+*   ## **Phase 11 — Developer Documentation**
+
+*(Task codes unchanged, but deliverables **must now cover CMake, Conan/vcpkg, Kafka/NATS & Docker**.)*
+
+All **\[DEV‑DOC‑\*]** tasks remain as before.
+
+---
+
+## **Assumptions & Notes**
+
+\* The build system is **migrating from `make` to `CMake`** in Phase 5.A. Until that phase is complete, both build systems coexist.
+\* “Implement” tasks mean creating the `.c` & `.h`, compiling to `.so` if it’s a plugin, or linking into the core otherwise.
+\* Primary languages remain **C and Python**.
+
 
 ---
 This breakdown should provide smaller, more manageable sets of tasks for Jules. Each chunk aims for a tangible step forward.
