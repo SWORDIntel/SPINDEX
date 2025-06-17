@@ -322,7 +322,7 @@ Status: Pending
 |  4  |  CORE‑008        |  Threading model (`threading.c`).                                          |  Medium    |  To Do        |  —           |
 |  5  |  OPT‑001         |  General hardware‑optimisation plugins.                                    |  Low       |  To Do        |  —           |
 |  6  |  SEC‑001         |  C‑level security‑analysis plugins.                                        |  Low       |  To Do        |  —           |
-|  7  |  DOCS‑001        |  README & usage docs (ongoing).                                            |  Medium    |  In Progress  |  —           |
+|  7  |  DOCS‑001        |  README & usage docs (ongoing).                                            |  Medium    |  DONE ✅        |  —           |
 |  8  |  TEST‑003        |  Comprehensive system & perf testing.                                      |  Medium    |  To Do        |  1‑7         |
 
 **Phase 11: Developer Documentation**
