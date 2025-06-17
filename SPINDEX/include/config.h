@@ -34,6 +34,11 @@ typedef struct {
     // Active plugins
     char *active_indexer_name;      // Dynamically allocated, e.g., "ElasticsearchIndexer"
 
+    // NLP NER specific settings
+    int nlp_ner_enabled;
+    char nlp_ner_python_executable[MAX_CONFIG_STR_LEN];
+    char nlp_ner_script_path[MAX_CONFIG_STR_LEN];
+
     // Add other configuration parameters as needed
     // For example:
     // char output_directory[MAX_CONFIG_STR_LEN];

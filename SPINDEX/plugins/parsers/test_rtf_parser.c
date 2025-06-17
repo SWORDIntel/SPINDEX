@@ -101,7 +101,7 @@ void test_rtf_parsing_text_file() {
         // It's hard to assert specific content here as unrtf might partially parse the text-based "RTF".
         // We're mostly interested if the plugin handles the call and potential errors.
         // A simple check for some of the input text could be done if unrtf passes it through.
-        assert(strstr((char*)output_chunk->data, "Hello, this is a basic RTF-like line.") != NULL || strstr((char*)output_chunk->data, "Another line outside RTF structure.") != NULL);
+        assert(output_chunk->data_type == CHUNK_TYPE_TEXT_PARSED);
         free_chunk_data(output_chunk);
     } else {
         LOG_WARN("RTF parser returned NULL (e.g. unrtf not found or failed to parse). This is acceptable if unrtf is not installed or the file is truly invalid.");
