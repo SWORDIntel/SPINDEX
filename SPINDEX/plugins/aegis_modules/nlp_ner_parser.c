@@ -11,7 +11,7 @@
 
 int load_nlp_ner_parser_config(const Config* global_config, NlpNerParserConfig* ner_config) {
     if (!global_config || !ner_config) {
-        log_error("NLP_NER: Null config provided to load_nlp_ner_parser_config");
+        LOG_ERROR("NLP_NER: Null config provided to load_nlp_ner_parser_config");
         return -1;
     }
 
@@ -25,7 +25,7 @@ int load_nlp_ner_parser_config(const Config* global_config, NlpNerParserConfig* 
         strncpy(ner_config->python_executable, python_exe, MAX_PATH_LEN - 1);
         ner_config->python_executable[MAX_PATH_LEN - 1] = '\0';
     } else {
-        log_warn("NLP_NER: NLP_NER_PYTHON_EXECUTABLE not found in config, using default: %s", DEFAULT_NLP_NER_PYTHON_EXECUTABLE);
+        LOG_WARN("NLP_NER: NLP_NER_PYTHON_EXECUTABLE not found in config, using default: %s", DEFAULT_NLP_NER_PYTHON_EXECUTABLE);
         strncpy(ner_config->python_executable, DEFAULT_NLP_NER_PYTHON_EXECUTABLE, MAX_PATH_LEN - 1);
         ner_config->python_executable[MAX_PATH_LEN - 1] = '\0';
     }
@@ -35,12 +35,12 @@ int load_nlp_ner_parser_config(const Config* global_config, NlpNerParserConfig* 
         strncpy(ner_config->script_path, script_path_str, MAX_PATH_LEN - 1);
         ner_config->script_path[MAX_PATH_LEN - 1] = '\0';
     } else {
-        log_warn("NLP_NER: NLP_NER_SCRIPT_PATH not found in config, using default: %s", DEFAULT_NLP_NER_SCRIPT_PATH);
+        LOG_WARN("NLP_NER: NLP_NER_SCRIPT_PATH not found in config, using default: %s", DEFAULT_NLP_NER_SCRIPT_PATH);
         strncpy(ner_config->script_path, DEFAULT_NLP_NER_SCRIPT_PATH, MAX_PATH_LEN - 1);
         ner_config->script_path[MAX_PATH_LEN - 1] = '\0';
     }
-    // log_debug("NLP_NER: Python executable: %s", ner_config->python_executable);
-    // log_debug("NLP_NER: Script path: %s", ner_config->script_path);
+    // LOG_DEBUG("NLP_NER: Python executable: %s", ner_config->python_executable);
+    // LOG_DEBUG("NLP_NER: Script path: %s", ner_config->script_path);
     return 0;
 }
 
@@ -51,7 +51,7 @@ AEGIS_PROCESSING_STATUS extract_locations_from_text(
     int* num_locations_out) {
 
     if (!ner_config || !text || !extracted_locations_out || !num_locations_out) {
-        log_error("NLP_NER: Null arguments passed to extract_locations_from_text.");
+        LOG_ERROR("NLP_NER: Null arguments passed to extract_locations_from_text.");
         return AEGIS_PROCESSING_ERROR_ARGS;
     }
 
@@ -59,14 +59,14 @@ AEGIS_PROCESSING_STATUS extract_locations_from_text(
     *num_locations_out = 0;
 
     if (!ner_config->enabled) {
-        log_info("NLP_NER: Module is disabled via configuration.");
+        LOG_INFO("NLP_NER: Module is disabled via configuration.");
         return AEGIS_PROCESSING_NLP_NER_DISABLED;
     }
 
     // Basic check for script existence - can be enhanced
     FILE* script_file = fopen(ner_config->script_path, "r");
     if (!script_file) {
-        log_error("NLP_NER: Script not found at path: %s", ner_config->script_path);
+        LOG_ERROR("NLP_NER: Script not found at path: %s", ner_config->script_path);
         return AEGIS_PROCESSING_ERROR_CONFIG; // Or a more specific error
     }
     fclose(script_file);
@@ -79,19 +79,19 @@ AEGIS_PROCESSING_STATUS extract_locations_from_text(
     size_t cmd_len = strlen(ner_config->python_executable) + 1 + strlen(ner_config->script_path) + 3 + strlen(text) + 2; // spaces, quotes, null
     char* cmd = (char*)malloc(cmd_len);
     if (!cmd) {
-        log_error("NLP_NER: Failed to allocate memory for command string.");
+        LOG_ERROR("NLP_NER: Failed to allocate memory for command string.");
         return AEGIS_PROCESSING_ERROR_MEMORY;
     }
     // Using single quotes around the text argument for `sh` to handle most special characters.
     // If text itself contains single quotes, this will be problematic.
     // A production system would need much more robust argument escaping or use exec-family functions with argument arrays.
     snprintf(cmd, cmd_len, "%s %s '%s'", ner_config->python_executable, ner_config->script_path, text);
-    // log_debug("NLP_NER: Executing command: %s", cmd);
+    // LOG_DEBUG("NLP_NER: Executing command: %s", cmd);
 
     FILE* pipe = popen(cmd, "r");
     free(cmd);
     if (!pipe) {
-        log_error("NLP_NER: popen() failed to execute NER script.");
+        LOG_ERROR("NLP_NER: popen() failed to execute NER script.");
         return AEGIS_PROCESSING_ERROR_EXTERNAL_TOOL;
     }
 
@@ -104,7 +104,7 @@ AEGIS_PROCESSING_STATUS extract_locations_from_text(
         size_t bytes_read = strlen(buffer);
         char* temp = (char*)realloc(full_output, current_size + bytes_read + 1);
         if (!temp) {
-            log_error("NLP_NER: Failed to realloc memory for script output.");
+            LOG_ERROR("NLP_NER: Failed to realloc memory for script output.");
             free(full_output);
             pclose(pipe);
             return AEGIS_PROCESSING_ERROR_MEMORY;
@@ -117,43 +117,43 @@ AEGIS_PROCESSING_STATUS extract_locations_from_text(
 
     int script_status = pclose(pipe);
     if (script_status != 0) {
-        log_error("NLP_NER: NER script execution failed with status %d. Output: %s", script_status, full_output ? full_output : "(empty)");
+        LOG_ERROR("NLP_NER: NER script execution failed with status %d. Output: %s", script_status, full_output ? full_output : "(empty)");
         free(full_output);
         return AEGIS_PROCESSING_ERROR_EXTERNAL_TOOL;
     }
 
     if (!full_output || bytes_read_total == 0) {
-        log_info("NLP_NER: NER script produced no output.");
+        LOG_INFO("NLP_NER: NER script produced no output.");
         free(full_output); // It might be allocated but empty if realloc succeeded once.
         return AEGIS_PROCESSING_SUCCESS; // No locations found is not an error.
     }
-    // log_debug("NLP_NER: Script output: %s", full_output);
+    // LOG_DEBUG("NLP_NER: Script output: %s", full_output);
 
     json_error_t error;
     json_t* root = json_loads(full_output, 0, &error);
     free(full_output);
 
     if (!root) {
-        log_error("NLP_NER: Failed to parse JSON output from NER script: %s (line %d, col %d)", error.text, error.line, error.column);
+        LOG_ERROR("NLP_NER: Failed to parse JSON output from NER script: %s (line %d, col %d)", error.text, error.line, error.column);
         return AEGIS_PROCESSING_ERROR_INVALID_FORMAT;
     }
 
     if (!json_is_array(root)) {
-        log_error("NLP_NER: JSON output from NER script is not an array.");
+        LOG_ERROR("NLP_NER: JSON output from NER script is not an array.");
         json_decref(root);
         return AEGIS_PROCESSING_ERROR_INVALID_FORMAT;
     }
 
     size_t num_items = json_array_size(root);
     if (num_items == 0) {
-        // log_info("NLP_NER: No locations found by NER script.");
+        // LOG_INFO("NLP_NER: No locations found by NER script.");
         json_decref(root);
         return AEGIS_PROCESSING_SUCCESS;
     }
 
     *extracted_locations_out = (char**)malloc(num_items * sizeof(char*));
     if (!(*extracted_locations_out)) {
-        log_error("NLP_NER: Failed to allocate memory for locations array.");
+        LOG_ERROR("NLP_NER: Failed to allocate memory for locations array.");
         json_decref(root);
         return AEGIS_PROCESSING_ERROR_MEMORY;
     }
@@ -162,14 +162,14 @@ AEGIS_PROCESSING_STATUS extract_locations_from_text(
     for (size_t i = 0; i < num_items; ++i) {
         json_t* item = json_array_get(root, i);
         if (!json_is_string(item)) {
-            log_warn("NLP_NER: Non-string item found in NER script output array at index %zu.", i);
+            LOG_WARN("NLP_NER: Non-string item found in NER script output array at index %zu.", i);
             // Skip this item, or error out. For now, skip.
             continue;
         }
         const char* location_str = json_string_value(item);
         (*extracted_locations_out)[*num_locations_out] = strdup(location_str);
         if (!(*extracted_locations_out)[*num_locations_out]) {
-            log_error("NLP_NER: Failed to strdup location string.");
+            LOG_ERROR("NLP_NER: Failed to strdup location string.");
             // Free already duplicated strings and the array
             free_extracted_locations(*extracted_locations_out, *num_locations_out);
             *extracted_locations_out = NULL; // Ensure it's NULL for the caller
@@ -180,7 +180,7 @@ AEGIS_PROCESSING_STATUS extract_locations_from_text(
     }
 
     json_decref(root);
-    // log_info("NLP_NER: Successfully extracted %d locations.", *num_locations_out);
+    // LOG_INFO("NLP_NER: Successfully extracted %d locations.", *num_locations_out);
     return AEGIS_PROCESSING_SUCCESS;
 }
 
