@@ -6,6 +6,8 @@
 
 // Forward declaration for the worker function
 static void* worker_thread_main(void* arg);
+// Forward declaration for internal helper
+static Task* actual_pop(TaskQueue* q);
 
 // Task Queue utility function implementations
 // REVIEW: Correctness of pthread synchronization: Mutex `lock` protects queue data (head, tail, count).

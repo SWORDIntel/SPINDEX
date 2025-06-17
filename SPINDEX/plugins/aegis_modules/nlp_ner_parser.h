@@ -23,7 +23,7 @@ typedef struct {
  * @param ner_config Pointer to NlpNerParserConfig to be populated.
  * @return 0 on success, -1 on failure (e.g., required config keys missing).
  */
-int load_nlp_ner_parser_config(const Config* global_config, NlpNerParserConfig* ner_config);
+int load_nlp_ner_parser_config(const SpindexConfig* global_config, NlpNerParserConfig* ner_config);
 
 /**
  * @brief Extracts location names from unstructured text using an external NER script.

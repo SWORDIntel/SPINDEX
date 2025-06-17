@@ -41,7 +41,7 @@ void geometric_validator_shutdown();
  * @param val_config Pointer to GeometricValidatorConfig to be populated.
  * @return 0 on success, -1 on failure (e.g., required config keys missing).
  */
-int load_geometric_validator_config(const Config* global_config, GeometricValidatorConfig* val_config);
+int load_geometric_validator_config(const SpindexConfig* global_config, GeometricValidatorConfig* val_config);
 
 /**
  * @brief Validates and optionally repairs a single GeoJSON geometry represented by a json_t object.
