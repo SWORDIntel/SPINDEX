@@ -130,78 +130,6 @@ aegis_modules/fast:
 	cd /app/SPINDEX/build_cmake && $(MAKE) $(MAKESILENT) -f plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build.make plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build
 .PHONY : aegis_modules/fast
 
-complex_geometry_handler.o: complex_geometry_handler.c.o
-.PHONY : complex_geometry_handler.o
-
-# target to build an object file
-complex_geometry_handler.c.o:
-	cd /app/SPINDEX/build_cmake && $(MAKE) $(MAKESILENT) -f plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build.make plugins/aegis_modules/CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.o
-.PHONY : complex_geometry_handler.c.o
-
-complex_geometry_handler.i: complex_geometry_handler.c.i
-.PHONY : complex_geometry_handler.i
-
-# target to preprocess a source file
-complex_geometry_handler.c.i:
-	cd /app/SPINDEX/build_cmake && $(MAKE) $(MAKESILENT) -f plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build.make plugins/aegis_modules/CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.i
-.PHONY : complex_geometry_handler.c.i
-
-complex_geometry_handler.s: complex_geometry_handler.c.s
-.PHONY : complex_geometry_handler.s
-
-# target to generate assembly for a file
-complex_geometry_handler.c.s:
-	cd /app/SPINDEX/build_cmake && $(MAKE) $(MAKESILENT) -f plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build.make plugins/aegis_modules/CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.s
-.PHONY : complex_geometry_handler.c.s
-
-geojson_processor.o: geojson_processor.c.o
-.PHONY : geojson_processor.o
-
-# target to build an object file
-geojson_processor.c.o:
-	cd /app/SPINDEX/build_cmake && $(MAKE) $(MAKESILENT) -f plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build.make plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geojson_processor.c.o
-.PHONY : geojson_processor.c.o
-
-geojson_processor.i: geojson_processor.c.i
-.PHONY : geojson_processor.i
-
-# target to preprocess a source file
-geojson_processor.c.i:
-	cd /app/SPINDEX/build_cmake && $(MAKE) $(MAKESILENT) -f plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build.make plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geojson_processor.c.i
-.PHONY : geojson_processor.c.i
-
-geojson_processor.s: geojson_processor.c.s
-.PHONY : geojson_processor.s
-
-# target to generate assembly for a file
-geojson_processor.c.s:
-	cd /app/SPINDEX/build_cmake && $(MAKE) $(MAKESILENT) -f plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build.make plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geojson_processor.c.s
-.PHONY : geojson_processor.c.s
-
-geometric_validator.o: geometric_validator.c.o
-.PHONY : geometric_validator.o
-
-# target to build an object file
-geometric_validator.c.o:
-	cd /app/SPINDEX/build_cmake && $(MAKE) $(MAKESILENT) -f plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build.make plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geometric_validator.c.o
-.PHONY : geometric_validator.c.o
-
-geometric_validator.i: geometric_validator.c.i
-.PHONY : geometric_validator.i
-
-# target to preprocess a source file
-geometric_validator.c.i:
-	cd /app/SPINDEX/build_cmake && $(MAKE) $(MAKESILENT) -f plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build.make plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geometric_validator.c.i
-.PHONY : geometric_validator.c.i
-
-geometric_validator.s: geometric_validator.c.s
-.PHONY : geometric_validator.s
-
-# target to generate assembly for a file
-geometric_validator.c.s:
-	cd /app/SPINDEX/build_cmake && $(MAKE) $(MAKESILENT) -f plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build.make plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geometric_validator.c.s
-.PHONY : geometric_validator.c.s
-
 nlp_ner_parser.o: nlp_ner_parser.c.o
 .PHONY : nlp_ner_parser.o
 
@@ -235,15 +163,6 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... aegis_modules"
-	@echo "... complex_geometry_handler.o"
-	@echo "... complex_geometry_handler.i"
-	@echo "... complex_geometry_handler.s"
-	@echo "... geojson_processor.o"
-	@echo "... geojson_processor.i"
-	@echo "... geojson_processor.s"
-	@echo "... geometric_validator.o"
-	@echo "... geometric_validator.i"
-	@echo "... geometric_validator.s"
 	@echo "... nlp_ner_parser.o"
 	@echo "... nlp_ner_parser.i"
 	@echo "... nlp_ner_parser.s"

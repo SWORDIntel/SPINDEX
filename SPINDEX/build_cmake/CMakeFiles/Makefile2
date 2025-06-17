@@ -116,7 +116,7 @@ plugins/aegis_modules/clean: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/
 core/CMakeFiles/spindex_core_objects.dir/all:
 	$(MAKE) $(MAKESILENT) -f core/CMakeFiles/spindex_core_objects.dir/build.make core/CMakeFiles/spindex_core_objects.dir/depend
 	$(MAKE) $(MAKESILENT) -f core/CMakeFiles/spindex_core_objects.dir/build.make core/CMakeFiles/spindex_core_objects.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/app/SPINDEX/build_cmake/CMakeFiles --progress-num=16,17,18,19,20,21,22,23,24 "Built target spindex_core_objects"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/app/SPINDEX/build_cmake/CMakeFiles --progress-num=13,14,15,16,17,18,19,20,21 "Built target spindex_core_objects"
 .PHONY : core/CMakeFiles/spindex_core_objects.dir/all
 
 # Build rule for subdir invocation for target.
@@ -142,12 +142,12 @@ core/CMakeFiles/spindex_core_objects.dir/clean:
 core/CMakeFiles/spindex_app.dir/all: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/all
 	$(MAKE) $(MAKESILENT) -f core/CMakeFiles/spindex_app.dir/build.make core/CMakeFiles/spindex_app.dir/depend
 	$(MAKE) $(MAKESILENT) -f core/CMakeFiles/spindex_app.dir/build.make core/CMakeFiles/spindex_app.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/app/SPINDEX/build_cmake/CMakeFiles --progress-num=6,7,8,9,10,11,12,13,14,15 "Built target spindex_app"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/app/SPINDEX/build_cmake/CMakeFiles --progress-num=3,4,5,6,7,8,9,10,11,12 "Built target spindex_app"
 .PHONY : core/CMakeFiles/spindex_app.dir/all
 
 # Build rule for subdir invocation for target.
 core/CMakeFiles/spindex_app.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /app/SPINDEX/build_cmake/CMakeFiles 15
+	$(CMAKE_COMMAND) -E cmake_progress_start /app/SPINDEX/build_cmake/CMakeFiles 12
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 core/CMakeFiles/spindex_app.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /app/SPINDEX/build_cmake/CMakeFiles 0
 .PHONY : core/CMakeFiles/spindex_app.dir/rule
@@ -168,12 +168,12 @@ core/CMakeFiles/spindex_app.dir/clean:
 plugins/aegis_modules/CMakeFiles/aegis_modules.dir/all:
 	$(MAKE) $(MAKESILENT) -f plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build.make plugins/aegis_modules/CMakeFiles/aegis_modules.dir/depend
 	$(MAKE) $(MAKESILENT) -f plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build.make plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/app/SPINDEX/build_cmake/CMakeFiles --progress-num=1,2,3,4,5 "Built target aegis_modules"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/app/SPINDEX/build_cmake/CMakeFiles --progress-num=1,2 "Built target aegis_modules"
 .PHONY : plugins/aegis_modules/CMakeFiles/aegis_modules.dir/all
 
 # Build rule for subdir invocation for target.
 plugins/aegis_modules/CMakeFiles/aegis_modules.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /app/SPINDEX/build_cmake/CMakeFiles 5
+	$(CMAKE_COMMAND) -E cmake_progress_start /app/SPINDEX/build_cmake/CMakeFiles 2
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 plugins/aegis_modules/CMakeFiles/aegis_modules.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /app/SPINDEX/build_cmake/CMakeFiles 0
 .PHONY : plugins/aegis_modules/CMakeFiles/aegis_modules.dir/rule

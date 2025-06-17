@@ -1,7 +1,13 @@
-file(GLOB AEGIS_MODULE_SOURCES "*.c" "*.h") # Include .h for IDEs, won't be compiled directly
+#file(GLOB AEGIS_MODULE_SOURCES "*.c" "*.h") # Include .h for IDEs, won't be compiled directly
 # Filter out .h files from sources to be compiled
-list(FILTER AEGIS_MODULE_SOURCES EXCLUDE REGEX "\\.h$")
+#list(FILTER AEGIS_MODULE_SOURCES EXCLUDE REGEX "\\.h$")
 
+set(AEGIS_MODULE_SOURCES
+    #complex_geometry_handler.c
+    #geojson_processor.c
+    #geometric_validator.c
+    nlp_ner_parser.c
+    )
 
 # Create a static library for AEGIS modules
 add_library(aegis_modules STATIC ${AEGIS_MODULE_SOURCES})

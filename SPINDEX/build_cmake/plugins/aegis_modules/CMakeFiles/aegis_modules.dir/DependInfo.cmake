@@ -8,9 +8,6 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/app/SPINDEX/plugins/aegis_modules/complex_geometry_handler.c" "plugins/aegis_modules/CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.o" "gcc" "plugins/aegis_modules/CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.o.d"
-  "/app/SPINDEX/plugins/aegis_modules/geojson_processor.c" "plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geojson_processor.c.o" "gcc" "plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geojson_processor.c.o.d"
-  "/app/SPINDEX/plugins/aegis_modules/geometric_validator.c" "plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geometric_validator.c.o" "gcc" "plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geometric_validator.c.o.d"
   "/app/SPINDEX/plugins/aegis_modules/nlp_ner_parser.c" "plugins/aegis_modules/CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o" "gcc" "plugins/aegis_modules/CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o.d"
   )
 

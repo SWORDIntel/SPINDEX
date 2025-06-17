@@ -1,2 +1,2 @@
-/usr/bin/ar qc libaegis_modules.a CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.o CMakeFiles/aegis_modules.dir/geojson_processor.c.o CMakeFiles/aegis_modules.dir/geometric_validator.c.o CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o
+/usr/bin/ar qc libaegis_modules.a CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o
 /usr/bin/ranlib libaegis_modules.a

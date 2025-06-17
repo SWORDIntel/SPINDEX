@@ -69,52 +69,10 @@ include plugins/aegis_modules/CMakeFiles/aegis_modules.dir/progress.make
 # Include the compile flags for this target's objects.
 include plugins/aegis_modules/CMakeFiles/aegis_modules.dir/flags.make
 
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.o: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/flags.make
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.o: /app/SPINDEX/plugins/aegis_modules/complex_geometry_handler.c
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.o: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/app/SPINDEX/build_cmake/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building C object plugins/aegis_modules/CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.o"
-	cd /app/SPINDEX/build_cmake/plugins/aegis_modules && /usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT plugins/aegis_modules/CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.o -MF CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.o.d -o CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.o -c /app/SPINDEX/plugins/aegis_modules/complex_geometry_handler.c
-
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.i"
-	cd /app/SPINDEX/build_cmake/plugins/aegis_modules && /usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /app/SPINDEX/plugins/aegis_modules/complex_geometry_handler.c > CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.i
-
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.s"
-	cd /app/SPINDEX/build_cmake/plugins/aegis_modules && /usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /app/SPINDEX/plugins/aegis_modules/complex_geometry_handler.c -o CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.s
-
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geojson_processor.c.o: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/flags.make
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geojson_processor.c.o: /app/SPINDEX/plugins/aegis_modules/geojson_processor.c
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geojson_processor.c.o: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/app/SPINDEX/build_cmake/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building C object plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geojson_processor.c.o"
-	cd /app/SPINDEX/build_cmake/plugins/aegis_modules && /usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geojson_processor.c.o -MF CMakeFiles/aegis_modules.dir/geojson_processor.c.o.d -o CMakeFiles/aegis_modules.dir/geojson_processor.c.o -c /app/SPINDEX/plugins/aegis_modules/geojson_processor.c
-
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geojson_processor.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/aegis_modules.dir/geojson_processor.c.i"
-	cd /app/SPINDEX/build_cmake/plugins/aegis_modules && /usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /app/SPINDEX/plugins/aegis_modules/geojson_processor.c > CMakeFiles/aegis_modules.dir/geojson_processor.c.i
-
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geojson_processor.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/aegis_modules.dir/geojson_processor.c.s"
-	cd /app/SPINDEX/build_cmake/plugins/aegis_modules && /usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /app/SPINDEX/plugins/aegis_modules/geojson_processor.c -o CMakeFiles/aegis_modules.dir/geojson_processor.c.s
-
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geometric_validator.c.o: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/flags.make
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geometric_validator.c.o: /app/SPINDEX/plugins/aegis_modules/geometric_validator.c
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geometric_validator.c.o: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/app/SPINDEX/build_cmake/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building C object plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geometric_validator.c.o"
-	cd /app/SPINDEX/build_cmake/plugins/aegis_modules && /usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geometric_validator.c.o -MF CMakeFiles/aegis_modules.dir/geometric_validator.c.o.d -o CMakeFiles/aegis_modules.dir/geometric_validator.c.o -c /app/SPINDEX/plugins/aegis_modules/geometric_validator.c
-
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geometric_validator.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/aegis_modules.dir/geometric_validator.c.i"
-	cd /app/SPINDEX/build_cmake/plugins/aegis_modules && /usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /app/SPINDEX/plugins/aegis_modules/geometric_validator.c > CMakeFiles/aegis_modules.dir/geometric_validator.c.i
-
-plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geometric_validator.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/aegis_modules.dir/geometric_validator.c.s"
-	cd /app/SPINDEX/build_cmake/plugins/aegis_modules && /usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /app/SPINDEX/plugins/aegis_modules/geometric_validator.c -o CMakeFiles/aegis_modules.dir/geometric_validator.c.s
-
 plugins/aegis_modules/CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/flags.make
 plugins/aegis_modules/CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o: /app/SPINDEX/plugins/aegis_modules/nlp_ner_parser.c
 plugins/aegis_modules/CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/app/SPINDEX/build_cmake/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building C object plugins/aegis_modules/CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/app/SPINDEX/build_cmake/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building C object plugins/aegis_modules/CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o"
 	cd /app/SPINDEX/build_cmake/plugins/aegis_modules && /usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT plugins/aegis_modules/CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o -MF CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o.d -o CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o -c /app/SPINDEX/plugins/aegis_modules/nlp_ner_parser.c
 
 plugins/aegis_modules/CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.i: cmake_force
@@ -127,21 +85,15 @@ plugins/aegis_modules/CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.s: cmake_for
 
 # Object files for target aegis_modules
 aegis_modules_OBJECTS = \
-"CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.o" \
-"CMakeFiles/aegis_modules.dir/geojson_processor.c.o" \
-"CMakeFiles/aegis_modules.dir/geometric_validator.c.o" \
 "CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o"
 
 # External object files for target aegis_modules
 aegis_modules_EXTERNAL_OBJECTS =
 
-plugins/aegis_modules/libaegis_modules.a: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/complex_geometry_handler.c.o
-plugins/aegis_modules/libaegis_modules.a: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geojson_processor.c.o
-plugins/aegis_modules/libaegis_modules.a: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/geometric_validator.c.o
 plugins/aegis_modules/libaegis_modules.a: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/nlp_ner_parser.c.o
 plugins/aegis_modules/libaegis_modules.a: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/build.make
 plugins/aegis_modules/libaegis_modules.a: plugins/aegis_modules/CMakeFiles/aegis_modules.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/app/SPINDEX/build_cmake/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Linking C static library libaegis_modules.a"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/app/SPINDEX/build_cmake/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking C static library libaegis_modules.a"
 	cd /app/SPINDEX/build_cmake/plugins/aegis_modules && $(CMAKE_COMMAND) -P CMakeFiles/aegis_modules.dir/cmake_clean_target.cmake
 	cd /app/SPINDEX/build_cmake/plugins/aegis_modules && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/aegis_modules.dir/link.txt --verbose=$(VERBOSE)
 
