@@ -65,5 +65,15 @@ typedef struct {
     char value[1024];
 } ConfigSetting;
 
+// Status codes for AEGIS processing modules
+typedef enum {
+    AEGIS_PROCESSING_SUCCESS = 0,
+    AEGIS_PROCESSING_FAILURE = 1,
+    AEGIS_PROCESSING_WARNING = 2, // Generic warning
+    AEGIS_PROCESSING_WARNING_GEOMETRY_INVALID = 3,
+    AEGIS_PROCESSING_NLP_NER_DISABLED = 4,
+    AEGIS_PROCESSING_REJECTED = 5
+} AEGIS_PROCESSING_STATUS;
+
 
 #endif // DATA_TYPES_H

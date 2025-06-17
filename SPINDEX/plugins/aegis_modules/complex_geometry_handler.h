@@ -48,6 +48,6 @@ AEGIS_PROCESSING_STATUS process_complex_geometries(
  * @param handler_config Pointer to ComplexGeometryHandlerConfig to be populated.
  * @return Returns 0 on success, -1 on failure.
  */
-int load_complex_geometry_handler_config(const Config* config, ComplexGeometryHandlerConfig* handler_config);
+int load_complex_geometry_handler_config(const SpindexConfig* config, ComplexGeometryHandlerConfig* handler_config);
 
 #endif // COMPLEX_GEOMETRY_HANDLER_H

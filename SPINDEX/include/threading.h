@@ -47,7 +47,7 @@ bool thread_pool_submit_task(ThreadPool* pool, void (*function)(void*), void* ar
  *
  * @param pool The thread pool to destroy.
  */
-void thread_pool_destroy(ThreadPool* pool);
+int thread_pool_destroy(ThreadPool* pool);
 
 #ifdef __cplusplus
 }

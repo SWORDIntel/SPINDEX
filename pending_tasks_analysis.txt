@@ -1,0 +1,448 @@
+Pending Tasks Extracted:
+- Task Code: BUILD-ARC-001
+  Phase: 5.A - Foundational Build & Dependency Refactoring (NEW)
+  Description: Migrate build system from legacy *Make* to modern, cross-platform *CMake*. Improves automatic dependency detection & multi-config builds.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: BUILD-ARC-002
+  Phase: 5.A - Foundational Build & Dependency Refactoring (NEW)
+  Description: Introduce a C/C++ package-manager (Conan or vcpkg) to pin exact versions of external libraries (libcurl, libzip, OpenVINO, …).
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: AEGIS-011
+  Phase: 6: AEGIS-ECHO Data Ingestion Pipeline
+  Description: Implement Content-Level Security Scanning module Develop the module for security scanning (e.g., XXE prevention, zip bomb detection).
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: AEGIS-012
+  Phase: 6: AEGIS-ECHO Data Ingestion Pipeline
+  Description: Implement Value-Domain & Schema Validation module Develop the module to validate data against expected structures, attribute types, and value constraints.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: AEGIS-013
+  Phase: 6: AEGIS-ECHO Data Ingestion Pipeline
+  Description: Implement Data Promotion logic Develop the logic to move validated, processed data to a trusted location and update metadata status accordingly.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: AEGIS-014
+  Phase: 6: AEGIS-ECHO Data Ingestion Pipeline
+  Description: Implement Data Quarantine (DLQ) logic Develop the logic to isolate data that fails processing/validation, update metadata, and log errors.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: AEGIS-015
+  Phase: 6: AEGIS-ECHO Data Ingestion Pipeline
+  Description: Implement Persistent Metadata Cataloguing Integrate a persistent database (e.g., PostgreSQL) for storing all ingestion job metadata, replacing any in-memory solutions.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: AEGIS-016
+  Phase: 6: AEGIS-ECHO Data Ingestion Pipeline
+  Description: Test AEGIS-ECHO pipeline end-to-end Conduct comprehensive testing of the full AEGIS-ECHO pipeline with various data types, sizes, and potential error conditions.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: AEGIS-ARC-001
+  Phase: 6 - AEGIS-ECHO Data Ingestion Pipeline
+  Description: Architect message-queue-based ingestion (decoupled producer/worker, PostgreSQL metadata).
+  Priority: High
+  Status: To Do
+  Dependencies: —
+
+- Task Code: AEGIS-003-R1
+  Phase: 6 - AEGIS-ECHO Data Ingestion Pipeline
+  Description: Refactor ingestion trigger to *publish* job messages to MQ.
+  Priority: High
+  Status: To Do
+  Dependencies: AEGIS-ARC-001
+
+- Task Code: AEGIS-004-R1
+  Phase: 6 - AEGIS-ECHO Data Ingestion Pipeline
+  Description: Refactor pipeline worker to *consume* jobs from MQ, run stateless chain.
+  Priority: High
+  Status: To Do
+  Dependencies: AEGIS-ARC-001
+
+- Task Code: AVX-001
+  Phase: 7: Advanced C Plugin Features - AVX-512 & Machine Learning
+  Description: Implement full AVX-512 phrase search algorithm
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: ES-003
+  Phase: 7: Advanced C Plugin Features - AVX-512 & Machine Learning
+  Description: Integrate AVX-512 Search with Elasticsearch Queries
+  Priority: Medium
+  Status: Design Complete
+  Dependencies: None
+
+- Task Code: ML-OV-005
+  Phase: 7: Advanced C Plugin Features - AVX-512 & Machine Learning
+  Description: Execute hardware-specific testing and validation for OpenVINO FP16 Inference on Meteor Lake 165h
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: BE-001
+  Phase: 8: Backend Finalization
+  Description: Implement persistent storage for IndexMetadata (Refined from original BE-001) Replace current in-memory list for `IndexMetadata` with a persistent storage solution.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: BE-002
+  Phase: 8: Backend Finalization
+  Description: Implement persistent storage for Query History
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: BE-006
+  Phase: 8: Backend Finalization
+  Description: Implement robust error handling and user notification for general backend operations (Refined from original BE-006) Enhance error handling for general backend API calls, provide clearer error messages, and establish user notifications where applicable (beyond AEGIS pipeline).
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: BE-007
+  Phase: 8: Backend Finalization
+  Description: Testing and Refinement of Backend APIs and Services (Refined from original BE-007) Conduct thorough testing of all backend endpoints and services (excluding AEGIS pipeline which is tested in [AEGIS-016]).
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-FND-001
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement RBAC checks in UI based on user roles. Ensure UI elements and actions are enabled/disabled based on authenticated user's role and permissions.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-FND-002
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Ensure UI interactions with backend respect E2E encryption and authentication model. Verify client-side handling of tokens, mTLS requirements, and secure API communication.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-FND-003
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Design UI for Index Versioning & Integrity display. Implement UI elements to show index versions, associated hashes, and verification status.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-UX-001
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement multi-step Index Creation Wizard. Develop the full wizard flow as per `GUI_DESIGN.md` and `gui/GUI_MOCKUPS.md`.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-UX-002
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Add Data Preview & Validation display within the wizard. Integrate preview of AEGIS-processed data and its validation summary in the Index Creation Wizard.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-UX-003
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement Breadcrumb Navigation. Add breadcrumbs for easier navigation in nested views.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-UX-004
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Integrate Contextual Help & Tooltips throughout the GUI. Add "?" icons and informative tooltips for complex UI elements.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-UX-005
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement Progressive Disclosure in tables. Use pagination/load-more for tables like Index Management.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-UX-006
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement Loading States & Skeleton Screens. Add visual feedback during data loading and asynchronous operations.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-UX-007
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement Query History & Favorites feature in Query Interface. Allow users to view past queries and save favorites.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-UX-008
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Refactor Query Interface for a Unified Map (draw/results modes). Implement the single map component that switches between geometry drawing and results display.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-DMGT-001
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Display Query Performance Metrics after query execution. Show query time and result count.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-DMGT-002
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement Bulk Actions in Index Management. Add support for batch delete/rebuild of indexes.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-DMGT-003
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement Saved & Sharable Queries. Allow users to save query definitions and share them.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-DMGT-004
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Add Drag-and-Drop File Upload capability. Implement drag-and-drop for relevant file inputs (e.g., query geometry files).
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-001
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement Dashboard View.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-002
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement Index Management View.
+  Priority: Medium
+  Status: To Do
+  Dependencies: GUI-UX-001,GUI-UX-005,GUI-DMGT-002
+
+- Task Code: GUI-003
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement Query Interface View.
+  Priority: Medium
+  Status: To Do
+  Dependencies: GUI-UX-007,GUI-UX-008,GUI-DMGT-001,GUI-DMGT-003
+
+- Task Code: GUI-004
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement Data Visualization View.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-005
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement Settings View.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-006
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement Ingestion Dashboard View.
+  Priority: Medium
+  Status: To Do
+  Dependencies: AEGIS Pipeline
+
+- Task Code: GUI-007
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Refine Enhanced Index Creation Wizard (GUI Part). (Effectively covered by [GUI-UX-001], [GUI-UX-002], this task can be considered merged or a placeholder for final wizard integration)
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-008
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Implement GUI Backend API Interaction. (Remains High Priority, Status: To Do - Ongoing)
+  Priority: Unknown
+  Status: To Do - Ongoing
+  Dependencies: None
+
+- Task Code: GUI-009
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Refine UI feedback mechanisms. (Effectively covered by [GUI-UX-004], [GUI-UX-006], this task can be considered merged or a placeholder for final polish)
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: GUI-010
+  Phase: 9: Comprehensive GUI Implementation
+  Description: Testing and Refinement of GUI components. (Remains High Priority, Status: To Do)
+  Priority: Unknown
+  Status: To Do
+  Dependencies: None
+
+- Task Code: OPT-001
+  Phase: 10: System Optimizations, Security, and Final Touches
+  Description: Implement general hardware optimization plugins
+  Priority: Low
+  Status: To Do
+  Dependencies: None
+
+- Task Code: SEC-001
+  Phase: 10: System Optimizations, Security, and Final Touches
+  Description: Implement C-level security analysis plugins (e.g., hash_separator.so, password_analyzer.so)
+  Priority: Low
+  Status: To Do
+  Dependencies: None
+
+- Task Code: CORE-008
+  Phase: 10: System Optimizations, Security, and Final Touches
+  Description: Implement Threading Model (`threading.c`)
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: DOCS-001
+  Phase: 10: System Optimizations, Security, and Final Touches
+  Description: Write `README.md` and Basic Usage Documentation
+  Priority: Medium (ongoing)
+  Status: In Progress
+  Dependencies: None
+
+- Task Code: TEST-003
+  Phase: 10: System Optimizations, Security, and Final Touches
+  Description: Execute comprehensive system and performance testing
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: CORE-009
+  Phase: 10: System Optimizations, Security, and Final Touches
+  Description: Enhance plugin loader with versioning & dependency-graph resolution.
+  Priority: Medium
+  Status: To Do
+  Dependencies: —
+
+- Task Code: DEPLOY-001
+  Phase: 10: System Optimizations, Security, and Final Touches
+  Description: Dockerfile for SPINDEX worker (C side).
+  Priority: High
+  Status: To Do
+  Dependencies: —
+
+- Task Code: DEPLOY-002
+  Phase: 10: System Optimizations, Security, and Final Touches
+  Description: Docker Swarm stack/compose files (services, networks, scaling).
+  Priority: Medium
+  Status: To Do
+  Dependencies: DEPLOY-001
+
+- Task Code: CORE-008
+  Phase: 10: System Optimizations, Security, and Final Touches
+  Description: Threading model (`threading.c`).
+  Priority: Medium
+  Status: To Do
+  Dependencies: —
+
+- Task Code: OPT-001
+  Phase: 10: System Optimizations, Security, and Final Touches
+  Description: General hardware-optimisation plugins.
+  Priority: Low
+  Status: To Do
+  Dependencies: —
+
+- Task Code: SEC-001
+  Phase: 10: System Optimizations, Security, and Final Touches
+  Description: C-level security-analysis plugins.
+  Priority: Low
+  Status: To Do
+  Dependencies: —
+
+- Task Code: DOCS-001
+  Phase: 10: System Optimizations, Security, and Final Touches
+  Description: README & usage docs (ongoing).
+  Priority: Medium
+  Status: In Progress
+  Dependencies: —
+
+- Task Code: TEST-003
+  Phase: 10: System Optimizations, Security, and Final Touches
+  Description: Comprehensive system & perf testing.
+  Priority: Medium
+  Status: To Do
+  Dependencies: 1-7
+
+- Task Code: DEV-DOC-001
+  Phase: 11: Developer Documentation
+  Description: Document Core Architecture and Design Principles Create a high-level overview of the SPINDEX architecture, including the core engine, plugin system, AEGIS-ECHO pipeline, backend API, and GUI. Document key design principles and decisions.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: DEV-DOC-002
+  Phase: 11: Developer Documentation
+  Description: Document AEGIS-ECHO Data Ingestion Pipeline Detail the pipeline's stages, modules, data flow, configuration options, and how to extend it with new processing or validation modules. Reference `docs/AEGIS_PIPELINE_DESIGN.md` but provide more developer-specific details.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: DEV-DOC-003
+  Phase: 11: Developer Documentation
+  Description: Document Backend API Provide detailed documentation for all backend API endpoints, including request/response schemas, authentication requirements, and usage examples. Leverage FastAPI's auto-generated OpenAPI docs and supplement as needed.
+  Priority: High
+  Status: To Do
+  Dependencies: None
+
+- Task Code: DEV-DOC-004
+  Phase: 11: Developer Documentation
+  Description: Document SPINDEX Core and Plugin Development Explain how to develop new plugins for the SPINDEX core (parsers, preprocessors, indexers, etc.). Detail the plugin interface, build process, and testing best practices.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: DEV-DOC-005
+  Phase: 11: Developer Documentation
+  Description: Document GUI Components and Frontend Development Describe the GUI architecture, key components, state management, and how to interact with the backend API from the frontend. Document the build process for the frontend.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: DEV-DOC-006
+  Phase: 11: Developer Documentation
+  Description: Create Contribution Guidelines Outline the process for contributing to the project, including coding standards, branch management, pull request process, and testing requirements.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: DEV-DOC-007
+  Phase: 11: Developer Documentation
+  Description: Setup and Deployment Guide Provide instructions for setting up a development environment and deploying SPINDEX (including backend, core, and GUI components).
+  Priority: Medium
+  Status: To Do
+  Dependencies: None
+
+- Task Code: DEV-DOC-008
+  Phase: 11: Developer Documentation
+  Description: Review and Publish Developer Documentation Collate all developer documentation into a coherent structure (e.g., a documentation website or a set of markdown files in a `/devdocs` directory). Review for clarity, accuracy, and completeness.
+  Priority: Medium
+  Status: To Do
+  Dependencies: None

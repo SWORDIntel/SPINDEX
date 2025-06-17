@@ -82,46 +82,46 @@ Status: **DONE ✅**
 Status: Pending
 (Based on docs/AEGIS_PIPELINE_DESIGN.md)
 
-1.  **Task: [AEGIS-001] Design and Implement Secure Upload/Reception Endpoint**
+1.  - [x] **Task: [AEGIS-001] Design and Implement Secure Upload/Reception Endpoint**
     *   Description: Establish the API endpoint for secure file uploads, including initial validation (size, MIME type) and robust authentication/authorization.
     *   Priority: High
-    *   Status: DONE ✅
-2.  **Task: [AEGIS-002] Implement Staging Area for raw data**
+    *(Original status: DONE ✅)*
+2.  - [x] **Task: [AEGIS-002] Implement Staging Area for raw data**
     *   Description: Set up a secure, isolated temporary storage location for uploaded raw data before processing.
     *   Priority: High
-    *   Status: DONE ✅
-3.  **Task: [AEGIS-003] Implement Ingestion Task Trigger mechanism**
+    *(Original status: DONE ✅)*
+3.  - [x] **Task: [AEGIS-003] Implement Ingestion Task Trigger mechanism**
     *   Description: Integrate a message queue (e.g., RabbitMQ, Redis) to publish tasks for asynchronous processing upon successful data staging.
     *   Priority: High
-    *   Status: DONE ✅
-4.  **Task: [AEGIS-004] Develop Pipeline Worker Execution framework**
+    *(Original status: DONE ✅)*
+4.  - [x] **Task: [AEGIS-004] Develop Pipeline Worker Execution framework**
     *   Description: Create the Celery worker (or similar) infrastructure capable of subscribing to the task queue and executing a sequence of processing modules.
     *   Priority: High
-    *   Status: DONE ✅
-5.  **Task: [AEGIS-005] Implement Format Conversion & Abstraction module (GDAL/OGR)**
+    *(Original status: DONE ✅)*
+5.  - [x] **Task: [AEGIS-005] Implement Format Conversion & Abstraction module (GDAL/OGR)**
     *   Description: Develop the pipeline module to detect input vector formats and convert them to a standard interchange format like GeoJSON using GDAL/OGR.
     *   Priority: Medium
-    *   Status: DONE ✅
-6.  **Task: [AEGIS-006] Implement CRS Transformation module**
+    *(Original status: DONE ✅)*
+6.  - [x] **Task: [AEGIS-006] Implement CRS Transformation module**
     *   Description: Develop the pipeline module to auto-detect source CRS and re-project geometries to a standard internal CRS (e.g., EPSG:4326).
     *   Priority: Medium
-    *   Status: DONE ✅
-7.  **Task: [AEGIS-007] Implement Geocoding Service Integration module**
+    *(Original status: DONE ✅)*
+7.  - [x] **Task: [AEGIS-007] Implement Geocoding Service Integration module**
     *   Description: Develop the module to identify address fields and integrate with a geocoding service to generate point geometries.
     *   Priority: Medium
-    *   Status: DONE ✅
-8.  **Task: [AEGIS-008] Implement Complex Geometry Handling module**
+    *(Original status: DONE ✅)*
+8.  - [x] **Task: [AEGIS-008] Implement Complex Geometry Handling module**
     *   Description: Develop the module to manage datasets with mixed geometry types based on configurable strategies (split, filter, reject).
     *   Priority: Medium
-    *   Status: DONE ✅
-9.  **Task: [AEGIS-009] Implement Unstructured Text Parsing (NLP/NER) module**
+    *(Original status: DONE ✅)*
+9.  - [x] **Task: [AEGIS-009] Implement Unstructured Text Parsing (NLP/NER) module**
     *   Description: Develop the module to use NER for extracting location names from text, integrating with the geocoding module.
     *   Priority: Medium
-    *   Status: DONE ✅
-10. **Task: [AEGIS-010] Implement Geometric Validation module**
+    *(Original status: DONE ✅)*
+10. - [x] **Task: [AEGIS-010] Implement Geometric Validation module**
     *   Description: Develop the pipeline module to check for and optionally repair invalid geometries (e.g., using Shapely).
     *   Priority: Medium
-    *   Status: DONE ✅
+    *(Original status: DONE ✅)*
 11. **Task: [AEGIS-011] Implement Content-Level Security Scanning module**
     *   Description: Develop the module for security scanning (e.g., XXE prevention, zip bomb detection).
     *   Priority: Medium
@@ -168,23 +168,23 @@ Status: In Progress
 2.  **Task: [ES-003] Integrate AVX-512 Search with Elasticsearch Queries**
     *   Priority: Medium
     *   Status: Design Complete
-3.  **Task: [ML-001] Define Machine Learning Interface (`ml_interface.h`)**
+3.  - [x] **Task: [ML-001] Define Machine Learning Interface (`ml_interface.h`)**
     *   Priority: Medium
-    *   Status: **DONE ✅**
-4.  **Task: [ML-002] Implement ML Classifier Plugin (`ml_classifier.so`)**
+    *(Original status: DONE ✅)*
+4.  - [x] **Task: [ML-002] Implement ML Classifier Plugin (`ml_classifier.so`)**
     *   Priority: Medium
-    *   Status: **DONE ✅**
-5.  **Task: [ML-003] Implement Content Analyzer Plugin (`content_analyzer.so`)**
+    *(Original status: DONE ✅)*
+5.  - [x] **Task: [ML-003] Implement Content Analyzer Plugin (`content_analyzer.so`)**
     *   Priority: Medium
-    *   Status: **DONE ✅**
-6.  **Task: [INGEST-003] Integrate ML Classification into Ingestion Pipeline**
+    *(Original status: DONE ✅)*
+6.  - [x] **Task: [INGEST-003] Integrate ML Classification into Ingestion Pipeline**
     *   Priority: Medium
-    *   Status: **DONE ✅**
-7.  **Task: [BUILD-006] Extend Makefile for AVX & ML Plugins**
+    *(Original status: DONE ✅)*
+7.  - [x] **Task: [BUILD-006] Extend Makefile for AVX & ML Plugins**
     *   Priority: Medium
-    *   Status: **DONE ✅**
+    *(Original status: DONE ✅)*
 *   **Sub-Phase: ML Inference Acceleration with OpenVINO**
-    *   Tasks [ML-OV-001] to [ML-OV-004] (DONE ✅, Medium-High priorities)
+    * - [x] Tasks [ML-OV-001] to [ML-OV-004] (DONE ✅, Medium-High priorities)
     5.  **Task: [ML-OV-005] Execute hardware-specific testing and validation for OpenVINO FP16 Inference on Meteor Lake 165h**
         *   Priority: High
         *   Status: To Do
