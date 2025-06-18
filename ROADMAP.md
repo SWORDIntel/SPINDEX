@@ -80,6 +80,7 @@ Status: **DONE ✅**
 
 **Phase 6: AEGIS-ECHO Data Ingestion Pipeline**
 Status: Pending
+*Note: Each AEGIS module listed below (AEGIS-001 through AEGIS-016) now has a dedicated root-level subfolder (e.g., `aegis_001_secure_upload_endpoint/`, `aegis_013_data_promotion/`) containing its specific README.md, BEST_PRACTICES.md, and is the designated location for other module-specific documentation and artifacts.*
 (Based on docs/AEGIS_PIPELINE_DESIGN.md)
 
 1.  - [x] **Task: [AEGIS-001] Design and Implement Secure Upload/Reception Endpoint**

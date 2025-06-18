@@ -8,8 +8,8 @@
 
 ## 2. Core Components
 
-*   **Secure Upload Endpoint:** The primary entry point for incoming data files. Responsible for initial validation and handoff to the staging area.
-*   **Staging Area:** A temporary storage location (e.g., a dedicated file system path) where uploaded files are stored before being processed by the pipeline.
+*   **Secure Upload Endpoint:** The primary entry point for incoming data files. Responsible for initial validation and handoff to the staging area. For more details, see the `aegis_001_secure_upload_endpoint/` directory.
+*   **Staging Area:** A temporary storage location (e.g., a dedicated file system path) where uploaded files are stored before being processed by the pipeline. Further details and considerations for the staging area can be found in `aegis_002_staging_area/`.
 *   **NATS JetStream:** The core message queuing system.
     *   **Stream:** `AEGIS_JOB_STREAM`. This stream will capture subjects like `aegis.jobs.new`.
     *   **Configuration:**
@@ -20,8 +20,8 @@
 *   **AEGIS Job Producers:** Any component or service that originates a new data processing job. Initially, this is the Secure Upload Endpoint. These producers interact with the PostgreSQL database to create job records and (indirectly via the Transactional Outbox pattern) publish messages to NATS.
 *   **AEGIS Pipeline Workers:** A pool of identical consumer applications that subscribe to the `AEGIS_JOB_STREAM`. These workers fetch jobs from NATS, execute the AEGIS processing modules, and update the job status in the PostgreSQL database.
 *   **PostgreSQL Database (`IngestionJobDB`):** The central metadata store for all ingestion jobs, their status, and related events. It acts as the source of truth for the pipeline.
-*   **AI-Powered Threat Detection Engine:** A specialized service that consumes data streams from NATS to analyze content for potential security threats using machine learning models and threat intelligence. It reports findings and can trigger alerts.
-*   **Data Promotion Module:** A component responsible for moving validated and processed data to a designated trusted storage location and updating its metadata status.
+*   **AI-Powered Threat Detection Engine:** A specialized service that consumes data streams from NATS to analyze content for potential security threats using machine learning models and threat intelligence. It reports findings and can trigger alerts. Detailed documentation for this engine is in `aegis_012_threat_detection_engine/`.
+*   **Data Promotion Module:** A component responsible for moving validated and processed data to a designated trusted storage location and updating its metadata status. See `aegis_013_data_promotion/` for specific documentation on this module.
 
 ## 3. PostgreSQL Schema (`IngestionJobDB`)
 
@@ -88,9 +88,9 @@ Tracks the status of individual processing modules for each job.
 
 *(Placeholder for a high-level diagram illustrating the flow: Upload -> Staging -> DB (Jobs, Outbox) -> Message Relay -> NATS -> Worker / AI Threat Detection Engine -> Validation -> Data Promotion Module -> Trusted Storage & DB Updates / SOC or Alerting System)*
 
-**A. Job Creation (Producer - e.g., Secure Upload Endpoint):**
+**A. Job Creation (Producer - e.g., Secure Upload Endpoint (see `aegis_001_secure_upload_endpoint/`)):**
 
-1.  **File Reception:** An external client uploads a data file. The Secure Upload Endpoint receives it.
+1.  **File Reception:** An external client uploads a data file. The Secure Upload Endpoint (see `aegis_001_secure_upload_endpoint/`) receives it.
 2.  **Staging:** The file is saved to a designated Staging Area on the file system. A unique path is generated.
 3.  **Database Transaction (PostgreSQL):**
     *   Start a new database transaction.
@@ -133,7 +133,7 @@ Tracks the status of individual processing modules for each job.
 
 #### Stage: Content-Level Security Scanning
 
-Before extensive processing, each job's staged file undergoes a content-level security scan. This module is implemented in `backend/security_scanner.py`.
+Before extensive processing, each job's staged file undergoes a content-level security scan. (Module AEGIS-011, details in `aegis_011_content_level_security_scanning/`). This module is implemented in `backend/security_scanner.py`.
 
 **Key Checks Performed:**
 
@@ -154,7 +154,7 @@ Before extensive processing, each job's staged file undergoes a content-level se
 
 This stage is integrated into `pipeline_logic.execute_aegis_pipeline` and runs on the initially staged file. After this stage, the worker proceeds to other defined modules.
 
-4.  **Execute Further Pipeline Modules:** Sequentially (or in parallel if designed for it) execute the configured AEGIS processing modules (e.g., Format Detection, CRS Transformation, NLP, GeoJSON processing, validation).
+4.  **Execute Further Pipeline Modules:** Sequentially (or in parallel if designed for it) execute the configured AEGIS processing modules (e.g., Format Detection, CRS Transformation, NLP, GeoJSON processing, validation). Each of these modules (such as Format Conversion [AEGIS-005], CRS Transformation [AEGIS-006], Geocoding Integration [AEGIS-007], Complex Geometry Handling [AEGIS-008], Unstructured Text Parsing [AEGIS-009], and Geometric Validation [AEGIS-010]) has its own dedicated folder (e.g., `aegis_005_format_conversion_abstraction/`, `aegis_006_crs_transformation/`, etc.) containing specific documentation like README.md and BEST_PRACTICES.md.
     *   For each module:
         *   Update `job_module_status`: `module_name`, `module_status = 'RUNNING'`, `started_at = NOW()`.
         *   Execute the module.
@@ -174,7 +174,7 @@ This stage is integrated into `pipeline_logic.execute_aegis_pipeline` and runs o
 
 **D. AI-Powered Threat Detection Processing:**
 
-1.  **Message Consumption:** The AI-Powered Threat Detection Engine subscribes to relevant subjects on the `AEGIS_JOB_STREAM` (or a dedicated stream if appropriate). This could be all processed data messages or specific types of content identified for advanced threat analysis.
+1.  **Message Consumption:** The AI-Powered Threat Detection Engine (Module AEGIS-012, details in `aegis_012_threat_detection_engine/`) subscribes to relevant subjects on the `AEGIS_JOB_STREAM` (or a dedicated stream if appropriate). This could be all processed data messages or specific types of content identified for advanced threat analysis.
 2.  **Data Analysis:**
     *   Retrieves the data associated with the job message (e.g., from the staged path or an intermediate processed output path).
     *   Applies its suite of AI/ML models, heuristics, and threat intelligence feeds to analyze the data content for sophisticated threats (e.g., malware, advanced persistent threat indicators, complex obfuscated scripts).
@@ -193,7 +193,7 @@ This stage is integrated into `pipeline_logic.execute_aegis_pipeline` and runs o
 
 **E. Data Promotion Module (AEGIS-013):**
 
-This module is triggered after data has successfully passed all preceding processing and validation stages, including security scans and any domain-specific validations.
+Details for this module are in `aegis_013_data_promotion/`. This module is triggered after data has successfully passed all preceding processing and validation stages, including security scans and any domain-specific validations.
 
 1.  **Responsibilities:**
     *   Securely move or copy validated data from its final intermediate processing location (e.g., a path in `intermediate_geojson_path` or `output_geopackage_path` from the `jobs` table) to a designated Trusted Storage area.
