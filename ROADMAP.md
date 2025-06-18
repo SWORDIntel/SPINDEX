@@ -129,11 +129,11 @@ Status: Pending
 12. **Task: [AEGIS-012] Implement Value-Domain & Schema Validation module**
     *   Description: Develop the module to validate data against expected structures, attribute types, and value constraints.
     *   Priority: Medium
-    *   Status: IN PROGRESS 🚧
+    *   Status: DONE ✅
 13. **Task: [AEGIS-013] Implement Data Promotion logic**
     *   Description: Develop the logic to move validated, processed data to a trusted location and update metadata status accordingly.
     *   Priority: High
-    *   Status: To Do
+    *   Status: IN PROGRESS 🚧
 14. **Task: [AEGIS-014] Implement Data Quarantine (DLQ) logic**
     *   Description: Develop the logic to isolate data that fails processing/validation, update metadata, and log errors.
     *   Priority: High
