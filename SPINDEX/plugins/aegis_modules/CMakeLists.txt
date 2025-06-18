@@ -1,32 +1,21 @@
-#file(GLOB AEGIS_MODULE_SOURCES "*.c" "*.h") # Include .h for IDEs, won't be compiled directly
-# Filter out .h files from sources to be compiled
-#list(FILTER AEGIS_MODULE_SOURCES EXCLUDE REGEX "\\.h$")
+# SPINDEX/plugins/aegis_modules/CMakeLists.txt
+cmake_minimum_required(VERSION 3.15) # Or inherit from parent
 
-set(AEGIS_MODULE_SOURCES
-    #complex_geometry_handler.c
-    #geojson_processor.c
-    #geometric_validator.c
-    nlp_ner_parser.c
-    )
+file(GLOB AEGIS_SOURCES "*.c")
+# Exclude any test files if they exist in this directory in the future
+# list(FILTER AEGIS_SOURCES EXCLUDE REGEX "test_.*\\.c")
 
-# Create a static library for AEGIS modules
-add_library(aegis_modules STATIC ${AEGIS_MODULE_SOURCES})
+add_library(spindex_aegis STATIC ${AEGIS_SOURCES})
 
-target_include_directories(aegis_modules PUBLIC
-    ../../include # To access common headers like data_types.h, config_manager.h
-    ${CMAKE_CURRENT_SOURCE_DIR} # For aegis_modules specific headers
+target_include_directories(spindex_aegis PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR} # For headers within aegis_modules like complex_geometry_handler.h
+    ${CMAKE_SOURCE_DIR}/include # Access to general include files like data_types.h
 )
 
-# If AEGIS modules directly use Jansson or GEOS, link them here.
-# Example:
-# target_link_libraries(aegis_modules PUBLIC Jansson::Jansson)
-# target_link_libraries(aegis_modules PUBLIC GEOS::GEOS)
-# From Makefile, it seems they don't directly link these, but rely on main app linking.
-# For a static library, PUBLIC/INTERFACE link dependencies are usually not needed
-# if the library itself doesn't use them directly in its *public headers*.
-# If aegis_modules .c files use jansson, then it might need:
-# target_link_libraries(aegis_modules PRIVATE Jansson::Jansson)
-# However, typically these are passed down from the main executable.
-# The current setup, where spindex_app links Jansson, GEOS, etc., should be sufficient
-# as long as aegis_modules doesn't expose their types in its headers.
-# Given the C structure, this is likely fine.
+# Assuming Jansson and GEOS are found by the top-level CMakeLists.txt
+target_link_libraries(spindex_aegis PUBLIC
+    Jansson::Jansson
+    GEOS::geos_c # Placeholder, confirm actual target
+)
+# Add other dependencies if AEGIS modules require them (e.g. CURL, Threads)
+# Based on Makefile, these modules don't seem to directly require curl or pthreads beyond what core might provide.
