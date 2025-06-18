@@ -52,15 +52,13 @@ void geometric_validator_shutdown() {
     }
 }
 
-int load_geometric_validator_config(const Config* global_config, GeometricValidatorConfig* val_config) {
+int load_geometric_validator_config(const SpindexConfig* global_config, GeometricValidatorConfig* val_config) {
     if (!global_config || !val_config) {
         LOG_ERROR("GEO_VALIDATOR: Null config provided.");
         return -1;
     }
-    const char* enabled_str = get_config_value(global_config, "GEOMETRIC_VALIDATION_ENABLED");
-    val_config->enabled = (!enabled_str || strcmp(enabled_str, "true") == 0 || strcmp(enabled_str, "1") == 0);
-    const char* repair_str = get_config_value(global_config, "GEOMETRIC_VALIDATION_ENABLE_REPAIR");
-    val_config->enable_repair = (repair_str && (strcmp(repair_str, "true") == 0 || strcmp(repair_str, "1") == 0));
+    val_config->enabled = global_config->geometric_validator_enabled;
+    val_config->enable_repair = global_config->geometric_validator_enable_repair;
     LOG_DEBUG("Geometric Validator Config: Enabled=%d, EnableRepair=%d", val_config->enabled, val_config->enable_repair);
     return 0;
 }

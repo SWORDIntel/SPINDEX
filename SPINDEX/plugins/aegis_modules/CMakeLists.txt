@@ -3,9 +3,9 @@
 #list(FILTER AEGIS_MODULE_SOURCES EXCLUDE REGEX "\\.h$")
 
 set(AEGIS_MODULE_SOURCES
-    #complex_geometry_handler.c
-    #geojson_processor.c
-    #geometric_validator.c
+    complex_geometry_handler.c
+    geojson_processor.c
+    geometric_validator.c
     nlp_ner_parser.c
     )
 

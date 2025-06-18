@@ -2,36 +2,37 @@
 #include "utils.h" // For logging or other utilities
 #include <stdio.h>
 #include <string.h>
+#include <strings.h> // For strcasecmp
 #include <jansson.h> // Using Jansson as an example JSON library
 
 // Placeholder for actual implementation of load_complex_geometry_handler_config
-int load_complex_geometry_handler_config(const Config* config, ComplexGeometryHandlerConfig* handler_config) {
+int load_complex_geometry_handler_config(const SpindexConfig* config, ComplexGeometryHandlerConfig* handler_config) {
     if (!config || !handler_config) {
-        // log_error("Null config provided to load_complex_geometry_handler_config");
+        LOG_ERROR("NLP_NER: Null config provided to load_complex_geometry_handler_config"); // Corrected log domain
         return -1;
     }
-    // Example: Read strategy from global config
-    // For now, hardcoding for structure, actual reading from config->aegis_complex_geometry_strategy needed
-    const char* strategy_str = get_config_value(config, "AEGIS_COMPLEX_GEOMETRY_STRATEGY");
 
-    if (strategy_str == NULL || strcmp(strategy_str, "split") == 0) {
+    // Use the strategy string from SpindexConfig
+    if (strcasecmp(config->complex_geometry_strategy, "split") == 0) {
         handler_config->strategy = STRATEGY_SPLIT;
-        // log_info("Complex geometry strategy: SPLIT");
-        handler_config->filter_type[0] = '\0'; // No filter type for split
-    } else if (strcmp(strategy_str, "reject") == 0) {
-        handler_config->strategy = STRATEGY_REJECT;
-        // log_info("Complex geometry strategy: REJECT");
-        handler_config->filter_type[0] = '\0'; // No filter type for reject
-    } else if (strncmp(strategy_str, "filter_", 7) == 0) {
+    } else if (strcasecmp(config->complex_geometry_strategy, "filter") == 0) {
         handler_config->strategy = STRATEGY_FILTER;
-        // log_info("Complex geometry strategy: FILTER (%s)", strategy_str + 7);
-        strncpy(handler_config->filter_type, strategy_str + 7, MAX_TYPE_NAME_LEN_LOCAL - 1);
-        handler_config->filter_type[MAX_TYPE_NAME_LEN_LOCAL - 1] = '\0';
-        // log_info("Filter type set to: %s", handler_config->filter_type);
+    } else if (strcasecmp(config->complex_geometry_strategy, "reject") == 0) {
+        handler_config->strategy = STRATEGY_REJECT;
     } else {
-        // log_warn("Unknown or missing AEGIS_COMPLEX_GEOMETRY_STRATEGY: '%s'. Defaulting to SPLIT.", strategy_str ? strategy_str : "NULL");
-        handler_config->strategy = STRATEGY_SPLIT; // Default strategy
-        handler_config->filter_type[0] = '\0';
+        handler_config->strategy = STRATEGY_REJECT; // Default to REJECT if string is unrecognized
+        LOG_WARN("AEGIS_GEOM: Unrecognized complex_geometry_strategy: '%s'. Defaulting to REJECT.", config->complex_geometry_strategy);
+    }
+    // LOG_INFO("AEGIS_GEOM: Complex geometry strategy set to: %d", handler_config->strategy);
+
+    // Use the filter type string from SpindexConfig
+    // This is only relevant if strategy is STRATEGY_FILTER
+    if (handler_config->strategy == STRATEGY_FILTER) {
+        strncpy(handler_config->filter_type, config->complex_geometry_filter_type, MAX_TYPE_NAME_LEN_LOCAL - 1);
+        handler_config->filter_type[MAX_TYPE_NAME_LEN_LOCAL - 1] = '\0';
+        // LOG_INFO("AEGIS_GEOM: Complex geometry filter type set to: %s", handler_config->filter_type);
+    } else {
+        handler_config->filter_type[0] = '\0'; // Not applicable for other strategies
     }
     return 0;
 }
