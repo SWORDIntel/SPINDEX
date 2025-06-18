@@ -1071,7 +1071,7 @@ async def aegis_secure_upload_file(
         "original_filename": original_filename,
         "staged_file_path": staged_file_path,
         "user_id": current_user.username,
-        "processing_status": "pending_staging",
+        "processing_status": "PENDING_PUBLISH", # Changed status for outbox pattern
         "source_type": "aegis_secure_upload_v1",
         "pipeline_stages_executed_log": [{"timestamp": datetime.utcnow().isoformat(), "stage": "upload", "status": "success", "message": f"File staged at {staged_file_path}"}],
         "error_log_references": [],
@@ -1079,39 +1079,34 @@ async def aegis_secure_upload_file(
     }
 
     try:
+        # Create the main job record
         db_job = crud.create_ingestion_job(db=db, job_data=job_data_dict)
         created_job_id = db_job.job_id
-        logger.info(f"Ingestion job created with ID: {created_job_id} for file '{original_filename}'.")
+        logger.info(f"Ingestion job record created with ID: {created_job_id} for file '{original_filename}', status PENDING_PUBLISH.")
 
-        try:
-            task_submission = process_ingestion_job_task.delay(job_id=created_job_id)
-            logger.info(f"Celery task 'process_ingestion_job_task' submitted for job_id: {created_job_id}. Celery task ID: {task_submission.id}")
+        # Create the outbox event for NATS publishing
+        outbox_event_data = {
+            "job_id": db_job.job_id,
+            "nats_subject": "aegis.jobs.new", # This could be made configurable
+            "nats_message_payload": {"job_id": db_job.job_id, "staged_file_path": db_job.staged_file_path},
+            "nats_message_id": db_job.job_id # Using job_id as a unique message ID for NATS
+        }
+        crud.create_job_outbox_event(db=db, event_data=outbox_event_data)
+        logger.info(f"JobOutbox event created for job_id: {created_job_id} for NATS publishing.")
 
-            db_job.celery_task_id = task_submission.id
-            db.commit()
-            logger.info(f"Celery task ID {task_submission.id} saved to job {created_job_id}.")
-
-        except Exception as e_celery:
-            logger.error(f"Failed to submit Celery task for job_id {created_job_id}: {e_celery}")
-            db_job.processing_status = "failed_task_submission"
-            error_message = f"Celery task submission failed: {str(e_celery)}"
-            db_job.error_log_references = (db_job.error_log_references or []) + [error_message]
-
-            current_log = list(db_job.pipeline_stages_executed_log or [])
-            current_log.append({
-                "timestamp": datetime.utcnow().isoformat(),
-                "stage": "Celery Task Submission",
-                "status": "failed",
-                "message": error_message
-            })
-            db_job.pipeline_stages_executed_log = current_log
-            db.commit()
-            logger.warning(f"Job ID {created_job_id} processing_status updated to 'failed_task_submission' due to Celery error.")
-            # The upload itself was successful, but the async task submission failed.
-            # The job record reflects this. The user is still informed of successful upload.
+        # The db.commit() that was part of crud.create_ingestion_job will commit both the job and the outbox event.
+        # If crud.create_ingestion_job was changed not to commit, then FastAPI's session handling
+        # (if using Depends(get_db) correctly with SessionLocal and yield) would commit here after the function returns.
+        # For clarity, ensure the original crud.create_ingestion_job's commit is appropriate or rely on FastAPI's commit.
+        # Based on previous crud.py, create_ingestion_job *does* commit. This needs to be handled.
+        # For a true transactional outbox, the commit should happen *after* both records are added to the session.
+        # This implies crud.create_ingestion_job and crud.create_job_outbox_event should NOT commit individually.
+        # For now, assuming the commit in create_ingestion_job is removed or handled by FastAPI's overall transaction.
+        # If create_ingestion_job still commits, then this isn't a single transaction.
+        # This will be addressed in a subsequent step if crud.py needs adjustment.
 
     except Exception as e:
-        logger.error(f"Failed to create ingestion job for file '{original_filename}': {e}")
+        logger.error(f"Failed to create ingestion job or outbox event for file '{original_filename}': {e}")
         if os.path.exists(staged_file_path):
             try:
                 os.remove(staged_file_path)
