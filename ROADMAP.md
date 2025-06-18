@@ -154,7 +154,7 @@ Status: Pending
 ### Completed (from v1.9)
 
 ### New & Modified Work
-|  16  |  **AEGIS‑ARC‑001**  |  **Architect message‑queue‑based ingestion (decoupled producer/worker, PostgreSQL metadata).**  |  High      |  To Do   |  —              |
+|  16  |  **AEGIS‑ARC‑001**  |  **Architect message‑queue‑based ingestion (decoupled producer/worker, PostgreSQL metadata). See `docs/AEGIS_MQ_PIPELINE_ARCHITECTURE.md`.**  |  High      |  Design Complete   |  —              |
 |  17  |  **AEGIS‑003‑R1**   |  **Refactor ingestion trigger to *publish* job messages to MQ.**                                |  High      |  To Do   |  AEGIS‑ARC‑001  |
 |  18  |  **AEGIS‑004‑R1**   |  **Refactor pipeline worker to *consume* jobs from MQ, run stateless chain.**                   |  High      |  To Do   |  AEGIS‑ARC‑001  |
 
