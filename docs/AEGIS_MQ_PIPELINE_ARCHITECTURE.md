@@ -20,6 +20,7 @@
 *   **AEGIS Job Producers:** Any component or service that originates a new data processing job. Initially, this is the Secure Upload Endpoint. These producers interact with the PostgreSQL database to create job records and (indirectly via the Transactional Outbox pattern) publish messages to NATS.
 *   **AEGIS Pipeline Workers:** A pool of identical consumer applications that subscribe to the `AEGIS_JOB_STREAM`. These workers fetch jobs from NATS, execute the AEGIS processing modules, and update the job status in the PostgreSQL database.
 *   **PostgreSQL Database (`IngestionJobDB`):** The central metadata store for all ingestion jobs, their status, and related events. It acts as the source of truth for the pipeline.
+*   **AI-Powered Threat Detection Engine:** A specialized service that consumes data streams from NATS to analyze content for potential security threats using machine learning models and threat intelligence. It reports findings and can trigger alerts.
 
 ## 3. PostgreSQL Schema (`IngestionJobDB`)
 
@@ -84,7 +85,7 @@ Tracks the status of individual processing modules for each job.
 
 ## 4. Workflow
 
-*(Placeholder for a high-level diagram illustrating the flow: Upload -> Staging -> DB (Jobs, Outbox) -> Message Relay -> NATS -> Worker -> DB Updates)*
+*(Placeholder for a high-level diagram illustrating the flow: Upload -> Staging -> DB (Jobs, Outbox) -> Message Relay -> NATS -> Worker / AI Threat Detection Engine -> DB Updates / SOC or Alerting System)*
 
 **A. Job Creation (Producer - e.g., Secure Upload Endpoint):**
 
@@ -169,6 +170,25 @@ This stage is integrated into `pipeline_logic.execute_aegis_pipeline` and runs o
 6.  **Acknowledge Message to NATS:**
     *   If processing was successful or reached a definitive terminal state (e.g., module failure handled, quarantined): Send an ACK to NATS JetStream to confirm the message has been fully processed and should not be redelivered.
     *   If a transient error occurred where a retry might succeed (e.g., temporary network issue accessing an external resource): Send a NAK (Negative Acknowledgement) to NATS, or simply don't ACK and let the message visibility timeout expire, allowing NATS to redeliver it to another worker (or the same one after a delay).
+
+**D. AI-Powered Threat Detection Processing:**
+
+1.  **Message Consumption:** The AI-Powered Threat Detection Engine subscribes to relevant subjects on the `AEGIS_JOB_STREAM` (or a dedicated stream if appropriate). This could be all processed data messages or specific types of content identified for advanced threat analysis.
+2.  **Data Analysis:**
+    *   Retrieves the data associated with the job message (e.g., from the staged path or an intermediate processed output path).
+    *   Applies its suite of AI/ML models, heuristics, and threat intelligence feeds to analyze the data content for sophisticated threats (e.g., malware, advanced persistent threat indicators, complex obfuscated scripts).
+    *   Data is handled securely, potentially in an isolated environment depending on the nature of the analysis and the sensitivity of the models.
+3.  **Reporting and Alerting:**
+    *   **Database Update:** May update the `jobs` table with a threat score or specific flags. It can also log its activity and findings in the `job_module_status` table (e.g., `module_name = 'AI_Threat_Detector'`, `status = 'COMPLETED_ANALYSIS_CLEAN'` or `COMPLETED_ANALYSIS_THREAT_DETECTED'`, `status_message = 'Threat signature XYZ found'`).
+    *   **NATS Alert Publication:** If a credible threat is detected, it publishes a structured alert message to a dedicated NATS subject (e.g., `aegis.alerts.threat.detected`). This message would contain `job_id`, threat type, severity, confidence score, and evidence.
+    *   **External Alerting (Conceptual):** The NATS alert messages can then be consumed by a separate component responsible for forwarding alerts to a Security Operations Center (SOC), an Incident Response System, or designated security personnel. This maintains decoupling.
+4.  **Message Acknowledgement:** ACKs the NATS message once its analysis and reporting/alerting actions are complete for that job. If it encounters a recoverable error, it may NAK the message for retry.
+
+**Security Considerations for AI Threat Detection Engine:**
+*   **Model Security:** ML models and threat intelligence data must be protected from unauthorized access or tampering.
+*   **Data Isolation:** Depending on the analysis, consider processing data in sandboxed or isolated environments to prevent any potential "escape" of malicious content if it were to be inadvertently activated.
+*   **Secure Communication:** All communication (NATS, database, external alert systems) must be over encrypted channels.
+*   **Principle of Least Privilege:** The engine should have only the necessary permissions to access data and publish alerts.
 
 ## 5. Error Handling, Retries, and Dead Letter Queues (DLQ)
 
