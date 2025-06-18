@@ -128,7 +128,31 @@ Tracks the status of individual processing modules for each job.
     *   If the `job_status` is already `PROCESSING`, `COMPLETED`, `VALIDATION_FAILED`, `MODULE_FAILED`, or `QUARANTINED`, it might be a redelivered message for a job already handled or in progress by another worker. The worker should carefully decide whether to ACK the message immediately or log a potential issue. (NATS duplicate detection should minimize this, but DB check is an extra safeguard).
 3.  **Update Job Status (DB):**
     *   Set `jobs.job_status = 'PROCESSING'` and `jobs.processing_started_at = NOW()`.
-4.  **Execute Pipeline Modules:** Sequentially (or in parallel if designed for it) execute the configured AEGIS processing modules (e.g., NLP, GeoJSON processing, validation).
+
+#### Stage: Content-Level Security Scanning
+
+Before extensive processing, each job's staged file undergoes a content-level security scan. This module is implemented in `backend/security_scanner.py`.
+
+**Key Checks Performed:**
+
+*   **File Type Validation (Magic Numbers):** Verifies file signatures (e.g., for ZIP, XML) against expectations from filename/MIME type.
+*   **Zip Bomb Detection:** If the input is a ZIP archive, its metadata is analyzed for common zip bomb characteristics:
+    *   Total uncompressed size of all members.
+    *   Total number of files within the archive.
+    *   Compression ratio of individual files.
+    *   Overall archive compression ratio.
+    These checks use configurable thresholds (sourced from environment variables like `SCANNER_MAX_TOTAL_UNCOMPRESSED_SIZE`, etc.) to identify potential threats.
+*   **XXE (XML External Entity) Prevention:** For files identified as XML-based (e.g., KML, GML), an `lxml` parser configured with `resolve_entities=False` and `no_network=True` is used. This ensures that any external entities are not resolved, preventing XXE vulnerabilities during this parsing step.
+
+**Outcomes:**
+
+*   **Threat Detected:** If a significant threat (like a potential zip bomb) is detected, or a critical parsing issue occurs that suggests a security risk, the job's status is set to `FAILED_SECURITY_SCAN`. Details are logged in the `validation_summary` (and potentially `job_module_status`), and pipeline processing for the job is halted.
+*   **Scanner Error:** If the scanner itself encounters an internal processing error, the job's status is set to `ERROR_SECURITY_SCAN`, and processing is halted.
+*   **Success:** If no threats are detected and the scans complete successfully, the pipeline proceeds to subsequent stages. A report from the scan is added to the `validation_summary`.
+
+This stage is integrated into `pipeline_logic.execute_aegis_pipeline` and runs on the initially staged file. After this stage, the worker proceeds to other defined modules.
+
+4.  **Execute Further Pipeline Modules:** Sequentially (or in parallel if designed for it) execute the configured AEGIS processing modules (e.g., Format Detection, CRS Transformation, NLP, GeoJSON processing, validation).
     *   For each module:
         *   Update `job_module_status`: `module_name`, `module_status = 'RUNNING'`, `started_at = NOW()`.
         *   Execute the module.

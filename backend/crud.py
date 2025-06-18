@@ -151,7 +151,6 @@ def update_outbox_event_status(db: Session, event_id: int, new_status: str, publ
         return db_event
     return None
 
-
 def get_job_status(db: Session, job_id: str) -> Optional[str]:
     """Fetches the current processing_status of an ingestion job."""
     job = db.query(models.IngestionJobDB.processing_status)\
@@ -160,6 +159,5 @@ def get_job_status(db: Session, job_id: str) -> Optional[str]:
     if job:
         return job.processing_status
     return None
-
 
 # Add other CRUD functions as needed for other models (IndexMetadataDB, QueryHistoryDB) later.

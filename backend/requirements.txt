@@ -13,3 +13,4 @@ alembic>=1.7 # Added for database migrations
 psycopg2-binary>=2.9 # For PostgreSQL connection
 nats-py>=2.6.0 # For NATS message queue communication
 spacy>=3.0.0,<4.0.0 # For NLP/NER
+lxml>=4.9.0 # For XML parsing and XXE protection

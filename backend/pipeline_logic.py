@@ -11,6 +11,7 @@ from typing import List, Dict, Any, Optional
 
 from sqlalchemy.orm import Session
 from backend.models import IngestionJobDB
+from backend.security_scanner import scan_file # For security scanning
 
 # --- Data Processing & Scientific Computing Imports ---
 from osgeo import gdal, ogr, osr # type: ignore
@@ -25,6 +26,12 @@ from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceErro
 PROCESSED_AREA_PATH = os.getenv("PROCESSED_AREA_PATH", "processed_area") # Make configurable like others
 TARGET_CRS_EPSG = 4326
 NOMINATIM_USER_AGENT = "spindex-aegis-pipeline/0.1 (developer.contact@example.org)" # Consider making this part of a config object
+
+# Security Scanner Configuration
+SCANNER_MAX_TOTAL_UNCOMPRESSED_SIZE = int(os.getenv("SCANNER_MAX_TOTAL_UNCOMPRESSED_SIZE", str(1 * 1024 * 1024 * 1024))) # 1 GB
+SCANNER_MAX_FILE_COUNT_IN_ZIP = int(os.getenv("SCANNER_MAX_FILE_COUNT_IN_ZIP", "10000"))
+SCANNER_MAX_COMPRESSION_RATIO_SINGLE_FILE = float(os.getenv("SCANNER_MAX_COMPRESSION_RATIO_SINGLE_FILE", "200.0"))
+SCANNER_MAX_COMPRESSION_RATIO_TOTAL = float(os.getenv("SCANNER_MAX_COMPRESSION_RATIO_TOTAL", "100.0"))
 GEOCODING_ADDRESS_FIELDS: List[str] = [
     "address", "Address", "ADDRESS",
     "location", "Location", "LOCATION",
@@ -214,13 +221,81 @@ def execute_aegis_pipeline(job_id: str, db: Session, logger_instance: logging.Lo
         logger_instance.error(f"Job ID {job_id} not found in the database for pipeline execution.")
         return False # Indicates failure or job not found
 
+    current_log = list(job.pipeline_stages_executed_log or [])
+
+    # --- Security Scan Stage ---
+    logger_instance.info(f"Starting security scan for job {job_id}, file: {job.staged_file_path}")
+    module_start_time = datetime.utcnow()
+    current_log.append({
+        "timestamp": module_start_time.isoformat(),
+        "stage": "SecurityScan",
+        "status": "started",
+        "message": f"Initiated security scan for staged file: {job.staged_file_path}"
+    })
+    job.pipeline_stages_executed_log = current_log
+    # db.commit() # Optional: commit start of stage
+
+    scan_config = {
+        "max_total_uncompressed_size": SCANNER_MAX_TOTAL_UNCOMPRESSED_SIZE,
+        "max_file_count_in_zip": SCANNER_MAX_FILE_COUNT_IN_ZIP,
+        "max_compression_ratio_single_file": SCANNER_MAX_COMPRESSION_RATIO_SINGLE_FILE,
+        "max_compression_ratio_total": SCANNER_MAX_COMPRESSION_RATIO_TOTAL
+    }
+    scan_results = scan_file(
+        file_path=job.staged_file_path, # type: ignore
+        original_filename=job.original_filename, # type: ignore
+        content_type=None, # TODO: Pass content_type if available on job model
+        config=scan_config
+    )
+
+    scan_stage_log_message = f"Security scan completed. Status: {scan_results['scan_status']}."
+    scan_stage_log_status = "success"
+
+    if scan_results["scan_status"] == "failure_threat_detected":
+        logger_instance.error(f"Security threats detected for job {job_id}: {scan_results['threats_found']}")
+        job.processing_status = "FAILED_SECURITY_SCAN"
+        job.validation_summary = {**(job.validation_summary or {}), "security_scan": scan_results}
+        scan_stage_log_status = "failed_threat"
+        scan_stage_log_message += f" Threats: {scan_results['threats_found']}"
+        current_log.append({
+            "timestamp": datetime.utcnow().isoformat(), "stage": "SecurityScan", "status": scan_stage_log_status,
+            "message": scan_stage_log_message, "details": scan_results
+        })
+        job.pipeline_stages_executed_log = current_log
+        db.commit()
+        return False # Stop pipeline
+
+    elif scan_results["scan_status"] == "failure_processing_error":
+        logger_instance.error(f"Error during security scan for job {job_id}: {scan_results['errors']}")
+        job.processing_status = "ERROR_SECURITY_SCAN"
+        job.validation_summary = {**(job.validation_summary or {}), "security_scan": scan_results}
+        scan_stage_log_status = "failed_internal_error"
+        scan_stage_log_message += f" Errors: {scan_results['errors']}"
+        current_log.append({
+            "timestamp": datetime.utcnow().isoformat(), "stage": "SecurityScan", "status": scan_stage_log_status,
+            "message": scan_stage_log_message, "details": scan_results
+        })
+        job.pipeline_stages_executed_log = current_log
+        db.commit()
+        return False # Stop pipeline
+
+    logger_instance.info(f"Security scan successful for job {job_id}.")
+    job.validation_summary = {**(job.validation_summary or {}), "security_scan_report": scan_results}
+    current_log.append({
+        "timestamp": datetime.utcnow().isoformat(), "stage": "SecurityScan", "status": scan_stage_log_status,
+        "message": scan_stage_log_message, "details": scan_results
+    })
+    job.pipeline_stages_executed_log = current_log
+    # db.commit() # Commit this stage's success, or let it be part of a larger transaction
+    # --- End of Security Scan Stage ---
+
     # Stage: Format Detection
     logger_instance.info(f"Starting format detection for job {job_id}, file: {job.staged_file_path}")
-    job.processing_status = "processing_format_detection"
-    current_log = list(job.pipeline_stages_executed_log or [])
+    job.processing_status = "processing_format_detection" # Set status for the next stage
+    # current_log is already initialized from above
     current_log.append({"timestamp": datetime.utcnow().isoformat(), "stage": "Format Detection", "status": "started", "message": f"Initiated format detection for staged file: {job.staged_file_path}"})
     job.pipeline_stages_executed_log = current_log
-    db.commit()
+    db.commit() # Commit status update before starting potentially long operation
 
     detected_driver_name = None
     try:
