@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import asc # Add asc for ordering
 from backend import models, database # Import SQLAlchemy model and Pydantic schema
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -42,8 +43,8 @@ def create_ingestion_job(db: Session, job_data: Dict[str, Any]) -> models.Ingest
     intermediate_geojson_path=job_data.get('intermediate_geojson_path', None)
     )
     db.add(db_job)
-    db.commit()
-    db.refresh(db_job)
+    # db.commit() # REMOVED: Commit will be handled by the calling endpoint logic
+    # db.refresh(db_job) # REMOVED: Refresh will be handled by the calling endpoint logic
     return db_job
 
 def update_ingestion_job_fields(db: Session, job_id: str, fields_to_update: Dict[str, Any]) -> Optional[models.IngestionJobDB]:
@@ -111,5 +112,43 @@ def remove_ingestion_job(db: Session, job_id: str) -> bool:
         db.commit()
         return True
     return False
+
+def create_job_outbox_event(db: Session, event_data: Dict[str, Any]) -> models.JobOutbox:
+    db_event = models.JobOutbox(
+        job_id=event_data.get("job_id"),
+        nats_subject=event_data.get("nats_subject"),
+        nats_message_payload=event_data.get("nats_message_payload"),
+        nats_message_id=event_data.get("nats_message_id"),
+        # published_status defaults to 'UNPUBLISHED' in the model
+        # created_at defaults to datetime.utcnow in the model
+    )
+    db.add(db_event)
+    # The commit will be handled by the calling function or FastAPI's session management
+    # to ensure it's part of the same transaction as other DB operations.
+    # db.commit() # Do not commit here
+    # db.refresh(db_event) # Refresh will also be handled after the commit
+    return db_event
+
+def get_unpublished_outbox_events(db: Session, limit: int = 100) -> List[models.JobOutbox]:
+    """Fetches a list of unpublished outbox events, oldest first."""
+    return db.query(models.JobOutbox)\
+             .filter(models.JobOutbox.published_status == 'UNPUBLISHED')\
+             .order_by(asc(models.JobOutbox.created_at))\
+             .limit(limit)\
+             .all()
+
+def update_outbox_event_status(db: Session, event_id: int, new_status: str, published_at: Optional[datetime] = None) -> Optional[models.JobOutbox]:
+    """Updates the status and published_at timestamp of an outbox event."""
+    db_event = db.query(models.JobOutbox).filter(models.JobOutbox.event_id == event_id).first()
+    if db_event:
+        db_event.published_status = new_status
+        if published_at:
+            db_event.published_at = published_at
+        # The commit will be handled by the calling function (message_relay.py)
+        # after processing a batch of events.
+        # db.commit() # No commit here
+        # db.refresh(db_event) # No refresh here
+        return db_event
+    return None
 
 # Add other CRUD functions as needed for other models (IndexMetadataDB, QueryHistoryDB) later.

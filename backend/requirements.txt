@@ -10,4 +10,6 @@ requests>=2.25 # For geopy/Nominatim and potentially other HTTP requests
 geopy>=2.2 # For geocoding services like Nominatim
 SQLAlchemy>=1.4,<2.1 # Added for database ORM
 alembic>=1.7 # Added for database migrations
+psycopg2-binary>=2.9 # For PostgreSQL connection
+nats-py>=2.6.0 # For NATS message queue communication
 spacy>=3.0.0,<4.0.0 # For NLP/NER
