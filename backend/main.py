@@ -50,6 +50,7 @@ from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceErro
 STAGING_AREA_PATH = "staging_area"
 PROCESSED_AREA_PATH = "processed_area"
 TARGET_CRS_EPSG = 4326
+NATS_JOB_SUBJECT = os.getenv("NATS_JOB_SUBJECT", "aegis.jobs.new")
 DEFAULT_NER_TEXT_PROPERTY_FIELDS: List[str] = [
     "description", "notes", "summary", "title", "text",
     "comments", "abstract", "message", "content", "detail"
@@ -1087,12 +1088,12 @@ async def aegis_secure_upload_file(
         # Create the outbox event for NATS publishing
         outbox_event_data = {
             "job_id": db_job.job_id,
-            "nats_subject": "aegis.jobs.new", # This could be made configurable
+            "nats_subject": NATS_JOB_SUBJECT, # Use the configured subject
             "nats_message_payload": {"job_id": db_job.job_id, "staged_file_path": db_job.staged_file_path},
             "nats_message_id": db_job.job_id # Using job_id as a unique message ID for NATS
         }
         crud.create_job_outbox_event(db=db, event_data=outbox_event_data)
-        logger.info(f"JobOutbox event created for job_id: {created_job_id} for NATS publishing.")
+        logger.info(f"JobOutbox event created for job_id: {created_job_id} for NATS publishing to subject '{NATS_JOB_SUBJECT}'.")
 
         # The db.commit() that was part of crud.create_ingestion_job will commit both the job and the outbox event.
         # If crud.create_ingestion_job was changed not to commit, then FastAPI's session handling
