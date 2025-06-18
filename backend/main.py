@@ -32,7 +32,7 @@ from backend.models import IngestionJobDB # Keep for Celery task type hint if ne
 # import zipfile # Keep if used for initial upload validation, otherwise move
 # import copy # Moved to pipeline_logic
 
-# --- External Service & Task Queue Imports ---
+
 from celery import Celery, shared_task # Keep for Celery app and task definition
 from celery.result import AsyncResult # Keep if task status check endpoint uses it
 # import requests # Keep if used outside pipeline logic
@@ -50,6 +50,34 @@ STAGING_AREA_PATH = "staging_area" # Still needed for upload endpoint
 NATS_JOB_SUBJECT = os.getenv("NATS_JOB_SUBJECT", "aegis.jobs.new") # Used in upload endpoint
 # DEFAULT_NER_TEXT_PROPERTY_FIELDS, EXPECTED_INPUT_FORMATS moved if only for pipeline
 MAX_FILE_SIZE = 100 * 1024 * 1024
+=======
+from celery import Celery, shared_task
+from celery.result import AsyncResult
+import requests # type: ignore
+from geopy.geocoders import Nominatim # type: ignore
+from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError # type: ignore
+
+
+# --- Application Setup & Pydantic Models (from 'jules_wip' branch) ---
+
+# --- Constants ---
+# Note: For production, ensure that the STAGING_AREA_PATH directory
+# has appropriate OS-level permissions to restrict access and protect
+# sensitive uploaded data. It should be writable by the application user
+# but not unnecessarily exposed.
+STAGING_AREA_PATH = "staging_area"
+PROCESSED_AREA_PATH = "processed_area"
+TARGET_CRS_EPSG = 4326
+NATS_JOB_SUBJECT = os.getenv("NATS_JOB_SUBJECT", "aegis.jobs.new")
+DEFAULT_NER_TEXT_PROPERTY_FIELDS: List[str] = [
+    "description", "notes", "summary", "title", "text",
+    "comments", "abstract", "message", "content", "detail"
+]
+EXPECTED_INPUT_FORMATS = [
+    "ESRI Shapefile", "GeoJSON", "KML", "GML", "GPKG", "FlatGeobuf"
+]
+MAX_FILE_SIZE = 100 * 1024 * 1024 # 100 MB
+
 ALLOWED_MIME_TYPES = [
     "application/geo+json", "application/json", "application/zip",
     "application/vnd.google-earth.kml+xml", "application/gml+xml",
