@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sys/stat.h> // For mkdir
 #include <unistd.h>   // For rmdir, unlink
+#include <pthread.h>  // For pthread_self
 #include <errno.h>    // For errno with mkdir
 
 // Forward declaration
@@ -121,7 +122,7 @@ static json_t* traverse_and_validate_node(json_t* node, const GeometricValidator
 
 AEGIS_PROCESSING_STATUS process_geojson_chunk(
     ProcessedDataChunk** chunk_ptr,
-    const Config* main_app_config,
+    const SpindexConfig* main_app_config,
     const ComplexGeometryHandlerConfig* cg_config,
     const GeometricValidatorConfig* gv_config,
     const char* temp_dir_base_path) {

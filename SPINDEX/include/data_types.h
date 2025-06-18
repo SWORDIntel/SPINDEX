@@ -3,6 +3,8 @@
 
 #include <stddef.h> // For size_t
 
+#define MAX_PATH_LEN 1024
+
 /**
  * @brief Represents a chunk of data that has been processed.
  *
@@ -81,7 +83,10 @@ typedef enum {
     AEGIS_PROCESSING_ERROR_CONFIG,          // 10
     // New error codes for complex_geometry_handler
     AEGIS_PROCESSING_ERROR_IO,                 // 11
-    AEGIS_PROCESSING_REJECT_COMPLEX_GEOMETRY   // 12
+    AEGIS_PROCESSING_REJECT_COMPLEX_GEOMETRY,  // 12
+    // New error codes for geojson_processor
+    AEGIS_PROCESSING_ERROR_GEOMETRY_VALIDATION, // 13
+    AEGIS_PROCESSING_ERROR_SERIALIZATION        // 14
 } AEGIS_PROCESSING_STATUS;
 
 

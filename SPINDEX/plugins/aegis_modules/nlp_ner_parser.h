@@ -4,12 +4,6 @@
 #include "config_manager.h" // For Config struct
 #include "data_types.h"     // For AEGIS_PROCESSING_STATUS and MAX_PATH_LEN
 
-// Make sure MAX_PATH_LEN is defined, e.g. in data_types.h or a common header
-// If not, define a local one for now.
-#ifndef MAX_PATH_LEN
-#define MAX_PATH_LEN 1024
-#endif
-
 typedef struct {
     char script_path[MAX_PATH_LEN];
     char python_executable[MAX_PATH_LEN];
