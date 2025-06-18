@@ -21,6 +21,7 @@
 *   **AEGIS Pipeline Workers:** A pool of identical consumer applications that subscribe to the `AEGIS_JOB_STREAM`. These workers fetch jobs from NATS, execute the AEGIS processing modules, and update the job status in the PostgreSQL database.
 *   **PostgreSQL Database (`IngestionJobDB`):** The central metadata store for all ingestion jobs, their status, and related events. It acts as the source of truth for the pipeline.
 *   **AI-Powered Threat Detection Engine:** A specialized service that consumes data streams from NATS to analyze content for potential security threats using machine learning models and threat intelligence. It reports findings and can trigger alerts.
+*   **Data Promotion Module:** A component responsible for moving validated and processed data to a designated trusted storage location and updating its metadata status.
 
 ## 3. PostgreSQL Schema (`IngestionJobDB`)
 
@@ -85,7 +86,7 @@ Tracks the status of individual processing modules for each job.
 
 ## 4. Workflow
 
-*(Placeholder for a high-level diagram illustrating the flow: Upload -> Staging -> DB (Jobs, Outbox) -> Message Relay -> NATS -> Worker / AI Threat Detection Engine -> DB Updates / SOC or Alerting System)*
+*(Placeholder for a high-level diagram illustrating the flow: Upload -> Staging -> DB (Jobs, Outbox) -> Message Relay -> NATS -> Worker / AI Threat Detection Engine -> Validation -> Data Promotion Module -> Trusted Storage & DB Updates / SOC or Alerting System)*
 
 **A. Job Creation (Producer - e.g., Secure Upload Endpoint):**
 
@@ -189,6 +190,70 @@ This stage is integrated into `pipeline_logic.execute_aegis_pipeline` and runs o
 *   **Data Isolation:** Depending on the analysis, consider processing data in sandboxed or isolated environments to prevent any potential "escape" of malicious content if it were to be inadvertently activated.
 *   **Secure Communication:** All communication (NATS, database, external alert systems) must be over encrypted channels.
 *   **Principle of Least Privilege:** The engine should have only the necessary permissions to access data and publish alerts.
+
+**E. Data Promotion Module (AEGIS-013):**
+
+This module is triggered after data has successfully passed all preceding processing and validation stages, including security scans and any domain-specific validations.
+
+1.  **Responsibilities:**
+    *   Securely move or copy validated data from its final intermediate processing location (e.g., a path in `intermediate_geojson_path` or `output_geopackage_path` from the `jobs` table) to a designated Trusted Storage area.
+    *   Update the job's metadata in the `IngestionJobDB` to reflect its promotion. This includes setting a specific status (e.g., `PROMOTED_TO_TRUSTED`) and recording the path to the data in the Trusted Storage.
+    *   Ensure atomicity or idempotency of the promotion process to prevent data loss or inconsistent states.
+
+2.  **Inputs:**
+    *   `job_id`: The UUID of the job being processed.
+    *   `source_data_path`: The file path to the validated data that needs to be promoted (e.g., `jobs.output_geopackage_path`).
+    *   `source_data_type`: Type of data being promoted (e.g., GeoPackage, GeoJSON).
+    *   Associated metadata that might influence storage decisions (e.g., data classification, original filename).
+
+3.  **Processing:**
+    *   **Retrieve Job Metadata:** Fetch the current job record from the `jobs` table using `job_id`. Verify its status is appropriate for promotion (e.g., `COMPLETED` or a specific pre-promotion validation status).
+    *   **Determine Trusted Storage Path:** Based on configuration and potentially data type or classification, determine the target directory and filename in the Trusted Storage.
+    *   **Secure Transfer:**
+        *   Copy or move the file from `source_data_path` to the target path in Trusted Storage. Use mechanisms that ensure data integrity during transfer (e.g., checksum verification after copy).
+        *   The choice between copy and move depends on whether the intermediate data should be retained for a period or cleaned up immediately.
+    *   **Database Update:**
+        *   Start a database transaction.
+        *   Update the `jobs` table for the given `job_id`:
+            *   Set `job_status` to `PROMOTED` (or a similar status like `ARCHIVED_TRUSTED`).
+            *   Store the new path in Trusted Storage in a dedicated field (e.g., `trusted_storage_path`).
+            *   Set `promotion_timestamp` to `NOW()`.
+        *   Log the promotion action in `job_module_status` (e.g., `module_name = 'DataPromotion'`, `status = 'COMPLETED_SUCCESS'`, `output_data_path = <new_trusted_path>`).
+        *   Commit the database transaction.
+    *   **Cleanup (Optional):** If the data was copied and the original is no longer needed, schedule or perform cleanup of the file at `source_data_path`.
+
+4.  **Outputs:**
+    *   `trusted_data_path`: The new file path of the data in the Trusted Storage.
+    *   Updated `job_id` metadata in the `IngestionJobDB` reflecting the promoted status and location.
+
+5.  **Trusted Storage:**
+    *   This is a highly secure and reliable storage location designated for long-term retention of validated and processed data.
+    *   Examples:
+        *   A dedicated, access-controlled file system mount (e.g., NFS, SAN).
+        *   A specific S3 bucket with strict IAM policies, versioning, and lifecycle management.
+        *   A document store or database optimized for large object storage if data is transformed into a non-file format.
+    *   Characteristics: Regular backups, access logging, integrity checks, and potentially immutability features.
+
+6.  **Error Handling:**
+    *   **Storage Full/Permissions Issue:** If the transfer to Trusted Storage fails due to space, permissions, or connectivity:
+        *   Log the error in detail in `job_module_status` and `jobs.overall_processing_status_message`.
+        *   Do NOT update the job status to `PROMOTED`. The job remains in its pre-promotion state.
+        *   Implement a retry mechanism with backoff for transient issues.
+        *   If retries are exhausted, the job status could be set to `PROMOTION_FAILED`.
+        *   Generate an alert for manual intervention. The data remains in its last valid intermediate location.
+    *   **Database Update Failure:** If the data transfer succeeds but the database update fails:
+        *   This indicates an inconsistent state. The system should attempt to roll back the file move if possible, or at least flag the job for immediate manual reconciliation.
+        *   Log the critical error. Alerts are crucial.
+    *   **Data Integrity Mismatch:** If checksums don't match after transfer:
+        *   Delete the corrupted file from Trusted Storage.
+        *   Log the error and retry the transfer. If it fails repeatedly, treat as a storage or network issue.
+
+7.  **Security Considerations:**
+    *   **Credentials Management:** Securely manage credentials (e.g., API keys for S3, service account tokens for file servers) used by the Data Promotion Module. Use environment variables, secrets management systems, or IAM roles.
+    *   **Path Sanitization:** Ensure that any paths used (source, destination) are canonicalized and validated to prevent path traversal or other injection attacks, especially if parts of paths are derived from metadata.
+    *   **Data Integrity:** Use checksums (e.g., SHA256) to verify data integrity before and after transfer to Trusted Storage. Store these checksums in the metadata if possible.
+    *   **Access Control:** The Trusted Storage must have strict access controls. The Data Promotion Module should operate with the minimum necessary permissions.
+    *   **Auditability:** All promotion actions, successes, and failures must be logged for audit purposes.
 
 ## 5. Error Handling, Retries, and Dead Letter Queues (DLQ)
 
