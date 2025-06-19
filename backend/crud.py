@@ -48,7 +48,7 @@ def create_ingestion_job(db: Session, job_data: Dict[str, Any]) -> models.Ingest
     original_crs=job_data.get('original_crs', None),
     target_crs=job_data.get('target_crs', None),
     location_of_promoted_data=job_data.get('location_of_promoted_data', None),
-    location_of_quarantined_data=job_data.get('location_of_quarantined_data', None),
+    location_of_quarantined_data=job_data.get('quarantined_data', None),
     promotion_timestamp=job_data.get('promotion_timestamp', None),
     quarantine_timestamp=job_data.get('quarantine_timestamp', None),
     data_hash_original=job_data.get('data_hash_original', None),
@@ -93,7 +93,7 @@ def update_pipeline_log(db: Session, job_id: str, log_entry: Dict[str, Any]):
         # db.refresh(db_job)
     else:
         # Log error: job not found
-        print(f"Error in update_pi")peline_log: Job {job_id} not found.")
+        print(f"Error in update_pipeline_log: Job {job_id} not found.")
 
 
 def update_validation_summary(db: Session, job_id: str, summary_update: Dict[str, Any]):
@@ -217,8 +217,8 @@ def update_outbox_event_status(db: Session, event_id: int, new_status: str, publ
 def get_job_status(db: Session, job_id: str) -> Optional[str]:
     """Fetches the current processing_status of an ingestion job."""
     job = db.query(models.IngestionJobDB.processing_status)\
-            .filter(models.IngestionJobDB.job_id == job_id)\
-            .first()
+             .filter(models.IngestionJobDB.job_id == job_id)\
+             .first()
     if job:
         return job.processing_status
     return None
@@ -255,7 +255,7 @@ def create_index_metadata(db: Session, metadata_pydantic: IndexMetadataPydantic)
             index_type=metadata_pydantic.index_type,
             promoted_data_path=metadata_pydantic.promoted_data_path,
             version=metadata_pydantic.version, # Relies on Pydantic default
-            status=metadata_pydantic.status,   # Relies on Pydantic default
+            status=metadata_pydantic.status,     # Relies on Pydantic default
             created_at=metadata_pydantic.created_at, # Relies on Pydantic default_factory
             updated_at=metadata_pydantic.updated_at, # Can be None initially
             celery_task_id=metadata_pydantic.celery_task_id
