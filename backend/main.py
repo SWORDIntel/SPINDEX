@@ -120,7 +120,7 @@ class IndexMetadata(BaseModel):
     promoted_data_path: str; version: int = 1; status: str = "creating"; created_at: datetime = PydanticField(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None; celery_task_id: Optional[str] = None
     class Config: orm_mode = True; json_encoders = {datetime: lambda v: v.isoformat() if v else None}
-index_metadata_db: List[IndexMetadata] = []
+# index_metadata_db: List[IndexMetadata] = [] # Removed in-memory list
 
 class QueryRequest(BaseModel): index_id: str; query_type: str; parameters: Dict[str, Any]
 class QueryResponse(BaseModel): results: List[Dict[str, Any]]; count: int; query_time_ms: int; message: Optional[str] = None
@@ -360,6 +360,97 @@ async def aegis_secure_upload_file(
         message="File uploaded and validated successfully. Ingestion job created.",
         staged_filepath=staged_file_path
     )
+
+# --- Index Metadata Endpoints ---
+
+@app.post("/indexes", response_model=IndexMetadata, status_code=status.HTTP_201_CREATED, tags=["Index Management"])
+async def create_new_index_metadata(
+    index_data: IndexMetadata, # Pydantic model for request body, defaults will be applied by Pydantic
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user) # Assuming auth is needed
+):
+    """
+    Create a new index metadata record.
+    The `index_id` and `created_at` will be auto-generated if not provided (Pydantic default_factory).
+    `version` and `status` also have defaults in the Pydantic model.
+    """
+    logger.info(f"User '{current_user.username}' creating new index metadata for name: {index_data.index_name}")
+    # Check permissions if necessary, e.g., if "create_index" in current_user.permissions
+    # For now, assuming any authenticated user can create index metadata.
+    db_index_meta = crud.create_index_metadata(db=db, metadata_pydantic=index_data)
+    logger.info(f"Index metadata created successfully with ID: {db_index_meta.index_id}")
+    return db_index_meta
+
+@app.get("/indexes", response_model=List[IndexMetadata], tags=["Index Management"])
+async def list_all_index_metadata(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user) # Assuming auth might be needed
+):
+    """
+    Retrieve a list of all index metadata records.
+    """
+    logger.info(f"User '{current_user.username}' requesting list of all index metadata. Skip: {skip}, Limit: {limit}")
+    indexes = crud.get_all_index_metadata(db=db, skip=skip, limit=limit)
+    return indexes
+
+@app.get("/indexes/{index_id}", response_model=IndexMetadata, tags=["Index Management"])
+async def get_specific_index_metadata(
+    index_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user) # Assuming auth might be needed
+):
+    """
+    Retrieve a specific index metadata record by its ID.
+    """
+    logger.info(f"User '{current_user.username}' requesting index metadata for ID: {index_id}")
+    db_index_meta = crud.get_index_metadata(db=db, index_id=index_id)
+    if db_index_meta is None:
+        logger.warning(f"Index metadata with ID '{index_id}' not found for user '{current_user.username}'.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Index metadata not found")
+    return db_index_meta
+
+@app.put("/indexes/{index_id}", response_model=IndexMetadata, tags=["Index Management"])
+async def update_existing_index_metadata(
+    index_id: str,
+    update_payload: Dict[str, Any], # Allow flexible updates
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user) # Assuming auth is needed
+):
+    """
+    Update an existing index metadata record.
+    Only provided fields in the payload will be updated.
+    'updated_at' is automatically handled by the database model.
+    """
+    logger.info(f"User '{current_user.username}' attempting to update index metadata for ID: {index_id} with payload: {update_payload}")
+    # Check permissions if necessary
+    updated_meta = crud.update_index_metadata(db=db, index_id=index_id, update_data=update_payload)
+    if updated_meta is None:
+        logger.warning(f"Update failed: Index metadata with ID '{index_id}' not found for user '{current_user.username}'.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Index metadata not found for update")
+    logger.info(f"Index metadata ID '{index_id}' updated successfully by user '{current_user.username}'.")
+    return updated_meta
+
+@app.delete("/indexes/{index_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Index Management"])
+async def delete_existing_index_metadata(
+    index_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user) # Assuming auth is needed
+):
+    """
+    Delete an index metadata record by its ID.
+    Returns HTTP 204 No Content on successful deletion.
+    """
+    logger.info(f"User '{current_user.username}' attempting to delete index metadata for ID: {index_id}")
+    # Check permissions if necessary
+    success = crud.delete_index_metadata(db=db, index_id=index_id)
+    if not success:
+        logger.warning(f"Deletion failed: Index metadata with ID '{index_id}' not found for user '{current_user.username}'.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Index metadata not found for deletion")
+    logger.info(f"Index metadata ID '{index_id}' deleted successfully by user '{current_user.username}'.")
+    return None # For HTTP 204, no response body should be sent. FastAPI handles this.
+
 
 # --- Main Application Runner ---
 if __name__ == "__main__":
