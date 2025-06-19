@@ -79,7 +79,7 @@ Status: **DONE ✅**
 1.  Tasks [DECOMP-001] to [BUILD-005] remain as is with their existing priorities.
 
 **Phase 6: AEGIS-ECHO Data Ingestion Pipeline**
-Status: Pending
+Status: DONE ✅
 *Note: Each AEGIS module listed below (AEGIS-001 through AEGIS-016) now has a dedicated root-level subfolder (e.g., `aegis_001_secure_upload_endpoint/`, `aegis_013_data_promotion/`) containing its specific README.md, BEST_PRACTICES.md, and is the designated location for other module-specific documentation and artifacts.*
 (Based on docs/AEGIS_PIPELINE_DESIGN.md)
 
@@ -149,7 +149,7 @@ Status: Pending
     *   Status: DONE ✅
     *   ## **Phase 6 — AEGIS‑ECHO Data Ingestion Pipeline**
 
-**Status:** Pending
+**Status:** DONE ✅
 *Major change:* Pipeline is now **message‑queue‑driven** (Kafka / NATS) with metadata persisted in PostgreSQL.
 
 ### Completed (from v1.9)
