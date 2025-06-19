@@ -54,10 +54,38 @@ else()
     endif()
 endif()
 
-# Placeholder for OpenVINO detection
-# find_package(OpenVINO REQUIRED)
+# OpenVINO Detection
+# Users might need to set OpenVINO_DIR environment variable or CMake variable
+# for find_package to locate the OpenVINO installation.
+# Example: cmake -DOpenVINO_DIR=/opt/intel/openvino_2023 ..
+find_package(OpenVINO) # Try to find OpenVINO, but don't fail if not found initially.
 
-add_subdirectory(core)
-add_subdirectory(plugins/aegis_modules)
+if(OpenVINO_FOUND)
+    message(STATUS "Found OpenVINO: YES")
+    # FindOpenVINO.cmake should provide imported targets (e.g., OpenVINO::runtime, OpenVINO::Core).
+    # The sub-projects (openvino_classifier plugin, test_openvino_classifier_hw)
+    # will link against these. The placeholder 'OpenVINO::openvino' used earlier
+    # should be replaced with actual targets like OpenVINO::runtime if that's what FindOpenVINO provides.
+    # For now, this message indicates it's found. The actual linking targets are deferred
+    # to where they are used, assuming FindOpenVINO sets them up.
+    # If specific components are needed, they can be listed in find_package:
+    # find_package(OpenVINO COMPONENTS ie_c_api runtime REQUIRED)
+    # This would create targets like OpenVINO::ie_c_api and OpenVINO::runtime
+    message(STATUS "  OpenVINO version: ${OpenVINO_VERSION}") # Example: Check version if available
+    message(STATUS "  Relevant OpenVINO CMake variables might include:")
+    message(STATUS "    OpenVINO_INCLUDE_DIRS: ${OpenVINO_INCLUDE_DIRS}")
+    message(STATUS "    OpenVINO_LIBS: ${OpenVINO_LIBS}") # Older style, prefer imported targets
+    message(STATUS "    OpenVINO_LIBRARIES: ${OpenVINO_LIBRARIES}") # Older style
+else()
+    message(WARNING "OpenVINO not found. The 'openvino_classifier' plugin and 'test_openvino_classifier_hw' test may not build or link correctly. Please ensure OpenVINO is installed and CMake can find it (e.g., set OpenVINO_DIR).")
+    # To make OpenVINO a hard requirement for the project to configure,
+    # change `find_package(OpenVINO)` to `find_package(OpenVINO REQUIRED)`.
+endif()
+
+message(STATUS "Adding subdirectories in specific order for dependency resolution.")
+add_subdirectory(plugins/aegis_modules) # Defines spindex_aegis (STATIC LIB)
+add_subdirectory(plugins)               # Defines all .so plugins and the 'stage_all_plugins_for_core_tests' custom target
+add_subdirectory(core)                  # Defines spindex_core (STATIC LIB), spindex_app (EXE), and core test executables
+add_subdirectory(tests)                 # Defines test_openvino_classifier_hw (EXE) and other standalone tests
 
 enable_testing()
