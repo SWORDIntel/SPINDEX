@@ -8,11 +8,15 @@ import uuid # For index_id default if needed, though Pydantic model should provi
 # Attempt to import Pydantic model, handle potential circularity if this file grows
 try:
     from backend.main import IndexMetadata as IndexMetadataPydantic
+    from backend.main import QueryHistoryItem as QueryHistoryItemPydantic
+    # QueryRequest is part of QueryHistoryItemPydantic, so direct import might not be needed here
+    # from backend.main import QueryRequest as QueryRequestPydantic
 except ImportError:
     # This is a fallback. In a real scenario, restructure to avoid circular deps,
     # or use a more generic Dict[str, Any] for creation if Pydantic model not available at this point.
     # For this subtask, we assume direct import is fine or will be resolved by overall structure.
     IndexMetadataPydantic = Dict[str, Any] # Placeholder if import fails
+    QueryHistoryItemPydantic = Dict[str, Any] # Placeholder if import fails
 
 # CRUD operations for IngestionJobDB
 
@@ -44,7 +48,7 @@ def create_ingestion_job(db: Session, job_data: Dict[str, Any]) -> models.Ingest
     original_crs=job_data.get('original_crs', None),
     target_crs=job_data.get('target_crs', None),
     location_of_promoted_data=job_data.get('location_of_promoted_data', None),
-    location_of_quarantined_data=job_data.get('location_of_quarantined_data', None),
+    location_of_quarantined_data=job_data.get('quarantined_data', None),
     promotion_timestamp=job_data.get('promotion_timestamp', None),
     quarantine_timestamp=job_data.get('quarantine_timestamp', None),
     data_hash_original=job_data.get('data_hash_original', None),
@@ -89,7 +93,7 @@ def update_pipeline_log(db: Session, job_id: str, log_entry: Dict[str, Any]):
         # db.refresh(db_job)
     else:
         # Log error: job not found
-        print(f"Error in update_pi")peline_log: Job {job_id} not found.")
+        print(f"Error in update_pipeline_log: Job {job_id} not found.")
 
 
 def update_validation_summary(db: Session, job_id: str, summary_update: Dict[str, Any]):
@@ -122,6 +126,55 @@ def remove_ingestion_job(db: Session, job_id: str) -> bool:
         db.commit()
         return True
     return False
+
+# CRUD operations for QueryHistoryDB
+
+def create_query_history_item(db: Session, history_item_pydantic: QueryHistoryItemPydantic) -> models.QueryHistoryDB:
+    """
+    Creates a new query history record in the database.
+    Relies on QueryHistoryItemPydantic for structure, including converting
+    its 'request_data' (which is a QueryRequest Pydantic model) to a dict.
+    """
+    request_data_dict = {}
+    if isinstance(history_item_pydantic, dict): # Fallback if Pydantic import failed
+        request_data_dict = history_item_pydantic.get("request_data", {})
+        user_id = history_item_pydantic.get("user_id", "unknown_user") # Should be provided
+        query_id_val = history_item_pydantic.get("query_id") or str(uuid.uuid4())
+        timestamp_val = history_item_pydantic.get("timestamp") or datetime.utcnow()
+    else: # Assuming history_item_pydantic is the actual Pydantic model
+        request_data_dict = history_item_pydantic.request_data.dict()
+        user_id = history_item_pydantic.user_id
+        query_id_val = history_item_pydantic.query_id
+        timestamp_val = history_item_pydantic.timestamp
+
+    db_history_item = models.QueryHistoryDB(
+        query_id=query_id_val,
+        timestamp=timestamp_val,
+        user_id=user_id,
+        request_data=request_data_dict
+    )
+    db.add(db_history_item)
+    db.commit()
+    db.refresh(db_history_item)
+    return db_history_item
+
+def get_query_history_item(db: Session, query_id: str) -> Optional[models.QueryHistoryDB]:
+    """
+    Retrieves a single query history record by its query_id.
+    """
+    return db.query(models.QueryHistoryDB).filter(models.QueryHistoryDB.query_id == query_id).first()
+
+def get_query_history_for_user(db: Session, user_id: str, skip: int = 0, limit: int = 100) -> List[models.QueryHistoryDB]:
+    """
+    Retrieves a list of query history records for a specific user_id, with pagination.
+    Orders by timestamp descending.
+    """
+    return db.query(models.QueryHistoryDB)\
+             .filter(models.QueryHistoryDB.user_id == user_id)\
+             .order_by(models.QueryHistoryDB.timestamp.desc())\
+             .offset(skip)\
+             .limit(limit)\
+             .all()
 
 def create_job_outbox_event(db: Session, event_data: Dict[str, Any]) -> models.JobOutbox:
     db_event = models.JobOutbox(
@@ -164,8 +217,8 @@ def update_outbox_event_status(db: Session, event_id: int, new_status: str, publ
 def get_job_status(db: Session, job_id: str) -> Optional[str]:
     """Fetches the current processing_status of an ingestion job."""
     job = db.query(models.IngestionJobDB.processing_status)\
-            .filter(models.IngestionJobDB.job_id == job_id)\
-            .first()
+             .filter(models.IngestionJobDB.job_id == job_id)\
+             .first()
     if job:
         return job.processing_status
     return None
@@ -202,7 +255,7 @@ def create_index_metadata(db: Session, metadata_pydantic: IndexMetadataPydantic)
             index_type=metadata_pydantic.index_type,
             promoted_data_path=metadata_pydantic.promoted_data_path,
             version=metadata_pydantic.version, # Relies on Pydantic default
-            status=metadata_pydantic.status,   # Relies on Pydantic default
+            status=metadata_pydantic.status,    # Relies on Pydantic default
             created_at=metadata_pydantic.created_at, # Relies on Pydantic default_factory
             updated_at=metadata_pydantic.updated_at, # Can be None initially
             celery_task_id=metadata_pydantic.celery_task_id
