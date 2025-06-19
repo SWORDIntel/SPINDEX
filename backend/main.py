@@ -349,7 +349,6 @@ async def aegis_secure_upload_file(
         if os.path.exists(staged_file_path):
             try:
                 os.remove(staged_file_path)
-                logger.info(f"Cleaned up staged file {staged_file_path} after DB error.")
             except OSError as ose:
                 logger.error(f"Error cleaning up staged file {staged_file_path}: {ose}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create ingestion job record.")
@@ -490,6 +489,7 @@ async def get_my_query_history(
         db=db, user_id=current_user.username, skip=skip, limit=limit
     )
     return user_query_history
+
 
 # --- Main Application Runner ---
 if __name__ == "__main__":

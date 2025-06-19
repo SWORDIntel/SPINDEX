@@ -6,7 +6,7 @@ from datetime import datetime
 
 class IngestionJobDB(Base):
     """
-    SQLAlchemy ORM model for an ingestion job. This table tracks the state and
+    SalesAlchemy ORM model for an ingestion job. This table tracks the state and
     metadata of each data file uploaded and processed by the AEGIS pipeline.
     """
     __tablename__ = "ingestion_jobs"
