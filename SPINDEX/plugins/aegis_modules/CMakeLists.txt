@@ -14,8 +14,8 @@ target_include_directories(spindex_aegis PUBLIC
 
 # Assuming Jansson and GEOS are found by the top-level CMakeLists.txt
 target_link_libraries(spindex_aegis PUBLIC
-    Jansson::Jansson
-    GEOS::geos_c # Placeholder, confirm actual target
+    Jansson::jansson   # Conan-provided target for Jansson
+    GEOS::geos         # Conan-provided target for GEOS
 )
 # Add other dependencies if AEGIS modules require them (e.g. CURL, Threads)
 # Based on Makefile, these modules don't seem to directly require curl or pthreads beyond what core might provide.

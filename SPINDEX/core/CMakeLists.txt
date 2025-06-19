@@ -6,9 +6,9 @@ add_library(spindex_core STATIC ${CORE_SOURCES})
 
 target_link_libraries(spindex_core PUBLIC
     Threads::Threads
-    CURL::libcurl
-    Jansson::Jansson
-    GEOS::geos_c # Assuming geos_c, might need adjustment
+    libcurl::libcurl    # Conan-provided target for libcurl
+    Jansson::jansson    # Conan-provided target for Jansson
+    GEOS::geos          # Conan-provided target for GEOS
 )
 
 add_executable(spindex_app main.c)
@@ -58,15 +58,15 @@ add_test(NAME test_complex_geometry_handler COMMAND test_complex_geometry_handle
 # Test for nlp_ner_parser
 # Source: core/test_nlp_ner_parser.c
 add_executable(test_nlp_ner_parser test_nlp_ner_parser.c)
-# spindex_aegis PUBLICly links Jansson::Jansson, so this test should inherit it.
-# Adding Jansson::Jansson explicitly if test code directly uses Jansson API.
-target_link_libraries(test_nlp_ner_parser PRIVATE spindex_core spindex_aegis Jansson::Jansson)
+# spindex_aegis PUBLICly links Jansson::jansson, so this test should inherit it.
+# Adding Jansson::jansson explicitly if test code directly uses Jansson API.
+target_link_libraries(test_nlp_ner_parser PRIVATE spindex_core spindex_aegis Jansson::jansson)
 add_test(NAME test_nlp_ner_parser COMMAND test_nlp_ner_parser)
 
 # Test for geometric_validator
 # Source: core/test_geometric_validator.c
 add_executable(test_geometric_validator test_geometric_validator.c)
-# spindex_aegis PUBLICly links GEOS::geos_c, so this test should inherit it.
-# Adding GEOS::geos_c explicitly if test code directly uses GEOS API.
-target_link_libraries(test_geometric_validator PRIVATE spindex_core spindex_aegis GEOS::geos_c)
+# spindex_aegis PUBLICly links GEOS::geos, so this test should inherit it.
+# Adding GEOS::geos explicitly if test code directly uses GEOS API.
+target_link_libraries(test_geometric_validator PRIVATE spindex_core spindex_aegis GEOS::geos)
 add_test(NAME test_geometric_validator COMMAND test_geometric_validator)

@@ -138,15 +138,15 @@ Status: Pending
 14. **Task: [AEGIS-014] Implement Data Quarantine (DLQ) logic**
     *   Description: Develop the logic to isolate data that fails processing/validation, update metadata, and log errors.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 15. **Task: [AEGIS-015] Implement Persistent Metadata Cataloguing**
     *   Description: Integrate a persistent database (e.g., PostgreSQL) for storing all ingestion job metadata, replacing any in-memory solutions.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 16. **Task: [AEGIS-016] Test AEGIS-ECHO pipeline end-to-end**
     *   Description: Conduct comprehensive testing of the full AEGIS-ECHO pipeline with various data types, sizes, and potential error conditions.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
     *   ## **Phase 6 — AEGIS‑ECHO Data Ingestion Pipeline**
 
 **Status:** Pending
