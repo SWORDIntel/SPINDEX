@@ -10,14 +10,13 @@
 // (e.g., through a higher-level include like ingestion_pipeline.h or directly).
 // If a file only includes threading.h and needs logging, it should include utils.h.
 
-// REVIEW: Consider if a maximum queue size should be implemented for TaskQueue to prevent excessive memory usage if tasks are produced much faster than consumed.
-// REVIEW: API clarity - thread_pool_submit takes a function pointer and arg. This is suitable for general tasks.
-// For file processing in the ingestion pipeline, 'arg' could be a struct containing file path, metadata, processing parameters, etc.
-// The submitted 'function' would then be responsible for casting 'arg' to the appropriate type and processing the file.
+// TODO: Consider implementing a maximum queue size for TaskQueue to prevent excessive memory usage under high load.
+// For file processing in the ingestion pipeline, 'arg' for thread_pool_submit could be a
+// struct containing file path, metadata, processing parameters, etc. The submitted
+// 'function' would then be responsible for casting 'arg' to the appropriate type and processing the file.
 
 // Task structure
-// REVIEW: Simple task structure. 'arg' being void* provides flexibility.
-// REVIEW: Ensure 'function' handles its 'arg' safely (e.g., correct type casting, NULL checks if applicable).
+// NOTE: Submitted task functions are responsible for safely handling their 'arg' (e.g., type casting, NULL checks).
 typedef struct Task {
     void (*function)(void* arg);
     void* arg;
@@ -25,27 +24,23 @@ typedef struct Task {
 } Task;
 
 // Task queue structure
-// REVIEW: Standard FIFO queue implementation.
 typedef struct TaskQueue {
     Task* head;
     Task* tail;
-    pthread_mutex_t lock; // REVIEW: Mutex to protect access to head, tail, and count. This is correct.
-    pthread_cond_t not_empty; // REVIEW: Condition variable to signal worker threads when a new task is available. Correctly used with 'lock'.
-    int count; // REVIEW: Keeping track of task count is useful for metrics or potentially for implementing a max queue size.
+    pthread_mutex_t lock;
+    pthread_cond_t not_empty;
+    int count;
 } TaskQueue;
 
 // Thread pool structure
-// REVIEW: Contains essential components for a thread pool.
 typedef struct ThreadPool {
-    pthread_t* threads; // REVIEW: Array of worker threads.
-    size_t num_threads; // REVIEW: Number of threads in the pool.
-    TaskQueue task_queue; // REVIEW: Embedded task queue.
-    volatile int shutdown; // Flag to signal threads to shutdown. REVIEW: 'volatile' is appropriate here as it's accessed by multiple threads and can change unexpectedly.
+    pthread_t* threads;
+    size_t num_threads;
+    TaskQueue task_queue;
+    volatile int shutdown; // Flag to signal threads to shutdown.
 } ThreadPool;
 
 // Function declarations
-// REVIEW: The API (init, submit, destroy) is clear and provides the necessary functionalities.
-// REVIEW: Consistency in return types (int for success/error) is good. 0 for success, -1 for error is a common pattern.
 
 /**
  * @brief Initializes the thread pool.
@@ -54,8 +49,8 @@ typedef struct ThreadPool {
  * @param num_threads Number of worker threads to create.
  * @return 0 on success, -1 on error.
  */
-// REVIEW: Consider what happens if some threads are created successfully but others fail during init. The current error code doesn't distinguish.
-// REVIEW: Ensure robust error handling for memory allocation (for `threads` array) and `pthread_create`.
+// REVIEW: If some threads are created successfully but others fail, the function correctly cleans up by joining created threads and freeing resources before returning an error. The single error code indicates overall pool initialization failure.
+// REVIEW: Error handling for memory allocation and pthread_create is implemented, including cleanup of successfully created resources on partial failure.
 int thread_pool_init(ThreadPool* pool, size_t num_threads);
 
 /**
@@ -65,9 +60,14 @@ int thread_pool_init(ThreadPool* pool, size_t num_threads);
  * @param function Pointer to the function to be executed.
  * @param arg Argument to be passed to the function.
  * @return 0 on success, -1 on error.
+ * @note The lifecycle of the `arg` parameter is the responsibility of the
+ *       caller or the submitted task function. The thread pool does not manage
+ *       the memory for `arg` itself. If `thread_pool_submit` fails, the
+ *       caller is responsible for freeing `arg` if it was dynamically allocated.
+ *       The `Task` structure itself is managed by the pool.
  */
-// REVIEW: Error handling for task allocation (if dynamic) and queue operations should be present.
-// REVIEW: What happens if task submission fails? Does the caller need to free 'arg'? (Assumed task function or submitter handles 'arg' lifecycle).
+// REVIEW: Error handling for task allocation (if dynamic) and queue operations is present in the .c file.
+// The note above clarifies 'arg' lifecycle on submission failure.
 int thread_pool_submit(ThreadPool* pool, void (*function)(void*), void* arg);
 
 /**
@@ -78,21 +78,22 @@ int thread_pool_submit(ThreadPool* pool, void (*function)(void*), void* arg);
  * @param pool Pointer to the ThreadPool structure.
  * @return 0 on success, -1 on error.
  */
-// REVIEW: Graceful shutdown sequence is critical.
-// 1. Signal shutdown.
-// 2. Wake up all worker threads (possibly blocked on condition variable).
-// 3. Worker threads should finish their current task and then exit.
-// 4. Join all threads.
-// 5. Clean up resources (task queue, mutexes, condition variables, threads array).
-// REVIEW: Ensure all dynamically allocated memory for tasks is freed.
-// REVIEW: Potential race condition if tasks are being submitted while the pool is shutting down. The submit function should probably check the shutdown flag.
+// REVIEW: Graceful shutdown sequence (signal, broadcast, join, cleanup) is implemented.
+// The steps include: 1. Signal shutdown. 2. Wake up all worker threads. 3. Worker threads finish current task then exit. 4. Join all threads. 5. Clean up resources.
+// REVIEW: Dynamically allocated `Task` structs remaining in the queue are freed by `task_queue_destroy`. The `arg` within tasks is user-managed.
+// (The `Task` structs for *executed* tasks are freed by the worker threads themselves).
 int thread_pool_destroy(ThreadPool* pool);
 
 // Task Queue utility functions (optional, can be static in .c)
-// REVIEW: These are good helper functions. If they are only used by threading.c, making them static is appropriate for encapsulation.
-int task_queue_init(TaskQueue* queue); // REVIEW: Ensure mutex and cond_var are initialized.
+// REVIEW: These are good helper functions. If they are only used by threading.c, making them static is appropriate for encapsulation. (This comment seems to refer to the .c file, these are declarations)
+// NOTE: Initializes mutex and condition variable for the queue.
+int task_queue_init(TaskQueue* queue);
 void task_queue_push(TaskQueue* queue, Task* task);
+// NOTE: This task_queue_pop is a general utility for the TaskQueue.
+// The internal worker threads use a non-blocking variant combined with condition variables.
+// This function will block until a task is available.
 Task* task_queue_pop(TaskQueue* queue);
-void task_queue_destroy(TaskQueue* queue); // REVIEW: Ensure mutex and cond_var are destroyed. Any remaining tasks in the queue should be handled (e.g., freed or processed, though during pool destroy, they are typically processed before this).
+// NOTE: Destroys mutex and condition variable. Frees remaining `Task` structs (but not their `arg` data).
+void task_queue_destroy(TaskQueue* queue);
 
 #endif // SPINDEX_CORE_THREADING_H
