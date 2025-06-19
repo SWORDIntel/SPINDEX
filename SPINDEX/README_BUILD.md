@@ -1,66 +1,77 @@
-. Build Documentation (README_BUILD.md)
+# SPINDEX Project Build Instructions
 
-This file provides explicit instructions for developers, CI/CD systems, or anyone else needing to build and test the project.
+This document outlines the necessary steps to build the SPINDEX project using CMake.
 
-README_BUILD.md
-Markdown
+## 1. Prerequisites
 
-# Project Build and Test Instructions
+Ensure you have the following software installed:
 
-This document outlines the necessary steps to set up the environment, build all components, and run the tests for this project.
+*   **CMake** (version 3.15 or higher)
+*   **A C Compiler** (e.g., GCC, Clang) that supports C11.
+*   **Make or Ninja** (or another build tool supported by CMake generators).
+*   **pkg-config** (for detecting dependencies like Jansson, GEOS).
+*   **Development Libraries:**
+    *   Jansson (libjansson-dev or equivalent)
+    *   libcurl (libcurl4-openssl-dev or equivalent)
+    *   GEOS (libgeos-dev or equivalent, specifically geos-c)
+    *   pthreads (usually part of the C compiler/standard library)
+*   **Optional: Intel OpenVINO Toolkit**
+    *   If you need the `openvino_classifier` plugin or to run `test_openvino_classifier_hw`.
+    *   Ensure the OpenVINO environment is initialized (e.g., by sourcing `setupvars.sh`) or that CMake can find it (e.g., by setting the `OpenVINO_DIR` environment variable or CMake variable).
 
-## 1. Project Structure
+## 2. Build Steps
 
-The build and test process assumes the following directory structure:
+1.  **Create a build directory:**
+    It's recommended to perform an out-of-source build.
+    ```sh
+    mkdir build
+    cd build
+    ```
 
-.
-├── build_and_test.sh           # This master script
-├── README_BUILD.md             # This documentation
-├── requirements.txt            # Python dependencies
-├── stego_test.py               # Main Python application logic (assumed)
-├── test_jsteg.py               # Python unit tests
-├── test_images_jpeg/
-│   ├── jpeg_grayscale.jpg      # Test image
-│   └── jpeg_low_quality_small.jpg # Test image
-├── Makefile                    # Optional: For building C components
-└── src/                        # Optional: Directory for C source files
+2.  **Configure with CMake:**
+    From the build directory, run CMake to configure the project. The source directory for SPINDEX is assumed to be `../SPINDEX` if your current directory is `build` at the same level as `SPINDEX`. If your `build` directory is inside `SPINDEX`, it would be `cmake ..`. Adjust accordingly. For this example, we assume `build` is a sibling of `SPINDEX`'s top-level source directory. More typically, if you clone `SPINDEX` and `cd SPINDEX`, you'd do `mkdir build && cd build && cmake ..`. The path to sources should be adjusted based on where the `SPINDEX` top-level `CMakeLists.txt` is relative to your build directory.
 
+    Example assuming `build` is inside the top-level `SPINDEX` directory:
+    ```sh
+    # From SPINDEX/
+    mkdir build
+    cd build
+    cmake ..
+    ```
+    *   If OpenVINO is installed in a non-standard path, you might need to specify its location:
+        ```sh
+        cmake -DOpenVINO_DIR=/path/to/your/openvino ..
+        ```
+    *   Review CMake output for any errors or warnings, especially regarding dependency detection.
 
-## 2. Prerequisites
+3.  **Compile the Project:**
+    Use the build tool specified by your CMake generator (e.g., Make or Ninja).
+    ```sh
+    cmake --build .
+    ```
+    Or, if using Make:
+    ```sh
+    make -j$(nproc) # Builds in parallel
+    ```
+    Or, if using Ninja:
+    ```sh
+    ninja
+    ```
+    This will compile the main `spindex_app` executable, all plugins (`.so` files), and all test executables.
+    *   Executables (application and tests) will be placed in `build/bin/`.
+    *   Libraries (`.a` and `.so` files) will be placed in `build/lib/`.
 
-Before running the build script, ensure you have the following software installed on your system:
+## 3. Running Tests
 
-* **Python 3**: The script is written to use `python3`.
-* **pip 3**: The Python package installer.
-* **git**: For version control diagnostics.
-* **gcc** (or a compatible C compiler): Required if the project includes C components managed by a `Makefile`.
-
-## 3. How to Build and Test
-
-The entire process is automated by the `build_and_test.sh` script.
-
-### One-Step Execution
-
-To set up the environment, install all dependencies, build any C components, and run all tests, simply execute the script from the root of the repository:
+After a successful build, you can run the tests using CTest from the build directory:
 
 ```sh
-# Make the script executable (only need to do this once)
-chmod +x build_and_test.sh
+ctest --verbose
+```
+This will execute all defined tests. Some tests might require specific conditions:
+*   `test_ingestion_pipeline` and `test_elasticsearch_indexing` require plugins to be loaded. The CMake build system stages these plugins into `build/plugins_for_test/`, and the tests are configured to run from `build/` (their CWD for CTest) to find them via the relative path `"plugins_for_test"`.
+*   `test_openvino_classifier_hw` is designed for specific hardware and requires OpenVINO. It might be skipped or fail if these conditions aren't met.
 
-# Run the script
-./build_and_test.sh
+## 4. Legacy Makefile
 
-What the Script Does
-
-The build_and_test.sh script performs the following actions:
-
-    Initial Diagnostics: It checks for required tools (python3, gcc), verifies the repository state with git, and confirms that necessary files and directories (test_jsteg.py, test_images_jpeg/) are present.
-    C Component Build: If a Makefile is found in the root directory, it runs the make command to compile any C programs. This standardizes the C build process.
-    Python Environment Setup:
-        It creates a Python virtual environment named keyplug_venv if one doesn't already exist. Using a virtual environment prevents conflicts with system-wide packages.
-        It activates the environment.
-        It installs the exact versions of the Python libraries specified in requirements.txt using pip.
-    Run Python Tests: It executes the test_jsteg.py script using the Python interpreter from the virtual environment, ensuring it uses the correct dependencies.
-    Cleanup: The script deactivates the virtual environment upon successful completion.
-
-This automated process ensures a reliable and repeatable build, which is essential for development, collaboration, and continuous integration (CI/CD).
+A legacy Makefile might still be present in `SPINDEX/Makefile`. The canonical way to build this project is now via CMake.

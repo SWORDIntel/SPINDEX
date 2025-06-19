@@ -79,7 +79,7 @@ Status: **DONE ✅**
 1.  Tasks [DECOMP-001] to [BUILD-005] remain as is with their existing priorities.
 
 **Phase 6: AEGIS-ECHO Data Ingestion Pipeline**
-Status: Pending
+Status: DONE ✅
 *Note: Each AEGIS module listed below (AEGIS-001 through AEGIS-016) now has a dedicated root-level subfolder (e.g., `aegis_001_secure_upload_endpoint/`, `aegis_013_data_promotion/`) containing its specific README.md, BEST_PRACTICES.md, and is the designated location for other module-specific documentation and artifacts.*
 (Based on docs/AEGIS_PIPELINE_DESIGN.md)
 
@@ -138,18 +138,18 @@ Status: Pending
 14. **Task: [AEGIS-014] Implement Data Quarantine (DLQ) logic**
     *   Description: Develop the logic to isolate data that fails processing/validation, update metadata, and log errors.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 15. **Task: [AEGIS-015] Implement Persistent Metadata Cataloguing**
     *   Description: Integrate a persistent database (e.g., PostgreSQL) for storing all ingestion job metadata, replacing any in-memory solutions.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 16. **Task: [AEGIS-016] Test AEGIS-ECHO pipeline end-to-end**
     *   Description: Conduct comprehensive testing of the full AEGIS-ECHO pipeline with various data types, sizes, and potential error conditions.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
     *   ## **Phase 6 — AEGIS‑ECHO Data Ingestion Pipeline**
 
-**Status:** Pending
+**Status:** DONE ✅
 *Major change:* Pipeline is now **message‑queue‑driven** (Kafka / NATS) with metadata persisted in PostgreSQL.
 
 ### Completed (from v1.9)
@@ -165,7 +165,7 @@ Status: In Progress
 
 1.  **Task: [AVX-001] Implement full AVX-512 phrase search algorithm**
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 2.  **Task: [ES-003] Integrate AVX-512 Search with Elasticsearch Queries**
     *   Priority: Medium
     *   Status: Design Complete

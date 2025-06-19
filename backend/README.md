@@ -12,6 +12,28 @@ This directory contains the Python FastAPI backend application for SPINDEX. It i
 *   **GEOS:** System library required by Shapely.
 *   **SQLAlchemy, Alembic:** For database ORM and migrations.
 
+## Configuration
+
+The backend application and worker behavior can be configured using environment variables. Key variables include:
+
+*   `NATS_URL`: URL for the NATS server (default: "nats://localhost:4222").
+*   `AEGIS_JOB_STREAM_NAME`: Name of the NATS JetStream stream for jobs (default: "AEGIS_JOB_STREAM").
+*   `NATS_AEGIS_WORKER_DURABLE_NAME`: Durable name for the NATS consumer (default: "aegis_job_worker").
+*   `STAGING_AREA_PATH`: Filesystem path for temporary storage of uploaded files before processing (e.g., default used by API might be "staging_area/"). The worker expects job records to contain the full path to the staged file.
+*   `PROCESSED_AREA_PATH`: Filesystem path for storing intermediate processed files by `pipeline_logic.py` (default: "processed_area").
+*   `QUARANTINE_AREA_PATH`: Base filesystem path where quarantined data from failed ingestion jobs will be stored by the worker (default: "quarantined_data" if not set in worker environment). Each failed job's data will typically be placed in a subdirectory named after its `job_id`.
+*   `SCANNER_MAX_TOTAL_UNCOMPRESSED_SIZE`: Security scanner - max total uncompressed size for archives (bytes, default: 1GB).
+*   `SCANNER_MAX_FILE_COUNT_IN_ZIP`: Security scanner - max number of files in an archive (default: 10000).
+*   `SCANNER_MAX_COMPRESSION_RATIO_SINGLE_FILE`: Security scanner - max compression ratio for any single file in an archive (default: 200.0).
+*   `SCANNER_MAX_COMPRESSION_RATIO_TOTAL`: Security scanner - max overall compression ratio for an archive (default: 100.0).
+*   `COMPLEX_GEOMETRY_STRATEGY`: Strategy for handling complex geometries like "split_all", "filter_types", "explode_collections" (default: "split_all").
+*   `CGH_FILTER_TYPES_TO_KEEP`: JSON formatted list of geometry types to retain when using "filter_types" strategy (default: '["Point", "LineString", "Polygon", "MultiPoint", "MultiLineString", "MultiPolygon"]').
+*   `CGH_REJECT_IF_TYPES_FOUND`: JSON formatted list of geometry types that will cause job rejection if found, when using "reject_on_types" strategy (default: "[]").
+*   `GEOCODING_ADDRESS_FIELDS`: JSON formatted list of property field names to check for addresses when attempting geocoding (default: `["address", "Address", ..., "שדה כתובת"]`).
+*   `NOMINATIM_USER_AGENT`: User agent string for Nominatim geocoding requests (default: "spindex-aegis-pipeline/0.1 (developer.contact@example.org)").
+
+Refer to the source code (e.g., `aegis_worker.py`, `pipeline_logic.py`) for defaults if an environment variable is not set.
+
 ## Application Structure
 
 *   `main.py`: The main FastAPI application file. Contains API endpoints, Pydantic models, Celery app configuration, and task definitions including the AEGIS pipeline logic.
