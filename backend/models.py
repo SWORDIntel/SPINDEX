@@ -55,14 +55,46 @@ class IngestionJobDB(Base):
     def __repr__(self):
         return f"<IngestionJobDB(job_id='{self.job_id}', filename='{self.original_filename}', status='{self.processing_status}')>"
 
-# If you had other models, they would be defined here, e.g.:
-# class IndexMetadataDB(Base):
-#      __tablename__ = "spatial_indexes"
-#      # ... columns ...
+class IndexMetadataDB(Base):
+    __tablename__ = "index_metadata"
 
-# class QueryHistoryDB(Base):
-#      __tablename__ = "query_history"
-#      # ... columns ...
+    index_id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    index_name = Column(String, index=True, nullable=False)
+    index_type = Column(String, nullable=False) # e.g., "elasticsearch", "solr", "qdrant_vector"
+    promoted_data_path = Column(String, nullable=False) # Path to the data that was indexed (e.g., from IngestionJobDB.location_of_promoted_data)
+    version = Column(Integer, default=1, nullable=False) # For tracking updates or re-indexing of the same data
+    status = Column(String, default="creating", index=True, nullable=False) # e.g., creating, active, inactive, failed, updating
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
+
+    celery_task_id = Column(String, nullable=True, index=True) # If index creation is a background task
+
+    # Potentially add fields for connection details if not managed externally,
+    # or specific metadata about the index schema or configuration.
+    # Example: index_specific_config = Column(JSON, nullable=True)
+
+    def __repr__(self):
+        return f"<IndexMetadataDB(index_id='{self.index_id}', name='{self.index_name}', type='{self.index_type}', status='{self.status}')>"
+
+class QueryHistoryDB(Base):
+    __tablename__ = "query_history"
+
+    query_id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True, nullable=False)
+    user_id = Column(String, index=True, nullable=False) # User who performed the query
+
+    # Stores the original request payload (e.g., index_id, query_type, parameters)
+    # This allows for replaying queries or detailed auditing.
+    request_data = Column(JSON, nullable=False)
+
+    # Optional: Could add fields for query_status (success/failure), execution_time_ms, result_summary (e.g., num_hits)
+    # query_status = Column(String, nullable=True)
+    # execution_time_ms = Column(Integer, nullable=True)
+    # result_count = Column(Integer, nullable=True)
+
+    def __repr__(self):
+        return f"<QueryHistoryDB(query_id='{self.query_id}', user_id='{self.user_id}', timestamp='{self.timestamp.isoformat()}')>"
 
 class JobOutbox(Base):
     __tablename__ = "job_outbox"

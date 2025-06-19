@@ -9,7 +9,8 @@
 // For a test executable in SPINDEX/build/, the path to the plugin might be
 // "./build/plugins/lib/openvino_classifier.so"
 // For now, define a placeholder that might need adjustment in the Makefile or runtime.
-#define OPENVINO_PLUGIN_SO_PATH "build/plugins/lib/openvino_classifier.so"
+// Corrected path assuming test executable is run from SPINDEX project root.
+#define OPENVINO_PLUGIN_SO_PATH "./build/lib/openvino_classifier.so"
 
 // We need the interface definitions.
 // Path relative to SPINDEX/tests/ directory if test_openvino_classifier_hw.c is there.
