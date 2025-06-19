@@ -1134,6 +1134,85 @@ bool test_buff_many_small_matches() {
     return pass;
 }
 
+// TC-BUFF-002: Long Phrase Exceeding Buffer for Header
+// This should match the value in avx512_phrase_search.c for accurate testing.
+// If it's not defined here (e.g. plugin not compiled with test), define for test purposes.
+#ifndef RESULT_BUFFER_SIZE
+#define RESULT_BUFFER_SIZE 8192
+#endif
+
+bool test_buff_long_phrase_header_overflow() {
+    if (should_skip_test_and_init()) return true; // Uses the existing helper
+
+    ProcessedDataChunk* text_chunk = create_string_chunk("text_buff002", "some text");
+
+    // Create a very long phrase. Overhead: {"phrase": "", "offsets": []} is 28 chars.
+    // Target length for phrase_data_raw to potentially overflow RESULT_BUFFER_SIZE (8192)
+    // when constructing the phrase object header.
+    // Fixed JSON parts for phrase header: `{"phrase": "` (11) + `", "offsets": [` (15) = 26 chars.
+    // Remaining for escaped phrase: RESULT_BUFFER_SIZE - 26 - 1 (for null).
+    // Let's aim for a phrase that, after escaping (if any), fills this.
+    // Using simple characters 'A' which don't escape.
+    size_t phrase_len = RESULT_BUFFER_SIZE - 26 - 5; // Make it slightly less to ensure header fits but not much else
+    if (phrase_len <= 0 || phrase_len >= RESULT_BUFFER_SIZE) { // Safety for small RESULT_BUFFER_SIZE in some test setup
+        phrase_len = 500; // A reasonably long phrase if calculation is off
+    }
+
+    char* long_phrase_data = (char*)malloc(phrase_len + 1);
+    assert(long_phrase_data != NULL);
+    memset(long_phrase_data, 'A', phrase_len);
+    long_phrase_data[phrase_len] = '\0'; // Null terminate
+
+    ProcessedDataChunk* phrase_chunk = create_string_chunk("phrases_buff002", long_phrase_data);
+    free(long_phrase_data); // create_string_chunk duplicates it
+
+    AvxSearchParams params = {
+        .text_to_search = text_chunk,
+        .phrases_to_find = phrase_chunk,
+        .case_sensitive = true,
+        .find_all_occurrences = true,
+        .max_hits_per_doc = 0
+    };
+    ProcessedDataChunk wrapper_chunk = {.data = &params, .length = sizeof(params), .data_type = CHUNK_TYPE_OPAQUE_PARAMS, .source_id = strdup("wrapper_buff002")};
+
+    printf("    (TC-BUFF-002 Note: Testing with very long phrase name. RESULT_BUFFER_SIZE in plugin is %d. Phrase length: %zu. Expecting minimal valid JSON if header overflows.)\n", RESULT_BUFFER_SIZE, phrase_len);
+    ProcessedDataChunk* result = avx512_process_data(&wrapper_chunk);
+    avx512_shutdown();
+
+    bool pass = false;
+    // Expected: Plugin detects header won't fit, jumps to finalize_json, produces {"search_results": []}
+    const char* expected_json = "{\"search_results\": []}";
+    if (result && result->data) {
+        if (strcmp((char*)result->data, expected_json) == 0) {
+            pass = true;
+        } else {
+            fprintf(stderr, "\n    TC-BUFF-002: Expected JSON: %s\n    Actual JSON  : %s\n", expected_json, (char*)result->data);
+        }
+    } else {
+        // If RESULT_BUFFER_SIZE is extremely small (e.g. < 20), even "{"search_results": []}" might not fit.
+        // In such a case, result might be NULL or result->data might be NULL if strdup fails for a tiny buffer.
+        // The plugin's avx512_process_data has a check:
+        // `if (required_len_initial + 1 >= RESULT_BUFFER_SIZE)` which could lead to NULL return.
+        // Let's check if RESULT_BUFFER_SIZE is very small.
+        if (RESULT_BUFFER_SIZE < strlen(expected_json) + 1) {
+             if (result == NULL || result->data == NULL) {
+                printf("    TC-BUFF-002: Result is NULL or data is NULL, which is acceptable for very small RESULT_BUFFER_SIZE (%d).\n", RESULT_BUFFER_SIZE);
+                pass = true; // Acceptable if buffer is too small for minimal JSON
+             } else {
+                fprintf(stderr, "\n    TC-BUFF-002: Expected NULL or NULL data for tiny buffer, got: %s\n", (char*)result->data);
+             }
+        } else {
+            fprintf(stderr, "\n    TC-BUFF-002: Result or result->data was NULL. Expected minimal JSON.\n");
+        }
+    }
+
+    free_chunk(text_chunk);
+    free_chunk(phrase_chunk);
+    if(wrapper_chunk.source_id) free(wrapper_chunk.source_id);
+    free_chunk(result);
+    return pass;
+}
+
 // TC-NULL-003: params->text_to_search is NULL
 bool test_null_param_text_to_search() {
     if (should_skip_test_and_init()) return true;
@@ -1278,6 +1357,7 @@ int main() {
     RUN_TEST(test_json_all_special_chars);
 
     RUN_TEST(test_buff_many_small_matches); // TC-BUFF-001 (conceptual)
+    RUN_TEST(test_buff_long_phrase_header_overflow); // TC-BUFF-002
 
     printf("---------------------------------------------\n");
     printf("Tests finished. %d/%d tests passed.\n", tests_passed, tests_run);
