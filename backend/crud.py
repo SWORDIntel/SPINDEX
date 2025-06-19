@@ -1,8 +1,22 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import asc # Add asc for ordering
-from backend import models, database # Import SQLAlchemy model and Pydantic schema
+from backend import models, database # Import SQLAlchemy model
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+import uuid # For index_id default if needed, though Pydantic model should provide it
+
+# Attempt to import Pydantic model, handle potential circularity if this file grows
+try:
+    from backend.main import IndexMetadata as IndexMetadataPydantic
+    from backend.main import QueryHistoryItem as QueryHistoryItemPydantic
+    # QueryRequest is part of QueryHistoryItemPydantic, so direct import might not be needed here
+    # from backend.main import QueryRequest as QueryRequestPydantic
+except ImportError:
+    # This is a fallback. In a real scenario, restructure to avoid circular deps,
+    # or use a more generic Dict[str, Any] for creation if Pydantic model not available at this point.
+    # For this subtask, we assume direct import is fine or will be resolved by overall structure.
+    IndexMetadataPydantic = Dict[str, Any] # Placeholder if import fails
+    QueryHistoryItemPydantic = Dict[str, Any] # Placeholder if import fails
 
 # CRUD operations for IngestionJobDB
 
@@ -113,6 +127,55 @@ def remove_ingestion_job(db: Session, job_id: str) -> bool:
         return True
     return False
 
+# CRUD operations for QueryHistoryDB
+
+def create_query_history_item(db: Session, history_item_pydantic: QueryHistoryItemPydantic) -> models.QueryHistoryDB:
+    """
+    Creates a new query history record in the database.
+    Relies on QueryHistoryItemPydantic for structure, including converting
+    its 'request_data' (which is a QueryRequest Pydantic model) to a dict.
+    """
+    request_data_dict = {}
+    if isinstance(history_item_pydantic, dict): # Fallback if Pydantic import failed
+        request_data_dict = history_item_pydantic.get("request_data", {})
+        user_id = history_item_pydantic.get("user_id", "unknown_user") # Should be provided
+        query_id_val = history_item_pydantic.get("query_id") or str(uuid.uuid4())
+        timestamp_val = history_item_pydantic.get("timestamp") or datetime.utcnow()
+    else: # Assuming history_item_pydantic is the actual Pydantic model
+        request_data_dict = history_item_pydantic.request_data.dict()
+        user_id = history_item_pydantic.user_id
+        query_id_val = history_item_pydantic.query_id
+        timestamp_val = history_item_pydantic.timestamp
+
+    db_history_item = models.QueryHistoryDB(
+        query_id=query_id_val,
+        timestamp=timestamp_val,
+        user_id=user_id,
+        request_data=request_data_dict
+    )
+    db.add(db_history_item)
+    db.commit()
+    db.refresh(db_history_item)
+    return db_history_item
+
+def get_query_history_item(db: Session, query_id: str) -> Optional[models.QueryHistoryDB]:
+    """
+    Retrieves a single query history record by its query_id.
+    """
+    return db.query(models.QueryHistoryDB).filter(models.QueryHistoryDB.query_id == query_id).first()
+
+def get_query_history_for_user(db: Session, user_id: str, skip: int = 0, limit: int = 100) -> List[models.QueryHistoryDB]:
+    """
+    Retrieves a list of query history records for a specific user_id, with pagination.
+    Orders by timestamp descending.
+    """
+    return db.query(models.QueryHistoryDB)\
+             .filter(models.QueryHistoryDB.user_id == user_id)\
+             .order_by(models.QueryHistoryDB.timestamp.desc())\
+             .offset(skip)\
+             .limit(limit)\
+             .all()
+
 def create_job_outbox_event(db: Session, event_data: Dict[str, Any]) -> models.JobOutbox:
     db_event = models.JobOutbox(
         job_id=event_data.get("job_id"),
@@ -161,3 +224,86 @@ def get_job_status(db: Session, job_id: str) -> Optional[str]:
     return None
 
 # Add other CRUD functions as needed for other models (IndexMetadataDB, QueryHistoryDB) later.
+
+# CRUD operations for IndexMetadataDB
+
+def create_index_metadata(db: Session, metadata_pydantic: IndexMetadataPydantic) -> models.IndexMetadataDB:
+    """
+    Creates a new index metadata record in the database.
+    Relies on the Pydantic model `IndexMetadataPydantic` to provide necessary fields,
+    including those with default factories (like index_id, created_at) or simple defaults.
+    """
+    # Ensure metadata_pydantic is not the placeholder Dict if import failed and we need specific fields
+    if isinstance(metadata_pydantic, dict):
+        # This block is for the placeholder scenario where IndexMetadataPydantic import might fail.
+        # In a properly structured app, IndexMetadataPydantic would be a Pydantic model.
+        db_metadata_item = models.IndexMetadataDB(
+            index_id=metadata_pydantic.get("index_id") or str(uuid.uuid4()), # Generate if not provided
+            index_name=metadata_pydantic["index_name"], # Required
+            index_type=metadata_pydantic["index_type"], # Required
+            promoted_data_path=metadata_pydantic["promoted_data_path"], # Required
+            version=metadata_pydantic.get("version", 1),
+            status=metadata_pydantic.get("status", "creating"),
+            created_at=metadata_pydantic.get("created_at") or datetime.utcnow(), # Generate if not provided
+            updated_at=metadata_pydantic.get("updated_at"), # Can be None
+            celery_task_id=metadata_pydantic.get("celery_task_id")
+        )
+    else: # Assumes metadata_pydantic is the actual Pydantic model instance
+        db_metadata_item = models.IndexMetadataDB(
+            index_id=metadata_pydantic.index_id, # Relies on Pydantic default_factory
+            index_name=metadata_pydantic.index_name,
+            index_type=metadata_pydantic.index_type,
+            promoted_data_path=metadata_pydantic.promoted_data_path,
+            version=metadata_pydantic.version, # Relies on Pydantic default
+            status=metadata_pydantic.status,   # Relies on Pydantic default
+            created_at=metadata_pydantic.created_at, # Relies on Pydantic default_factory
+            updated_at=metadata_pydantic.updated_at, # Can be None initially
+            celery_task_id=metadata_pydantic.celery_task_id
+        )
+    db.add(db_metadata_item)
+    db.commit()
+    db.refresh(db_metadata_item)
+    return db_metadata_item
+
+def get_index_metadata(db: Session, index_id: str) -> Optional[models.IndexMetadataDB]:
+    """
+    Retrieves a single index metadata record by its index_id.
+    """
+    return db.query(models.IndexMetadataDB).filter(models.IndexMetadataDB.index_id == index_id).first()
+
+def get_all_index_metadata(db: Session, skip: int = 0, limit: int = 100) -> List[models.IndexMetadataDB]:
+    """
+    Retrieves a list of index metadata records, with pagination.
+    Orders by creation date descending.
+    """
+    return db.query(models.IndexMetadataDB).order_by(models.IndexMetadataDB.created_at.desc()).offset(skip).limit(limit).all()
+
+def update_index_metadata(db: Session, index_id: str, update_data: Dict[str, Any]) -> Optional[models.IndexMetadataDB]:
+    """
+    Updates an existing index metadata record.
+    'updated_at' is handled automatically by the SQLAlchemy model's onupdate.
+    """
+    db_metadata = get_index_metadata(db, index_id)
+    if db_metadata:
+        for key, value in update_data.items():
+            if hasattr(db_metadata, key):
+                setattr(db_metadata, key, value)
+            else:
+                # Optionally log a warning for keys not found, or raise an error
+                print(f"Warning: Field '{key}' not found in IndexMetadataDB model during update.")
+        # db_metadata.updated_at = datetime.utcnow() # Not needed due to onupdate in model
+        db.commit()
+        db.refresh(db_metadata)
+    return db_metadata
+
+def delete_index_metadata(db: Session, index_id: str) -> bool:
+    """
+    Deletes an index metadata record by its index_id.
+    Returns True if deletion was successful, False otherwise.
+    """
+    db_metadata = get_index_metadata(db, index_id)
+    if db_metadata:
+        db.delete(db_metadata)
+        db.commit()
+        return True
+    return False

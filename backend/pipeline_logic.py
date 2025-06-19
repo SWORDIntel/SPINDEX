@@ -4,7 +4,7 @@ import json
 import logging
 import time # For geocoding time.sleep
 from datetime import datetime
-import shutil # Not directly used in the moved logic, but often useful with file paths
+import shutil # Now used for promotion
 import copy
 from collections import defaultdict
 from typing import List, Dict, Any, Optional
@@ -24,6 +24,8 @@ from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceErro
 
 # --- Constants (moved or redefined from main.py) ---
 PROCESSED_AREA_PATH = os.getenv("PROCESSED_AREA_PATH", "processed_area") # Make configurable like others
+TRUSTED_AREA_PATH = os.getenv("TRUSTED_AREA_PATH", "trusted_data_area") # Changed default name slightly for clarity
+os.makedirs(TRUSTED_AREA_PATH, exist_ok=True)
 TARGET_CRS_EPSG = 4326
 NOMINATIM_USER_AGENT = "spindex-aegis-pipeline/0.1 (developer.contact@example.org)" # Consider making this part of a config object
 
@@ -453,7 +455,74 @@ def execute_aegis_pipeline(job_id: str, db: Session, logger_instance: logging.Lo
             job.pipeline_stages_executed_log = current_log; db.commit()
             return False # Potentially not critical, depends on requirements
 
+    # --- Data Promotion Stage ---
+    if job.processing_status == "completed_complex_geometry":
+        logger_instance.info(f"Starting data promotion for job {job_id}")
+        job.processing_status = "PROCESSING_PROMOTION"
+        module_start_time = datetime.utcnow()
+        current_log = list(job.pipeline_stages_executed_log or [])
+        current_log.append({
+            "timestamp": module_start_time.isoformat(),
+            "stage": "Data Promotion",
+            "status": "started",
+            "message": "Initiated data promotion to trusted area."
+        })
+        job.pipeline_stages_executed_log = current_log
+        db.commit()
+
+        if not job.intermediate_geojson_path or not os.path.isfile(job.intermediate_geojson_path):
+            error_message = f"Intermediate GeoJSON path '{job.intermediate_geojson_path}' not found or not a file for job {job_id}."
+            logger_instance.error(error_message)
+            job.processing_status = "FAILED_PROMOTION"
+            current_log = list(job.pipeline_stages_executed_log or [])
+            current_log.append({
+                "timestamp": datetime.utcnow().isoformat(),
+                "stage": "Data Promotion",
+                "status": "failed",
+                "message": error_message,
+                "details": {"reason": "Intermediate file missing or invalid"}
+            })
+            job.pipeline_stages_executed_log = current_log
+            db.commit()
+        else:
+            try:
+                original_filename_base = os.path.splitext(job.original_filename or f"job_{job_id}")[0]
+                promoted_filename = f"{original_filename_base}_promoted.geojson"
+                destination_path = os.path.join(TRUSTED_AREA_PATH, promoted_filename)
+
+                shutil.move(job.intermediate_geojson_path, destination_path)
+
+                job.location_of_promoted_data = destination_path
+                job.promotion_timestamp = datetime.utcnow()
+                job.processing_status = "PROMOTED"
+                success_message = f"Data successfully promoted to: {destination_path}"
+                logger_instance.info(success_message)
+                current_log = list(job.pipeline_stages_executed_log or [])
+                current_log.append({
+                    "timestamp": job.promotion_timestamp.isoformat(),
+                    "stage": "Data Promotion",
+                    "status": "success",
+                    "message": success_message,
+                    "details": {"destination_path": destination_path}
+                })
+                job.pipeline_stages_executed_log = current_log
+                db.commit()
+            except Exception as e_promote:
+                error_message = f"Exception during data promotion for job {job_id}: {e_promote}"
+                logger_instance.error(error_message)
+                job.processing_status = "FAILED_PROMOTION"
+                current_log = list(job.pipeline_stages_executed_log or [])
+                current_log.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "stage": "Data Promotion",
+                    "status": "failed",
+                    "message": error_message,
+                    "details": {"exception": str(e_promote)}
+                })
+                job.pipeline_stages_executed_log = current_log
+                db.commit()
+
     logger_instance.info(f"Pipeline execution finished for job_id: {job_id} with status {job.processing_status}")
-    # Final check: if any "failed_" status was set, overall success is False.
-    # Otherwise, if it reached a "completed_" state for the last executed step, it's True.
-    return not job.processing_status.startswith("failed_")
+    # Final check: if any "failed_" status was set (including FAILED_PROMOTION), overall success is False.
+    # Otherwise, if it reached a "completed_" or "PROMOTED" state, it's True.
+    return not job.processing_status.startswith("failed_") and not job.processing_status.startswith("FAILED_")
