@@ -25,22 +25,36 @@ The test harness allows for loading a specified OpenVINO model, running inferenc
 
 ## 3. Compiling the Test Harness
 
-Navigate to the root directory of the SPINDEX project.
-Ensure the OpenVINO environment is set up (source `setupvars.sh`).
-Run the following make command:
+The test harness is built as part of the main SPINDEX CMake project.
 
 ```bash
-make build/test_openvino_classifier_hw
-```
+# Ensure OpenVINO environment is set up (source setupvars.sh from your OpenVINO installation)
+# Example: source /opt/intel/openvino_2023/setupvars.sh
 
-This command will compile the test harness executable and place it at `build/test_openvino_classifier_hw`. It will also compile the `openvino_classifier.so` plugin if it hasn't been built already, as the harness loads it dynamically.
+# Navigate to the SPINDEX project root directory.
+mkdir -p build
+cd build
+cmake .. # Add -DOpenVINO_DIR=/path/to/openvino if not found automatically
+cmake --build . -j$(nproc || echo 2) # Or your preferred build tool like make/ninja
+cd .. # Return to project root for running
+```
+This command should produce:
+- The test executable at `./build/bin/test_openvino_classifier_hw`.
+- The required plugin at `./build/lib/openvino_classifier.so`.
 
 ## 4. Running the Test Harness
 
 Execute the compiled test harness from the SPINDEX root directory with the following command-line arguments:
 
 ```bash
-./build/test_openvino_classifier_hw <model_xml_path> <input_tensor_data_path> <device_name>
+# Ensure OpenVINO vars are sourced first!
+source /opt/intel/openvino_2023/setupvars.sh # Adjust to actual path
+
+# Ensure you are running this command from the SPINDEX project root directory.
+./build/bin/test_openvino_classifier_hw \
+    models/my_distilbert_fp16.xml \
+    test_data/openvino_sample_input/sample1_int64_seq128.bin \
+    AUTO
 ```
 
 **Arguments:**
@@ -54,16 +68,7 @@ Execute the compiled test harness from the SPINDEX root directory with the follo
     *   `NPU`: Explicitly targets the Neural Processing Unit.
 
 **Example:**
-
-```bash
-# Ensure OpenVINO vars are sourced first!
-source /opt/intel/openvino_2023/setupvars.sh
-
-./build/test_openvino_classifier_hw \
-    ./models/my_distilbert_fp16.xml \
-    ./test_data/openvino_sample_input/sample1_int64_seq128.bin \
-    AUTO
-```
+(The command above serves as the primary example)
 
 ## 5. Interpreting Output
 
