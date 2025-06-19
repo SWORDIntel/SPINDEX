@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import signal # For graceful shutdown
+import shutil # Added for DLQ
+from datetime import datetime # Added for DLQ (ensure direct import)
 
 import nats
 from nats.errors import ConnectionClosedError, TimeoutError as NatsTimeoutError, NoServersError
@@ -12,6 +14,7 @@ from nats.errors import ConnectionClosedError, TimeoutError as NatsTimeoutError,
 from backend.database import SessionLocal # For creating DB sessions in the worker
 from backend.pipeline_logic import execute_aegis_pipeline # The refactored pipeline logic
 from backend.crud import get_job_status # For idempotency checks
+from backend.models import IngestionJobDB # Added for DLQ querying
 
 # --- Configuration ---
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
@@ -124,17 +127,113 @@ async def run_worker():
                             if processing_success:
                                 await msg.ack()
                                 logger.info(f"WORKER: Message for job {job_id} acknowledged after successful pipeline execution.")
-                            else:
-                                # Pipeline returned False, implying it handled its own error state and DB update.
-                                # Or an exception occurred during run_in_executor but before pipeline_logic could set a terminal state.
-                                final_job_status_after_failure = get_job_status(db_session_inner_loop, job_id)
-                                logger.warning(f"WORKER: Pipeline execution indicated failure for job {job_id}. Final DB status: '{final_job_status_after_failure}'.")
-                                if final_job_status_after_failure and any(state_fragment in final_job_status_after_failure for state_fragment in ["FAILED", "QUARANTINED", "COMPLETED"]):
-                                    await msg.ack() # Pipeline set a terminal state
-                                    logger.info(f"WORKER: Message for job {job_id} ACKed as pipeline set terminal status '{final_job_status_after_failure}'.")
+                            else: # processing_success is False
+                                logger.warning(f"WORKER: Pipeline execution failed or indicated failure for job {job_id}.")
+                                job_for_quarantine = db_session_inner_loop.query(IngestionJobDB).filter(IngestionJobDB.job_id == job_id).first()
+
+                                final_status_for_ack_check = ""
+
+                                if job_for_quarantine:
+                                    final_status_for_ack_check = job_for_quarantine.processing_status # Status set by pipeline_logic
+
+                                    # Check if job is already in a state that should not be quarantined (e.g. already completed by another worker)
+                                    # The idempotency check at the start should ideally prevent reprocessing of successfully completed jobs.
+                                    # This check here is a safeguard.
+                                    successful_terminal_states = ["COMPLETED", "PROMOTED"] # Add any other valid success states
+                                    is_already_successfully_terminal = any(job_for_quarantine.processing_status.startswith(s) for s in successful_terminal_states)
+
+                                    if not is_already_successfully_terminal and job_for_quarantine.processing_status != "QUARANTINED":
+                                        logger.info(f"WORKER: Initiating quarantine process for job {job_id} with current status '{job_for_quarantine.processing_status}'.")
+
+                                        QUARANTINE_BASE_PATH = os.getenv("QUARANTINE_AREA_PATH", "quarantined_data") # Default path
+                                        os.makedirs(QUARANTINE_BASE_PATH, exist_ok=True)
+
+                                        quarantined_file_path = None
+                                        original_staged_file_path = job_for_quarantine.staged_file_path
+
+                                        if original_staged_file_path and os.path.exists(original_staged_file_path):
+                                            try:
+                                                original_filename = os.path.basename(original_staged_file_path)
+                                                job_quarantine_dir = os.path.join(QUARANTINE_BASE_PATH, job_id)
+                                                os.makedirs(job_quarantine_dir, exist_ok=True)
+
+                                                destination_path = os.path.join(job_quarantine_dir, original_filename)
+
+                                                # Handle potential filename collision in quarantine
+                                                counter = 0
+                                                base, ext = os.path.splitext(destination_path)
+                                                while os.path.exists(destination_path):
+                                                    counter += 1
+                                                    destination_path = f"{base}_{counter}{ext}"
+
+                                                shutil.move(original_staged_file_path, destination_path)
+                                                quarantined_file_path = destination_path
+                                                logger.info(f"WORKER: Moved staged file from {original_staged_file_path} to quarantine: {quarantined_file_path}")
+
+                                                # Optionally move/copy intermediate GeoJSON
+                                                if job_for_quarantine.intermediate_geojson_path and os.path.exists(job_for_quarantine.intermediate_geojson_path):
+                                                    intermediate_filename = os.path.basename(job_for_quarantine.intermediate_geojson_path)
+                                                    intermediate_dest_path = os.path.join(job_quarantine_dir, intermediate_filename)
+                                                    # Add unique handling for this too if needed
+                                                    shutil.copy(job_for_quarantine.intermediate_geojson_path, intermediate_dest_path)
+                                                    logger.info(f"WORKER: Copied intermediate GeoJSON from {job_for_quarantine.intermediate_geojson_path} to quarantine dir: {intermediate_dest_path}")
+
+                                            except Exception as e_move:
+                                                logger.error(f"WORKER: Failed to move file to quarantine for job {job_id}: {e_move}", exc_info=True)
+                                                error_summary_key = "quarantine_error_file_move"
+                                                if job_for_quarantine.validation_summary and isinstance(job_for_quarantine.validation_summary, dict):
+                                                    job_for_quarantine.validation_summary[error_summary_key] = f"Failed to move file: {str(e_move)}"
+                                                else:
+                                                    job_for_quarantine.validation_summary = {error_summary_key: f"Failed to move file: {str(e_move)}"}
+                                        else:
+                                            logger.warning(f"WORKER: Staged file path for job {job_id} ('{original_staged_file_path}') does not exist. Cannot move to quarantine.")
+                                            if job_for_quarantine.validation_summary and isinstance(job_for_quarantine.validation_summary, dict):
+                                                 job_for_quarantine.validation_summary["quarantine_info"] = "Original staged file not found for move."
+                                            else:
+                                                 job_for_quarantine.validation_summary = {"quarantine_info": "Original staged file not found for move."}
+
+
+                                        # Update DB record
+                                        job_for_quarantine.processing_status = "QUARANTINED"
+                                        job_for_quarantine.location_of_quarantined_data = quarantined_file_path
+                                        job_for_quarantine.quarantine_timestamp = datetime.utcnow()
+
+                                        current_log = list(job_for_quarantine.pipeline_stages_executed_log or [])
+                                        current_log.append({
+                                            "timestamp": job_for_quarantine.quarantine_timestamp.isoformat(),
+                                            "stage": "Quarantine",
+                                            "status": "processed",
+                                            "message": f"Job data moved/marked for quarantine due to pipeline failure. Original failure details in previous log entries and validation_summary.",
+                                            "details": {"quarantined_original_path": quarantined_file_path}
+                                        })
+                                        job_for_quarantine.pipeline_stages_executed_log = current_log
+
+                                        try:
+                                            db_session_inner_loop.commit()
+                                            logger.info(f"WORKER: Job {job_id} successfully marked as QUARANTINED in DB.")
+                                            final_status_for_ack_check = "QUARANTINED" # Update status for ACK check
+                                        except Exception as e_db_commit:
+                                            logger.error(f"WORKER: Failed to commit quarantine status for job {job_id} to DB: {e_db_commit}", exc_info=True)
+                                            db_session_inner_loop.rollback()
+                                            final_status_for_ack_check = job_for_quarantine.processing_status # Status before failed commit
+                                            # Message will not be ACKed due to failed commit, leading to NATS redelivery.
+                                    else:
+                                        # Already successfully terminal or already quarantined
+                                        logger.info(f"WORKER: Job {job_id} not quarantined. Current status '{job_for_quarantine.processing_status}' is already successfully terminal or quarantined.")
+                                        final_status_for_ack_check = job_for_quarantine.processing_status
+
+                                else: # Job not found in DB, though idempotency check should have caught this.
+                                    logger.error(f"WORKER: Job {job_id} not found in database when attempting to quarantine. Cannot proceed with quarantine.")
+                                    final_status_for_ack_check = "ERROR_JOB_NOT_FOUND_FOR_QUARANTINE"
+                                    # This case is problematic, message might be ACKed if status implies terminal for ACK logic, or not.
+
+                                # ACK logic based on the final status after attempting quarantine
+                                terminal_statuses_for_ack = ["FAILED", "QUARANTINED", "COMPLETED"] # Add any specific "failed_" or "completed_" if necessary
+                                if final_status_for_ack_check and any(state_fragment in final_status_for_ack_check for state_fragment in terminal_statuses_for_ack):
+                                    await msg.ack()
+                                    logger.info(f"WORKER: Message for job {job_id} ACKed as pipeline processing led to terminal status '{final_status_for_ack_check}'.")
                                 else:
-                                    logger.warning(f"WORKER: Job {job_id} pipeline processing failed but status '{final_job_status_after_failure}' is not terminal. Message will NOT be ACKed for NATS redelivery.")
-                                    # Consider NAK for more control: await msg.nak(delay=60)
+                                    logger.warning(f"WORKER: Job {job_id} processing failed and resulting status '{final_status_for_ack_check}' is not considered terminal for ACK. Message will NOT be ACKed for NATS redelivery.")
 
                         except json.JSONDecodeError:
                             logger.error(f"WORKER: Failed to decode JSON from message: {msg.data.decode() if msg else 'N/A'}")
