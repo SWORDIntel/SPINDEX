@@ -490,7 +490,6 @@ async def get_my_query_history(
     )
     return user_query_history
 
-
 # --- Main Application Runner ---
 if __name__ == "__main__":
     import uvicorn

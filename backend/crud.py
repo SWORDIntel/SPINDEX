@@ -255,7 +255,7 @@ def create_index_metadata(db: Session, metadata_pydantic: IndexMetadataPydantic)
             index_type=metadata_pydantic.index_type,
             promoted_data_path=metadata_pydantic.promoted_data_path,
             version=metadata_pydantic.version, # Relies on Pydantic default
-            status=metadata_pydantic.status,    # Relies on Pydantic default
+            status=metadata_pydantic.status,     # Relies on Pydantic default
             created_at=metadata_pydantic.created_at, # Relies on Pydantic default_factory
             updated_at=metadata_pydantic.updated_at, # Can be None initially
             celery_task_id=metadata_pydantic.celery_task_id
