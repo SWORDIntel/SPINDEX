@@ -1,83 +1,72 @@
-# SPINDEX/plugins/CMakeLists.txt
+file(GLOB CORE_SOURCES "*.c")
+list(FILTER CORE_SOURCES EXCLUDE REGEX "main\\.c")
+list(FILTER CORE_SOURCES EXCLUDE REGEX "test_.*\\.c")
 
-# Add subdirectories for different categories of plugins
-add_subdirectory(dummy_plugin)
-add_subdirectory(preprocessors)
-add_subdirectory(parsers)
-add_subdirectory(indexers)
-add_subdirectory(analyzers)
-add_subdirectory(classifiers)
-add_subdirectory(search_algorithms)
-add_subdirectory(decompressors)
+add_library(spindex_core STATIC ${CORE_SOURCES})
 
-# Note: AEGIS modules are in a separate directory (plugins/aegis_modules)
-# and already handled by the top-level SPINDEX/CMakeLists.txt.
-# Other plugin types can be added here if/when they are migrated.
-
-# --- Plugin Staging for Core Tests ---
-set(CORE_TEST_PLUGIN_STAGING_DIR ${PROJECT_BINARY_DIR}/plugins_for_test)
-
-# List all plugin library targets that should be staged.
-# These names must match the add_library() names for each plugin.
-set(ALL_PLUGIN_LIBRARY_TARGETS
-    dummy_plugin
-    json_preprocessor
-    txt_preprocessor
-    csv_preprocessor
-    doc_preprocessor
-    xls_preprocessor
-    pdf_preprocessor
-    rtf_preprocessor
-    dic_preprocessor
-    sqlite_preprocessor
-    json_parser
-    txt_parser
-    csv_parser
-    doc_parser
-    xls_parser
-    pdf_parser
-    rtf_parser
-    dic_parser
-    sqlite_parser
-    elasticsearch_indexer
-    content_analyzer
-    openvino_classifier
-    avx512_phrase_search
-    # Add new decompressor plugins
-    gzip_decompressor
-    zip_decompressor
-    zstd_decompressor
+target_link_libraries(spindex_core PUBLIC
+    Threads::Threads
+    libcurl::libcurl    # Conan-provided target for libcurl
+    Jansson::jansson    # Conan-provided target for Jansson
+    GEOS::geos          # Conan-provided target for GEOS
 )
 
-# Create a custom target that will be responsible for staging these plugins.
-# Core tests that need these plugins will depend on this target.
-add_custom_target(stage_all_plugins_for_core_tests
-    COMMENT "Staging all relevant plugins to ${CORE_TEST_PLUGIN_STAGING_DIR}"
+add_executable(spindex_app main.c)
+target_link_libraries(spindex_app PRIVATE spindex_core spindex_aegis)
+
+# Add tests
+set(CORE_TEST_SOURCES
+    test_config_manager.c
+    test_plugin_loader.c
+    test_logger.c
+    test_hardware_detection.c
+    test_elasticsearch_client.c
 )
 
-# Command to create the staging directory.
-# This command is part of the 'stage_all_plugins_for_core_tests' target's execution.
-add_custom_command(
-    TARGET stage_all_plugins_for_core_tests
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CORE_TEST_PLUGIN_STAGING_DIR}
-    COMMENT "Creating plugin staging directory: ${CORE_TEST_PLUGIN_STAGING_DIR}"
-    VERBATIM
-)
-
-# For each plugin library, make 'stage_all_plugins_for_core_tests' depend on it,
-# and add a command to copy the plugin to the staging directory.
-foreach(plugin_lib_target ${ALL_PLUGIN_LIBRARY_TARGETS})
-    # Ensure the plugin library is built before attempting to stage it.
-    add_dependencies(stage_all_plugins_for_core_tests ${plugin_lib_target})
-
-    # Add a command to copy the built plugin library to the staging directory.
-    # This command is also part of the 'stage_all_plugins_for_core_tests' target's execution.
-    add_custom_command(
-        TARGET stage_all_plugins_for_core_tests
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:${plugin_lib_target}>
-                ${CORE_TEST_PLUGIN_STAGING_DIR}/$<TARGET_FILE_NAME:${plugin_lib_target}>
-        COMMENT "Staging $<TARGET_FILE_NAME:${plugin_lib_target}> to ${CORE_TEST_PLUGIN_STAGING_DIR}"
-        VERBATIM
-    )
+foreach(test_source ${CORE_TEST_SOURCES})
+    get_filename_component(test_name ${test_source} NAME_WE)
+    add_executable(${test_name} ${test_source})
+    target_link_libraries(${test_name} PRIVATE spindex_core)
+    # Enable testing for each test executable
+    add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()
+
+# Test ingestion pipeline
+add_executable(test_ingestion_pipeline test_ingestion_pipeline.c)
+target_link_libraries(test_ingestion_pipeline PRIVATE spindex_core spindex_aegis)
+add_dependencies(test_ingestion_pipeline stage_all_plugins_for_core_tests)
+add_test(NAME test_ingestion_pipeline COMMAND test_ingestion_pipeline WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
+
+# Test Elasticsearch indexing
+add_executable(test_elasticsearch_indexing test_elasticsearch_indexing.c)
+target_link_libraries(test_elasticsearch_indexing PRIVATE spindex_core spindex_aegis)
+add_dependencies(test_elasticsearch_indexing stage_all_plugins_for_core_tests)
+add_test(NAME test_elasticsearch_indexing COMMAND test_elasticsearch_indexing WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
+
+# --- AEGIS Module Tests ---
+# These tests use source files from core/ (e.g., test_complex_geometry_handler.c)
+# but test functionalities from plugins/aegis_modules/ (e.g., complex_geometry_handler.c).
+# The aegis_modules are compiled into the spindex_aegis static library.
+# These tests also depend on utilities from spindex_core.
+
+# Test for complex_geometry_handler
+# Source: core/test_complex_geometry_handler.c
+add_executable(test_complex_geometry_handler test_complex_geometry_handler.c)
+target_link_libraries(test_complex_geometry_handler PRIVATE spindex_core spindex_aegis)
+add_test(NAME test_complex_geometry_handler COMMAND test_complex_geometry_handler)
+
+# Test for nlp_ner_parser
+# Source: core/test_nlp_ner_parser.c
+add_executable(test_nlp_ner_parser test_nlp_ner_parser.c)
+# spindex_aegis PUBLICly links Jansson::jansson, so this test should inherit it.
+# Adding Jansson::jansson explicitly if test code directly uses Jansson API.
+target_link_libraries(test_nlp_ner_parser PRIVATE spindex_core spindex_aegis Jansson::jansson)
+add_test(NAME test_nlp_ner_parser COMMAND test_nlp_ner_parser)
+
+# Test for geometric_validator
+# Source: core/test_geometric_validator.c
+add_executable(test_geometric_validator test_geometric_validator.c)
+# spindex_aegis PUBLICly links GEOS::geos, so this test should inherit it.
+# Adding GEOS::geos explicitly if test code directly uses GEOS API.
+target_link_libraries(test_geometric_validator PRIVATE spindex_core spindex_aegis GEOS::geos)
+add_test(NAME test_geometric_validator COMMAND test_geometric_validator)
