@@ -306,4 +306,4 @@ def delete_index_metadata(db: Session, index_id: str) -> bool:
         db.delete(db_metadata)
         db.commit()
         return True
-    return False
+
