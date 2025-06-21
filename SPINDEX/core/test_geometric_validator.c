@@ -196,10 +196,92 @@ static void test_validation_disabled() {
     printf("test_validation_disabled: PASSED\n");
 }
 
+static void test_invalid_linestring() {
+    printf("Running test: test_invalid_linestring...\n");
+    GeometricValidatorConfig val_cfg_no_repair = { .enabled = 1, .enable_repair = 0 };
+    GeometricValidatorConfig val_cfg_with_repair = { .enabled = 1, .enable_repair = 1 }; // Repair might not fix this
+    json_t* output_json = NULL;
+    GeometryValidationResultStatus status;
+
+    // Invalid LineString (only one point)
+    const char* one_point_line_str = "{\"type\": \"LineString\", \"coordinates\": [[0,0]]}";
+    json_t* one_point_line_json = parse_json_string(one_point_line_str);
+
+    // Test 1: No repair
+    status = validate_and_repair_geometry(one_point_line_json, &val_cfg_no_repair, &output_json);
+    assert(status == GEOMETRY_STATUS_INVALID);
+    assert(output_json == one_point_line_json); // No repair, output is input
+
+    // Test 2: With repair
+    // Repair for a single-point LineString might result in an empty geometry or still be invalid.
+    // GEOS behavior can vary. Let's assume it remains invalid or becomes empty (which is also invalid in some contexts or becomes NULL).
+    json_t* one_point_line_json_for_repair = parse_json_string(one_point_line_str);
+    status = validate_and_repair_geometry(one_point_line_json_for_repair, &val_cfg_with_repair, &output_json);
+
+    // Expect it to be invalid, or repaired to something still considered problematic (e.g. empty geometry from buffer(0))
+    // or GEOS might convert it to a Point. For this test, we'll assert it's not 'valid' in the simple sense.
+    // If GEOS buffer(0) on a single point line string results in an empty geometry, then the output_json might be NULL
+    // or an empty GeometryCollection. If it results in a Point, then it would be REPAIRED_VALID.
+    // For now, let's check if it's not trivially valid as a LineString.
+    // A more robust check would inspect output_json's type if status is REPAIRED_VALID.
+    // Given GEOS_ এটিকে একটি বিন্দুতে রূপান্তর করতে পারে, আমরা REPAIRED_VALID আশা করতে পারি
+    // Let's assume it might get repaired to a Point.
+    if (status == GEOMETRY_STATUS_REPAIRED_VALID) {
+        assert(output_json != NULL);
+        assert(output_json != one_point_line_json_for_repair);
+        json_t* type_val = json_object_get(output_json, "type");
+        assert(type_val != NULL && strcmp(json_string_value(type_val), "Point") == 0); // Repaired to a Point
+        json_decref(output_json);
+    } else {
+         assert(status == GEOMETRY_STATUS_INVALID || status == GEOMETRY_STATUS_REPAIRED_EMPTY_OR_INVALID); // Or some other invalid/empty status
+         if(output_json && output_json != one_point_line_json_for_repair) json_decref(output_json);
+    }
+
+
+    json_decref(one_point_line_json);
+    json_decref(one_point_line_json_for_repair);
+    printf("test_invalid_linestring: PASSED\n");
+}
+
+static void test_malformed_geojson_input() {
+    printf("Running test: test_malformed_geojson_input...\n");
+    GeometricValidatorConfig val_cfg = { .enabled = 1, .enable_repair = 0 };
+    json_t* output_json = NULL;
+    GeometryValidationResultStatus status;
+
+    // Malformed GeoJSON: Missing "type" field
+    const char* missing_type_str = "{\"coordinates\": [10, 20]}";
+    json_t* missing_type_json = parse_json_string(missing_type_str); // parse_json_string itself will load it, but it's not GeoJSON
+
+    status = validate_and_repair_geometry(missing_type_json, &val_cfg, &output_json);
+    assert(status == GEOMETRY_STATUS_ERROR_INPUT_FORMAT);
+    assert(output_json == missing_type_json); // Output should be the input object
+    json_decref(missing_type_json);
+
+    // Malformed GeoJSON: Missing "coordinates" field for a Point
+    const char* missing_coords_str = "{\"type\": \"Point\"}";
+    json_t* missing_coords_json = parse_json_string(missing_coords_str);
+
+    status = validate_and_repair_geometry(missing_coords_json, &val_cfg, &output_json);
+    assert(status == GEOMETRY_STATUS_ERROR_INPUT_FORMAT);
+    assert(output_json == missing_coords_json);
+    json_decref(missing_coords_json);
+
+    // Malformed GeoJSON: "coordinates" is not an array for Point
+    const char* invalid_coords_str = "{\"type\": \"Point\", \"coordinates\": \"not-an-array\"}";
+    json_t* invalid_coords_json = parse_json_string(invalid_coords_str);
+
+    status = validate_and_repair_geometry(invalid_coords_json, &val_cfg, &output_json);
+    assert(status == GEOMETRY_STATUS_ERROR_INPUT_FORMAT);
+    assert(output_json == invalid_coords_json);
+    json_decref(invalid_coords_json);
+
+
+    printf("test_malformed_geojson_input: PASSED\n");
+}
+
 // TODO: Add more tests:
-// - Invalid LineString (e.g. one point)
 // - Invalid Polygon (unclosed, wrong orientation if GEOS cares without buffer(0))
-// - Malformed GeoJSON input (e.g. missing "type" or "coordinates") -> GEOMETRY_STATUS_ERROR_INPUT_FORMAT
 // - Test repair failures (geometries that buffer(0) can't fix or makes empty)
 
 int main() {
@@ -217,6 +299,8 @@ int main() {
     test_valid_geometries();
     test_invalid_polygon_self_intersecting();
     test_validation_disabled();
+    test_invalid_linestring();
+    test_malformed_geojson_input();
     // Add calls to more tests here
 
     printf("All Geometric Validator tests completed.\n");

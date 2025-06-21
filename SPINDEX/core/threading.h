@@ -28,8 +28,10 @@ typedef struct TaskQueue {
     Task* head;
     Task* tail;
     pthread_mutex_t lock;
-    pthread_cond_t not_empty;
+    pthread_cond_t not_empty; // Signaled when a task is added
+    pthread_cond_t not_full;  // Signaled when a task is removed (if queue was full)
     int count;
+    size_t max_size;          // Maximum number of tasks in the queue (0 for unbounded)
 } TaskQueue;
 
 // Thread pool structure
@@ -47,11 +49,12 @@ typedef struct ThreadPool {
  *
  * @param pool Pointer to the ThreadPool structure.
  * @param num_threads Number of worker threads to create.
+ * @param max_queue_size Maximum number of tasks allowed in the queue. 0 for unbounded.
  * @return 0 on success, -1 on error.
  */
 // REVIEW: If some threads are created successfully but others fail, the function correctly cleans up by joining created threads and freeing resources before returning an error. The single error code indicates overall pool initialization failure.
 // REVIEW: Error handling for memory allocation and pthread_create is implemented, including cleanup of successfully created resources on partial failure.
-int thread_pool_init(ThreadPool* pool, size_t num_threads);
+int thread_pool_init(ThreadPool* pool, size_t num_threads, size_t max_queue_size);
 
 /**
  * @brief Submits a task to the thread pool.
@@ -86,9 +89,10 @@ int thread_pool_destroy(ThreadPool* pool);
 
 // Task Queue utility functions (optional, can be static in .c)
 // REVIEW: These are good helper functions. If they are only used by threading.c, making them static is appropriate for encapsulation. (This comment seems to refer to the .c file, these are declarations)
-// NOTE: Initializes mutex and condition variable for the queue.
-int task_queue_init(TaskQueue* queue);
-void task_queue_push(TaskQueue* queue, Task* task);
+// NOTE: Initializes mutex and condition variables for the queue.
+int task_queue_init(TaskQueue* queue, size_t max_size);
+// Pushes a task. Assumes queue->lock is held. Returns 0 on success, -1 if pool is shutting down during wait.
+int task_queue_push(TaskQueue* queue, Task* task, ThreadPool* pool);
 // NOTE: This task_queue_pop is a general utility for the TaskQueue.
 // The internal worker threads use a non-blocking variant combined with condition variables.
 // This function will block until a task is available.
