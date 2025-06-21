@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h> // For isspace
 
 #include "plugin_interface.h"
 #include "data_types.h"
@@ -12,6 +13,28 @@
 static const char* G_PLUGIN_NAME = "CSVParser";
 static const char* G_PLUGIN_VERSION = "0.1.0";
 static const char* G_PLUGIN_DESCRIPTION = "Parses CSV data into a JSON array of objects.";
+
+// Helper function to trim leading/trailing whitespace from a string (modifies the string in place)
+static char* trim_whitespace_inplace(char *str) {
+    if (!str) return NULL;
+    char *end;
+
+    // Trim leading space
+    while (isspace((unsigned char)*str)) str++;
+
+    if (*str == 0) // All spaces?
+        return str;
+
+    // Trim trailing space
+    end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end)) end--;
+
+    // Write new null terminator
+    *(end + 1) = 0;
+
+    return str;
+}
+
 
 // Basic JSON string escaping
 static char* escape_json_string_csv(const char* input) {
@@ -123,9 +146,10 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
                 free(csv_data_copy); return NULL;
             }
             headers = temp_headers;
-            headers[header_count] = strdup(token); // TODO: trim whitespace from header token
+            char* trimmed_token = trim_whitespace_inplace(token);
+            headers[header_count] = strdup(trimmed_token);
             if (!headers[header_count]) {
-                 LOG_ERROR("[%s] Failed to strdup header token.", G_PLUGIN_NAME);
+                 LOG_ERROR("[%s] Failed to strdup trimmed header token.", G_PLUGIN_NAME);
                  if (headers) { for(int i=0; i<header_count; ++i) free(headers[i]); /* headers[header_count] was not set */ free(headers); }
                  free(csv_data_copy); return NULL;
             }

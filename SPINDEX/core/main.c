@@ -13,16 +13,16 @@
 #define MAIN_LOG_LEVEL LOG_LEVEL_INFO // Define desired log level for main
 
 int main(int argc, char *argv[]) {
-    // Initialize logger
-    char default_log_path[256] = "spindex_app.log"; // Default if not in config
-    // TODO: Consider making log path and level configurable via SpindexConfig
-    spindex_log_init(default_log_path, MAIN_LOG_LEVEL);
+    // Initialize logger to stderr first for early messages.
+    // Log level MAIN_LOG_LEVEL is defined in this file.
+    spindex_log_init(NULL, MAIN_LOG_LEVEL); // NULL path logs to stdout/stderr by default
 
-    LOG_INFO("Spindex Application Starting...");
+    LOG_INFO("Spindex Application Starting (pre-config logging)...");
 
     if (argc != 2) {
         LOG_ERROR("Usage: %s <config_file_path>", argv[0]);
         fprintf(stderr, "Usage: %s <config_file_path>\n", argv[0]);
+        spindex_log_shutdown();
         return EXIT_FAILURE;
     }
     const char *config_file_path = argv[1];
@@ -30,24 +30,31 @@ int main(int argc, char *argv[]) {
 
     // 1. Initialize and Load Configuration
     SpindexConfig config;
+    // Initialize config with zeros or specific invalid markers if necessary
+    // For example, ensure string paths are empty or pointers are NULL before set_default_config
+    memset(&config, 0, sizeof(SpindexConfig));
     set_default_config(&config); // Apply defaults first
 
-    // Potentially override default log path if specified in config and logger can be re-init or takes path from config struct
-    // For now, we use a default log path set above.
-    // If config.log_file_path is populated by set_default_config or parse_config_file, logger could use it.
-    // Example: spindex_logger_init(config.log_file_path, config.log_level); (after parsing)
-
+    // Parse the configuration file
     if (parse_config_file(config_file_path, &config) != 0) {
         LOG_ERROR("Failed to parse configuration file: %s. Exiting.", config_file_path);
-        // spindex_logger_cleanup(); // If logger needs explicit cleanup
+        free_config_resources(&config); // Free any defaults that might have been strdup'd
+        spindex_log_shutdown();
         return EXIT_FAILURE;
     }
+
+    // Re-initialize the logger with settings from the configuration file.
+    // The spindex_log_init function handles closing the previous log file (stderr in this case)
+    // and opening the new one.
+    spindex_log_init(config.log_file_path, config.log_level);
+    LOG_INFO("Logging re-initialized from configuration: path='%s', level=%d", config.log_file_path, config.log_level);
+    // The original TODO for configurable log path/level is now addressed.
+
     LOG_INFO("Configuration loaded successfully.");
-    if (MAIN_LOG_LEVEL <= LOG_LEVEL_DEBUG) { // Only print if debug or lower
+    // Print config only if log level from config allows (or use a fixed level for this debug output)
+    if (config.log_level >= LOG_LEVEL_DEBUG) {
         print_config(&config);
     }
-    // Apply log level from config if it's different and logger supports dynamic level changes
-    // For now, assume initial log level is fine.
 
     // 2. Load Plugins
     SpindexPlugin *loaded_plugins = NULL;

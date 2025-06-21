@@ -153,6 +153,28 @@ static void test_split_strategy() {
     remove(input_filename);
     remove(output_filename);
 
+    // Test with an empty GeometryCollection
+    const char* geojson_content_empty_gc = "{ \"type\": \"FeatureCollection\", \"features\": [ { \"type\": \"Feature\", \"geometry\": { \"type\": \"GeometryCollection\", \"geometries\": [] }, \"properties\": {\"prop0\": \"value0\"} } ] }";
+    assert(create_temp_file(input_filename, geojson_content_empty_gc));
+    status = process_complex_geometries(input_filename, output_filename, &cfg, temp_dir);
+    assert(status == AEGIS_PROCESSING_SUCCESS); // Should succeed, but result in zero features from this one
+    output_content = read_file_to_string(output_filename);
+    assert(output_content != NULL);
+    root = json_loads(output_content, 0, &error);
+    assert(root != NULL);
+    features = json_object_get(root, "features");
+    assert(json_is_array(features));
+    // Depending on implementation: could be 0 features if the GC was the only one,
+    // or the original feature is removed and nothing replaces it.
+    // Current code in complex_geometry_handler.c iterates geometries in GC. If empty, it won't add any new features
+    // and the original feature with GC is removed by `json_array_remove(features, i)`.
+    // So, if this was the only feature, features array should be empty.
+    assert(json_array_size(features) == 0);
+    json_decref(root);
+    free(output_content);
+    remove(input_filename);
+    remove(output_filename);
+
 
     printf("test_split_strategy: PASSED\n");
 }
@@ -268,6 +290,32 @@ static void test_filter_strategy() {
     printf("test_filter_strategy: PASSED\n");
 }
 
+static void test_malformed_json() {
+    printf("Running test: test_malformed_json...\n");
+    ComplexGeometryHandlerConfig cfg = { .strategy = STRATEGY_SPLIT }; // Strategy doesn't matter much here
+    const char* input_filename = "test_malformed_input.json";
+    char output_filename[256];
+    snprintf(output_filename, sizeof(output_filename), "test_malformed_output.json");
+    const char* temp_dir = ".";
+
+    // Malformed JSON content (e.g., missing closing brace)
+    const char* malformed_json_content = "{ \"type\": \"FeatureCollection\", \"features\": [ { \"type\": \"Feature\", \"geometry\": { \"type\": \"Point\", \"coordinates\": [102.0, 0.5] } "; // Missing "}]}"
+    assert(create_temp_file(input_filename, malformed_json_content));
+
+    AEGIS_PROCESSING_STATUS status = process_complex_geometries(input_filename, output_filename, &cfg, temp_dir);
+    // Depending on where the JSON parsing happens (inside process_complex_geometries or before),
+    // the status code might vary. Assuming it's handled inside.
+    // A common error code for this scenario would be related to file I/O or parse error.
+    // Based on current complex_geometry_handler.c, it uses load_json_from_file which returns NULL on error.
+    // The function then returns AEGIS_PROCESSING_ERROR_FILE_IO_OR_JSON_PARSE.
+    assert(status == AEGIS_PROCESSING_ERROR_FILE_IO_OR_JSON_PARSE);
+
+    remove(input_filename);
+    // Output file might not be created or could be empty/incomplete
+    remove(output_filename); // Attempt to remove, ignore error if it doesn't exist
+
+    printf("test_malformed_json: PASSED\n");
+}
 
 int main() {
     // Initialize anything global if necessary (e.g. logger)
@@ -279,6 +327,7 @@ int main() {
     test_split_strategy();
     test_reject_strategy();
     test_filter_strategy();
+    test_malformed_json();
     // TODO: Add more tests (edge cases, malformed JSON, etc.)
 
     printf("All Complex Geometry Handler tests completed.\n");
