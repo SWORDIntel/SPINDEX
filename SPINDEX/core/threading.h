@@ -29,7 +29,9 @@ typedef struct TaskQueue {
     Task* tail;
     pthread_mutex_t lock;
     pthread_cond_t not_empty;
+    pthread_cond_t not_full; // Condition variable for when the queue is not full
     int count;
+    int max_size; // Maximum number of tasks in the queue
 } TaskQueue;
 
 // Thread pool structure

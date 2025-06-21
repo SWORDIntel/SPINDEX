@@ -7,7 +7,7 @@ from backend.models import QueryHistoryDB # For direct DB checks
 # Pydantic models are in main.py
 from backend.main import QueryHistoryItem as QueryHistoryItemPydantic
 from backend.main import QueryRequest as QueryRequestPydantic
-from backend.main import SECURE_PLACEHOLDER_TOKEN_ADMIN, SECURE_PLACEHOLDER_TOKEN_ANALYST # Using admin and another user for basic isolation check
+from backend.main import TOKEN_ADMIN, TOKEN_ANALYST # Using admin and another user for basic isolation check
 
 # Helper to get auth headers
 def user_auth_headers(token: str) -> Dict[str, str]:
@@ -30,14 +30,14 @@ def test_create_query_history_item_success(client: TestClient, db_session_overri
     response = client.post(
         "/users/me/query_history",
         json=sample_query_request_1,
-        headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ADMIN)
+        headers=user_auth_headers(TOKEN_ADMIN)
     )
     assert response.status_code == 201
     data = response.json()
 
     # Validate response structure against QueryHistoryItemPydantic
     assert "query_id" in data
-    assert data["user_id"] == "admin" # Based on SECURE_PLACEHOLDER_TOKEN_ADMIN mapping
+    assert data["user_id"] == "admin" # Based on TOKEN_ADMIN mapping
     assert data["request_data"]["index_id"] == sample_query_request_1["index_id"]
     assert data["request_data"]["query_type"] == sample_query_request_1["query_type"]
     assert "timestamp" in data
@@ -53,21 +53,21 @@ def test_create_query_history_item_invalid_payload(client: TestClient):
     response = client.post(
         "/users/me/query_history",
         json=invalid_query_request,
-        headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ADMIN)
+        headers=user_auth_headers(TOKEN_ADMIN)
     )
     assert response.status_code == 422 # Unprocessable Entity
 
 def test_get_my_query_history_empty(client: TestClient):
-    response = client.get("/users/me/query_history", headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ADMIN))
+    response = client.get("/users/me/query_history", headers=user_auth_headers(TOKEN_ADMIN))
     assert response.status_code == 200
     assert response.json() == []
 
 def test_get_my_query_history_with_items(client: TestClient, db_session_override: SQLAlchemySession):
     # Create some history items for admin user
-    client.post("/users/me/query_history", json=sample_query_request_1, headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ADMIN))
-    client.post("/users/me/query_history", json=sample_query_request_2, headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ADMIN))
+    client.post("/users/me/query_history", json=sample_query_request_1, headers=user_auth_headers(TOKEN_ADMIN))
+    client.post("/users/me/query_history", json=sample_query_request_2, headers=user_auth_headers(TOKEN_ADMIN))
 
-    response = client.get("/users/me/query_history", headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ADMIN))
+    response = client.get("/users/me/query_history", headers=user_auth_headers(TOKEN_ADMIN))
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 2
@@ -79,14 +79,14 @@ def test_get_my_query_history_with_items(client: TestClient, db_session_override
 
 def test_get_my_query_history_pagination(client: TestClient):
     # Create 3 items for admin
-    client.post("/users/me/query_history", json=sample_query_request_1, headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ADMIN))
-    client.post("/users/me/query_history", json=sample_query_request_2, headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ADMIN))
+    client.post("/users/me/query_history", json=sample_query_request_1, headers=user_auth_headers(TOKEN_ADMIN))
+    client.post("/users/me/query_history", json=sample_query_request_2, headers=user_auth_headers(TOKEN_ADMIN))
     # Create a third one to check ordering and limit
     third_query_request = {"index_id": "some_index_uuid_3", "query_type": "term", "parameters": {"field": "tag", "value": "new"}}
-    client.post("/users/me/query_history", json=third_query_request, headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ADMIN))
+    client.post("/users/me/query_history", json=third_query_request, headers=user_auth_headers(TOKEN_ADMIN))
 
     # Get 2 items, skipping 0
-    response_limit_2 = client.get("/users/me/query_history?limit=2", headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ADMIN))
+    response_limit_2 = client.get("/users/me/query_history?limit=2", headers=user_auth_headers(TOKEN_ADMIN))
     assert response_limit_2.status_code == 200
     data_limit_2 = response_limit_2.json()
     assert len(data_limit_2) == 2
@@ -94,7 +94,7 @@ def test_get_my_query_history_pagination(client: TestClient):
     assert data_limit_2[1]["request_data"]["index_id"] == sample_query_request_2["index_id"]
 
     # Get 1 item, skipping 1
-    response_skip_1_limit_1 = client.get("/users/me/query_history?skip=1&limit=1", headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ADMIN))
+    response_skip_1_limit_1 = client.get("/users/me/query_history?skip=1&limit=1", headers=user_auth_headers(TOKEN_ADMIN))
     assert response_skip_1_limit_1.status_code == 200
     data_skip_1_limit_1 = response_skip_1_limit_1.json()
     assert len(data_skip_1_limit_1) == 1
@@ -102,13 +102,13 @@ def test_get_my_query_history_pagination(client: TestClient):
 
 def test_get_my_query_history_user_isolation(client: TestClient, db_session_override: SQLAlchemySession):
     # Create item for admin user
-    client.post("/users/me/query_history", json=sample_query_request_1, headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ADMIN))
+    client.post("/users/me/query_history", json=sample_query_request_1, headers=user_auth_headers(TOKEN_ADMIN))
 
     # Create item for analyst user
-    client.post("/users/me/query_history", json=sample_query_request_2, headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ANALYST))
+    client.post("/users/me/query_history", json=sample_query_request_2, headers=user_auth_headers(TOKEN_ANALYST))
 
     # Check admin's history
-    response_admin = client.get("/users/me/query_history", headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ADMIN))
+    response_admin = client.get("/users/me/query_history", headers=user_auth_headers(TOKEN_ADMIN))
     assert response_admin.status_code == 200
     data_admin = response_admin.json()
     assert len(data_admin) == 1
@@ -116,7 +116,7 @@ def test_get_my_query_history_user_isolation(client: TestClient, db_session_over
     assert data_admin[0]["request_data"]["index_id"] == sample_query_request_1["index_id"]
 
     # Check analyst's history
-    response_analyst = client.get("/users/me/query_history", headers=user_auth_headers(SECURE_PLACEHOLDER_TOKEN_ANALYST))
+    response_analyst = client.get("/users/me/query_history", headers=user_auth_headers(TOKEN_ANALYST))
     assert response_analyst.status_code == 200
     data_analyst = response_analyst.json()
     assert len(data_analyst) == 1

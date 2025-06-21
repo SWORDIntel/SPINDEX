@@ -39,7 +39,7 @@ int load_complex_geometry_handler_config(const Config* config, ComplexGeometryHa
 
 // Helper function to process a single feature (conceptual)
 static AEGIS_PROCESSING_STATUS process_feature(json_t* feature, const ComplexGeometryHandlerConfig* config, json_t* output_features_array) {
-    // TODO: Implement logic based on design:
+    // Logic based on design:
     // 1. Get geometry type from feature.
     // 2. If GeometryCollection:
     //    - STRATEGY_SPLIT: Iterate geometries, create new features, add to output_features_array.

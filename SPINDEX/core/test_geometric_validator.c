@@ -196,10 +196,46 @@ static void test_validation_disabled() {
     printf("test_validation_disabled: PASSED\n");
 }
 
+static void test_invalid_linestring_one_point() {
+    printf("Running test: test_invalid_linestring_one_point...\n");
+    GeometricValidatorConfig val_cfg_no_repair = { .enabled = 1, .enable_repair = 0 };
+    json_t* output_json = NULL;
+    GeometryValidationResultStatus status;
+
+    // Invalid LineString (only one point)
+    const char* line_one_point_str = "{\"type\": \"LineString\", \"coordinates\": [[0,0]]}";
+    json_t* line_one_point_json = parse_json_string(line_one_point_str);
+
+    status = validate_and_repair_geometry(line_one_point_json, &val_cfg_no_repair, &output_json);
+    assert(status == GEOMETRY_STATUS_INVALID); // GEOS considers a 1-point LineString invalid
+    assert(output_json == line_one_point_json);
+    json_decref(line_one_point_json);
+
+    printf("test_invalid_linestring_one_point: PASSED\n");
+}
+
+static void test_malformed_geojson_missing_type() {
+    printf("Running test: test_malformed_geojson_missing_type...\n");
+    GeometricValidatorConfig val_cfg = { .enabled = 1, .enable_repair = 0 };
+    json_t* output_json = NULL;
+    GeometryValidationResultStatus status;
+
+    // Malformed GeoJSON (missing "type" field)
+    const char* malformed_str = "{\"coordinates\": [10, 20]}";
+    json_t* malformed_json = parse_json_string(malformed_str); // Jansson will parse it
+
+    status = validate_and_repair_geometry(malformed_json, &val_cfg, &output_json);
+    // This should fail in the geojson_to_geos conversion phase
+    assert(status == GEOMETRY_STATUS_ERROR_INPUT_FORMAT);
+    assert(output_json == NULL); // No output JSON should be set on format error
+    json_decref(malformed_json);
+
+    printf("test_malformed_geojson_missing_type: PASSED\n");
+}
+
+
 // TODO: Add more tests:
-// - Invalid LineString (e.g. one point)
 // - Invalid Polygon (unclosed, wrong orientation if GEOS cares without buffer(0))
-// - Malformed GeoJSON input (e.g. missing "type" or "coordinates") -> GEOMETRY_STATUS_ERROR_INPUT_FORMAT
 // - Test repair failures (geometries that buffer(0) can't fix or makes empty)
 
 int main() {
@@ -217,6 +253,8 @@ int main() {
     test_valid_geometries();
     test_invalid_polygon_self_intersecting();
     test_validation_disabled();
+    test_invalid_linestring_one_point();
+    test_malformed_geojson_missing_type();
     // Add calls to more tests here
 
     printf("All Geometric Validator tests completed.\n");

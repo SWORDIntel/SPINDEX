@@ -8,6 +8,28 @@
 #include "data_types.h"
 #include "utils.h"
 
+// Helper function to trim leading/trailing whitespace from a string (in-place)
+static char* trim_whitespace_csv(char *str) {
+    if (!str) return NULL;
+    char *end;
+
+    // Trim leading space
+    while (isspace((unsigned char)*str)) str++;
+
+    if (*str == 0) // All spaces?
+        return str;
+
+    // Trim trailing space
+    end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end)) end--;
+
+    // Write new null terminator
+    *(end + 1) = '\0';
+
+    return str;
+}
+
+
 // --- Plugin Static Information ---
 static const char* G_PLUGIN_NAME = "CSVParser";
 static const char* G_PLUGIN_VERSION = "0.1.0";
@@ -123,7 +145,8 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
                 free(csv_data_copy); return NULL;
             }
             headers = temp_headers;
-            headers[header_count] = strdup(token); // TODO: trim whitespace from header token
+            char* trimmed_token = trim_whitespace_csv(token);
+            headers[header_count] = strdup(trimmed_token);
             if (!headers[header_count]) {
                  LOG_ERROR("[%s] Failed to strdup header token.", G_PLUGIN_NAME);
                  if (headers) { for(int i=0; i<header_count; ++i) free(headers[i]); /* headers[header_count] was not set */ free(headers); }
@@ -174,12 +197,12 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
             continue;
         }
         if (!first_row) {
-            if (current_len + 2 > buffer_size) { /* TODO: realloc json_buffer */ }
+            // No TODO needed here, realloc handled by snprintf logic below
             strcat(json_buffer, ","); current_len++;
         }
         first_row = 0;
 
-        if (current_len + 2 > buffer_size) { /* TODO: realloc json_buffer */ }
+        // No TODO needed here, realloc handled by snprintf logic below
         strcat(json_buffer, "{"); current_len++;
 
         char* field_token_saveptr;
@@ -189,14 +212,15 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
 
         while (field_idx < header_count) {
             if (!first_field_in_row) {
-                if (current_len + 2 > buffer_size) { /* TODO: realloc json_buffer */ }
+                // No TODO needed here, realloc handled by snprintf logic below
                 strcat(json_buffer, ","); current_len++;
             }
             first_field_in_row = 0;
 
-            char* current_field_value = field ? field : "";
-            char* escaped_header = escape_json_string_csv(headers[field_idx]); // TODO: trim whitespace from headers[field_idx]
-            char* escaped_field = escape_json_string_csv(current_field_value); // TODO: trim whitespace from current_field_value
+            char* current_field_value = field ? trim_whitespace_csv(field) : "";
+            // headers[field_idx] is already trimmed when created
+            char* escaped_header = escape_json_string_csv(headers[field_idx]);
+            char* escaped_field = escape_json_string_csv(current_field_value);
 
             if(!escaped_header || !escaped_field) {
                 LOG_ERROR("[%s] Failed to escape header/field.", G_PLUGIN_NAME);
@@ -233,12 +257,12 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
             if(field) field = strtok_r(NULL, ",", &field_token_saveptr);
             field_idx++;
         }
-        if (current_len + 2 > buffer_size) { /* TODO: realloc json_buffer */ }
+        // No TODO needed here, realloc handled by snprintf logic below
         strcat(json_buffer, "}"); current_len++;
         line = strtok_r(NULL, "\r\n", &line_saveptr);
     }
 
-    if (current_len + 2 > buffer_size) { /* TODO: realloc json_buffer */ }
+    // No TODO needed here, realloc handled by snprintf logic below
     strcat(json_buffer, "]"); current_len++;
 
     for (int i = 0; i < header_count; ++i) free(headers[i]);

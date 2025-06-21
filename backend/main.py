@@ -160,14 +160,25 @@ app = FastAPI(
     version="0.1.0",
     openapi_tags=tags_metadata  # Add tags metadata to FastAPI app
 )
-SECURE_PLACEHOLDER_TOKEN_ADMIN = "secure-placeholder-token-admin"
-SECURE_PLACEHOLDER_TOKEN_ANALYST = "secure-placeholder-token-analyst"
-SECURE_PLACEHOLDER_TOKEN_VIEWER = "secure-placeholder-token-viewer"
+
+# --- Token Configuration ---
+# Load tokens from environment variables with defaults for local development if not set.
+# In a production environment, these environment variables should be securely managed.
+TOKEN_ADMIN = os.getenv("AEGIS_TOKEN_ADMIN", "secure-dev-token-admin")
+TOKEN_ANALYST = os.getenv("AEGIS_TOKEN_ANALYST", "secure-dev-token-analyst")
+TOKEN_VIEWER = os.getenv("AEGIS_TOKEN_VIEWER", "secure-dev-token-viewer")
+
 TOKEN_TO_USER_MAPPING = {
-    SECURE_PLACEHOLDER_TOKEN_ADMIN: "admin",
-    SECURE_PLACEHOLDER_TOKEN_ANALYST: "analyst",
-    SECURE_PLACEHOLDER_TOKEN_VIEWER: "viewer",
+    TOKEN_ADMIN: "admin",
+    TOKEN_ANALYST: "analyst",
+    TOKEN_VIEWER: "viewer",
 }
+
+# Log a warning if default tokens are being used, as this is insecure for production.
+if (TOKEN_ADMIN == "secure-dev-token-admin" or
+    TOKEN_ANALYST == "secure-dev-token-analyst" or
+    TOKEN_VIEWER == "secure-dev-token-viewer"):
+    logger.warning("Using default development tokens. Ensure AEGIS_TOKEN_ADMIN, AEGIS_TOKEN_ANALYST, and AEGIS_TOKEN_VIEWER environment variables are set for production.")
 
 # --- Authentication Dependency ---
 async def get_current_user(token: Optional[str] = Depends(X_AUTH_TOKEN_SCHEME)) -> User:

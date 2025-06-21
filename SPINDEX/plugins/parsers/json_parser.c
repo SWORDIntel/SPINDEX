@@ -93,7 +93,7 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk *input_
 
     output_chunk->data = (void*)new_data;
     output_chunk->length = new_data_len;
-    output_chunk->data_type = CHUNK_TYPE_PARSED_JSON_PLACEHOLDER;
+    output_chunk->data_type = CHUNK_TYPE_STRUCTURED_DATA;
 
     output_chunk->source_id = NULL;
     if (input_chunk->source_id) {

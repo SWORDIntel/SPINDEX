@@ -18,29 +18,46 @@ int task_queue_init(TaskQueue* queue) {
     queue->head = NULL;
     queue->tail = NULL;
     queue->count = 0;
+    queue->max_size = 100; // Default max size, can be configured
     if (pthread_mutex_init(&queue->lock, NULL) != 0) {
         LOG_ERROR("task_queue_init: Failed to initialize mutex.");
         return -1;
     }
     if (pthread_cond_init(&queue->not_empty, NULL) != 0) {
-        LOG_ERROR("task_queue_init: Failed to initialize condition variable.");
-        pthread_mutex_destroy(&queue->lock); // Clean up successfully initialized mutex.
+        LOG_ERROR("task_queue_init: Failed to initialize not_empty condition variable.");
+        pthread_mutex_destroy(&queue->lock);
         return -1;
     }
-    LOG_DEBUG("Task queue initialized.");
+    if (pthread_cond_init(&queue->not_full, NULL) != 0) {
+        LOG_ERROR("task_queue_init: Failed to initialize not_full condition variable.");
+        pthread_mutex_destroy(&queue->lock);
+        pthread_cond_destroy(&queue->not_empty);
+        return -1;
+    }
+    LOG_DEBUG("Task queue initialized with max_size: %d", queue->max_size);
     return 0;
 }
 
-void task_queue_push(TaskQueue* queue, Task* task) {
+// Pushes a task to the queue. Blocks if the queue is full.
+// Returns 0 on success, -1 if queue or task is NULL, or if interrupted during wait (if shutdown implemented here)
+int task_queue_push(TaskQueue* queue, Task* task) {
     if (!queue || !task) {
         LOG_ERROR("task_queue_push: Queue or Task pointer is NULL.");
         if(task) free(task); // Prevent memory leak if task was allocated and queue is NULL.
-        return;
+        return -1;
     }
 
-    task->next = NULL; // Ensure the new task's next pointer is NULL
+    task->next = NULL;
 
     pthread_mutex_lock(&queue->lock);
+    while (queue->count >= queue->max_size) {
+        // Add a check for shutdown if this push operation needs to be interruptible
+        // For now, it blocks indefinitely until space is available or error.
+        LOG_DEBUG("Task queue is full (count: %d, max: %d). Waiting for space...", queue->count, queue->max_size);
+        pthread_cond_wait(&queue->not_full, &queue->lock);
+        // After waking, re-check condition (e.g. if multiple threads were waiting for space)
+    }
+
     if (queue->tail == NULL) { // Queue is empty
         queue->head = task;
         queue->tail = task;
@@ -49,9 +66,10 @@ void task_queue_push(TaskQueue* queue, Task* task) {
         queue->tail = task;
     }
     queue->count++;
-    pthread_cond_signal(&queue->not_empty);
+    pthread_cond_signal(&queue->not_empty); // Signal that the queue is no longer empty
     pthread_mutex_unlock(&queue->lock);
-    LOG_DEBUG("Task pushed to queue.");
+    LOG_DEBUG("Task pushed to queue. Count: %d", queue->count);
+    return 0;
 }
 
 // This function is a general utility for blocking pop.
@@ -72,17 +90,19 @@ Task* task_queue_pop(TaskQueue* queue) {
     Task* task = NULL;
     // This state check is a safeguard; count == 0 should imply head is NULL.
     if (queue->count > 0 && queue->head == NULL) {
-        LOG_ERROR("task_queue_pop: Inconsistent queue state (count > 0 but head is NULL).");
-    } else if (queue->head != NULL) {
-        task = queue->head;
-        queue->head = queue->head->next;
-        if (queue->head == NULL) {
-            queue->tail = NULL;
+            LOG_ERROR("task_queue_pop: Inconsistent queue state (count > 0 but head is NULL).");
+        } else if (queue->head != NULL) {
+            task = queue->head;
+            queue->head = queue->head->next;
+            if (queue->head == NULL) {
+                queue->tail = NULL;
+            }
+            queue->count--;
+            // Signal that the queue is no longer full, as a task has been removed
+            pthread_cond_signal(&queue->not_full);
         }
-        queue->count--;
-    }
     pthread_mutex_unlock(&queue->lock);
-    // LOG_DEBUG("Task popped from queue via public pop."); // Optional: if verbose logging for this specific function is needed
+    LOG_DEBUG("Task popped from queue via public pop. Count: %d", queue->count);
     return task;
 }
 
@@ -114,7 +134,10 @@ void task_queue_destroy(TaskQueue* queue) {
         LOG_ERROR("task_queue_destroy: Failed to destroy task queue mutex. It might be locked or still in use.");
     }
     if (pthread_cond_destroy(&queue->not_empty) != 0) {
-        LOG_ERROR("task_queue_destroy: Failed to destroy task queue condition variable. A thread might still be waiting.");
+        LOG_ERROR("task_queue_destroy: Failed to destroy not_empty task queue condition variable. A thread might still be waiting.");
+    }
+    if (pthread_cond_destroy(&queue->not_full) != 0) {
+        LOG_ERROR("task_queue_destroy: Failed to destroy not_full task queue condition variable.");
     }
     LOG_DEBUG("Task queue destroyed successfully.");
 }
@@ -191,20 +214,32 @@ int thread_pool_submit(ThreadPool* pool, void (*function)(void*), void* arg) {
 
     new_task->function = function;
     new_task->arg = arg;
-    new_task->next = NULL;
+    // new_task->next is handled by task_queue_push
 
-    if (pool->task_queue.tail == NULL) { // Queue is empty
-        pool->task_queue.head = new_task;
-        pool->task_queue.tail = new_task;
-    } else {
-        pool->task_queue.tail->next = new_task;
-        pool->task_queue.tail = new_task;
-    }
-    pool->task_queue.count++;
-    pthread_cond_signal(&pool->task_queue.not_empty);
+    // Unlock before calling task_queue_push as it takes its own lock.
+    // This is a deviation from the original pattern where task_queue_push was simpler.
+    // The alternative is for task_queue_push to not take a lock, and submit does all locking.
+    // For now, let task_queue_push manage its own locking for blocking on full.
     pthread_mutex_unlock(&pool->task_queue.lock);
 
-    LOG_DEBUG("Task submitted to thread pool.");
+    if (task_queue_push(&pool->task_queue, new_task) != 0) {
+        LOG_ERROR("thread_pool_submit: Failed to push task to queue (it might be full and blocking).");
+        // If task_queue_push fails (e.g. if it were to return error on shutdown), new_task needs freeing.
+        // For now, task_queue_push blocks or succeeds. If it had error returns, handle new_task.
+        // Assuming task_queue_push handles the task's memory if it takes ownership and then errors.
+        // Current task_queue_push doesn't really error out in a way that `new_task` would be leaked by it.
+        // It returns -1 for bad args (checked earlier) or if it were to handle shutdown (not currently).
+        // The main concern is if it returns while `new_task` is still our responsibility.
+        // Given `task_queue_push` blocks until not full, this path implies an issue in `task_queue_push` logic
+        // or an unhandled case like shutdown during wait.
+        // If `task_queue_push` could fail after accepting `new_task` but before queuing, `new_task` must be freed.
+        // However, its current design doesn't show this. It either queues or blocks.
+        // Let's assume if task_queue_push returns error, new_task was not queued.
+        free(new_task); // Free if task_queue_push failed to enqueue it.
+        return -1; // Propagate error
+    }
+
+    LOG_DEBUG("Task submitted to thread pool via task_queue_push.");
     return 0;
 }
 
@@ -278,22 +313,22 @@ static void* worker_thread_main(void* arg) {
 
         task = NULL;
         if (pool->task_queue.head != NULL) {
-            task = actual_pop(&pool->task_queue);
+            task = actual_pop(&pool->task_queue); // This also signals not_full
         }
 
         pthread_mutex_unlock(&pool->task_queue.lock);
 
         if (task) {
             if (task->function) {
-                snprintf(msg, sizeof(msg), "Worker thread %lu executing task.", (unsigned long)pthread_self());
+                snprintf(msg, sizeof(msg), "Worker thread %lu executing task. Queue count after pop: %d",
+                         (unsigned long)pthread_self(), pool->task_queue.count); // Accessing count outside lock is racy for logging, but gives an idea.
                 LOG_DEBUG(msg);
                 task->function(task->arg);
             } else {
                 LOG_ERROR("Worker thread: Popped task has NULL function pointer.");
             }
-            // Task struct is freed by the worker thread after execution.
-            free(task);
-            LOG_DEBUG("Task execution processed and task freed.");
+            free(task); // Task struct is freed by the worker thread after execution.
+            LOG_DEBUG("Task execution processed and task freed by worker %lu.", (unsigned long)pthread_self());
         }
     }
 
@@ -314,5 +349,7 @@ static Task* actual_pop(TaskQueue* q) {
         q->tail = NULL;
     }
     q->count--;
+    // Signal that the queue is no longer full, as a task has been removed
+    pthread_cond_signal(&q->not_full);
     return task;
 }

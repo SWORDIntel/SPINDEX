@@ -279,6 +279,43 @@ int main() {
     test_split_strategy();
     test_reject_strategy();
     test_filter_strategy();
+
+    // Test with empty FeatureCollection
+    const char* geojson_empty_fc = "{ \"type\": \"FeatureCollection\", \"features\": [] }";
+    const char* input_empty_fc = "test_empty_fc_input.json";
+    char output_empty_fc[256];
+    snprintf(output_empty_fc, sizeof(output_empty_fc), "test_empty_fc_output.json");
+    ComplexGeometryHandlerConfig cfg_split = { .strategy = STRATEGY_SPLIT };
+    assert(create_temp_file(input_empty_fc, geojson_empty_fc));
+    AEGIS_PROCESSING_STATUS status_empty_fc = process_complex_geometries(input_empty_fc, output_empty_fc, &cfg_split, ".");
+    assert(status_empty_fc == AEGIS_PROCESSING_SUCCESS);
+    char* output_content_empty_fc = read_file_to_string(output_empty_fc);
+    assert(output_content_empty_fc != NULL);
+    json_error_t error_empty_fc;
+    json_t* root_empty_fc = json_loads(output_content_empty_fc, 0, &error_empty_fc);
+    assert(root_empty_fc != NULL);
+    json_t* features_empty_fc = json_object_get(root_empty_fc, "features");
+    assert(json_is_array(features_empty_fc));
+    assert(json_array_size(features_empty_fc) == 0);
+    json_decref(root_empty_fc);
+    free(output_content_empty_fc);
+    remove(input_empty_fc);
+    remove(output_empty_fc);
+    printf("test_empty_feature_collection: PASSED\n");
+
+    // Test with malformed JSON (not a FeatureCollection)
+    const char* geojson_malformed = "{ \"type\": \"NotAFeatureCollection\" }";
+    const char* input_malformed = "test_malformed_input.json";
+    char output_malformed[256];
+    snprintf(output_malformed, sizeof(output_malformed), "test_malformed_output.json");
+    assert(create_temp_file(input_malformed, geojson_malformed));
+    AEGIS_PROCESSING_STATUS status_malformed = process_complex_geometries(input_malformed, output_malformed, &cfg_split, ".");
+    assert(status_malformed == AEGIS_PROCESSING_ERROR_INVALID_FORMAT); // Expecting an error due to invalid structure
+    remove(input_malformed);
+    // remove(output_malformed); // Output might not be created or be empty
+    printf("test_malformed_json_input: PASSED\n");
+
+
     // TODO: Add more tests (edge cases, malformed JSON, etc.)
 
     printf("All Complex Geometry Handler tests completed.\n");

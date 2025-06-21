@@ -31,7 +31,7 @@ To execute these E2E tests, the following components and conditions must be met:
     *   Redis server (as Celery broker and backend).
     *   Database (SQLite for default setup) accessible and schema initialized/migrated.
 *   **Sample Data Files:** A collection of test files matching the requirements of various test scenarios (see section 4).
-*   **Authentication Tokens:** Valid `X-Auth-Token` values for different user roles (e.g., admin, analyst as per `SECURE_PLACEHOLDER_TOKEN_ADMIN`, `SECURE_PLACEHOLDER_TOKEN_ANALYST` in `backend/main.py`).
+*   **Authentication Tokens:** Valid `X-Auth-Token` values for different user roles. These are now sourced from environment variables `AEGIS_TOKEN_ADMIN`, `AEGIS_TOKEN_ANALYST`, `AEGIS_TOKEN_VIEWER`, or their defaults if not set (e.g., "secure-dev-token-admin").
 *   **Clean Test Environment (Recommended):**
     *   **Database:** For reproducible results, consider resetting the database (e.g., deleting the SQLite `spindex_aegis.db` file and letting Alembic re-initialize it) or clearing relevant job entries before a full test suite run.
     *   **File System:** Clear the `staging_area/` and `processed_area/` directories of any residual files from previous test runs to avoid conflicts or unintended behavior.
@@ -154,12 +154,12 @@ To execute these E2E tests, the following components and conditions must be met:
 
 ### AEGIS-E2E-009: Authorization Failure (Insufficient Permissions)
 *   **Description:** Tests endpoint protection when a user has valid authentication but lacks specific permission for data upload.
-*   **Test Data Requirements:** Any small valid file. A user/token that is valid but does not have the "upload_data" permission. (e.g., if "viewer" role exists and doesn't have this permission, use `SECURE_PLACEHOLDER_TOKEN_VIEWER`).
+*   **Test Data Requirements:** Any small valid file. A user/token that is valid but does not have the "upload_data" permission (e.g., use the token corresponding to `AEGIS_TOKEN_VIEWER` or its default "secure-dev-token-viewer", as the 'viewer' role lacks this permission).
 *   **Test Steps:**
     1.  Attempt to upload the file using `POST /upload/data` with an `X-Auth-Token` for a user who lacks the "upload_data" permission (e.g., viewer token).
 *   **Expected Results:**
     *   Step 1: API returns HTTP status 403 Forbidden. Detail indicates permission denied.
-*   **Verification Points:** API response. (Confirm dummy user roles: `dummy_viewer_role` does not have `upload_data` permission, so this is testable with `SECURE_PLACEHOLDER_TOKEN_VIEWER`).
+*   **Verification Points:** API response. (Confirm dummy user roles: `dummy_viewer_role` does not have `upload_data` permission, so this is testable with the viewer token).
 
 ## 4. Notes on Test Data
 
