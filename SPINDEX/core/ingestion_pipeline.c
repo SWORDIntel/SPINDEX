@@ -186,12 +186,17 @@ int pipeline_init(SpindexIngestionPipeline *pipeline,
     pipeline->active_indexer_plugin = NULL;
     pipeline->active_indexer_plugin_data = NULL;
 
-    size_t num_threads = 4;
-    if (thread_pool_init(&pipeline->thread_pool, num_threads) != 0) {
-        LOG_ERROR("Failed to initialize thread pool for ingestion pipeline.");
+    size_t num_threads = (config->max_concurrent_files > 0) ? (size_t)config->max_concurrent_files : 4; // Use config or default to 4
+    size_t max_queue_size = num_threads * 2; // Default max queue size, e.g., twice the number of threads
+
+    // Check if max_concurrent_files is defined in config, otherwise use a default.
+    LOG_INFO("Configured max_concurrent_files: %d. Using %zu threads for the pool.", config->max_concurrent_files, num_threads);
+
+    if (thread_pool_init(&pipeline->thread_pool, num_threads, max_queue_size) != 0) {
+        LOG_ERROR("Failed to initialize thread pool for ingestion pipeline (threads: %zu, queue_size: %zu).", num_threads, max_queue_size);
         return -1;
     }
-    LOG_INFO("Thread pool initialized successfully with %zu threads.", num_threads);
+    LOG_INFO("Thread pool initialized successfully with %zu threads and max queue size %zu.", num_threads, max_queue_size);
 
     if (pthread_mutex_init(&pipeline->indexer_mutex, NULL) != 0) {
         LOG_ERROR("Failed to initialize indexer mutex.");
@@ -416,9 +421,23 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
 
         if (ner_status == AEGIS_PROCESSING_SUCCESS && num_extracted_locs > 0) {
             LOG_INFO("Thread %lu: NLP/NER extracted %d locations from %s.", thread_id_for_log, num_extracted_locs, file_path);
-            for (int i = 0; i < num_extracted_locs; ++i) {
-                LOG_INFO("Thread %lu: NER Location %d for %s: %s", thread_id_for_log, i + 1, file_path, extracted_locs[i]);
-                // TODO: Call Geocoding Module [AEGIS-007] with extracted_locs[i] or the full list.
+            if (num_extracted_locs > 0) {
+                // Placeholder for Geocoding Module call
+                LOG_INFO("Thread %lu: Extracted locations require geocoding (AEGIS-007). Placeholder active.", thread_id_for_log);
+                for (int i = 0; i < num_extracted_locs; ++i) {
+                    LOG_INFO("Thread %lu: NER Location %d for %s: %s (Geocoding needed).", thread_id_for_log, i + 1, file_path, extracted_locs[i]);
+                    // Example of what a geocoding call might look like:
+                    // GeocodeResult geo_result;
+                    // int geocode_status = geocode_location(extracted_locs[i], &geo_result);
+                    // if (geocode_status == 0) {
+                    //     LOG_INFO("Thread %lu: Geocoded %s to (lat: %f, lon: %f)", thread_id_for_log, extracted_locs[i], geo_result.latitude, geo_result.longitude);
+                    //     // Further processing with geocoded data...
+                    // } else {
+                    //     LOG_WARN("Thread %lu: Failed to geocode location: %s", thread_id_for_log, extracted_locs[i]);
+                    // }
+                }
+                // If processing a full list was intended for the geocoding module:
+                // process_locations_for_geocoding(extracted_locs, num_extracted_locs);
             }
             free_extracted_locations(extracted_locs, num_extracted_locs);
         } else if (ner_status != AEGIS_PROCESSING_SUCCESS && ner_status != AEGIS_PROCESSING_NLP_NER_DISABLED) {

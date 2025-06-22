@@ -31,19 +31,7 @@ static json_t* parse_json_string(const char* json_str) {
 
 static void test_module_init_shutdown() {
     printf("Running test: test_module_init_shutdown...\n");
-    // Shutdown first in case it was initialized by a previous test run (if tests are one executable)
-    // In a typical test suite, each test file might be a separate executable, or setup/teardown fixtures are used.
-    // For this simple structure, call shutdown if geometric_validator_init could be called multiple times.
-    // However, the current design of geometric_validator.c makes init/shutdown idempotent or safe to call multiple times.
-
-    // geometric_validator_shutdown(); // Assuming this is safe if not initialized
-    // assert(geometric_validator_init() == 0); // Should succeed
-    // geometric_validator_shutdown(); // Clean up
-    // assert(geometric_validator_init() == 0); // Re-initialize for other tests
-
-    // The global GEOS context makes this tricky for isolated tests without a fixture framework.
-    // For now, assume main() in the test runner calls init once at start, shutdown once at end.
-    // This test will just verify it can be called.
+    // This test just verifies it can be called. The main test runner handles overall init/shutdown.
     assert(geometric_validator_init() == 0); // If called first time or re-init after shutdown
     printf("test_module_init_shutdown: PASSED (assuming main test runner handles overall init/shutdown)\n");
 }
@@ -94,7 +82,6 @@ static void test_valid_geometries() {
     assert(status == GEOMETRY_STATUS_VALID);
     assert(output_json == point_json); // Should be the same object as no repair
     json_decref(point_json);
-    // output_json does not need decref here as it points to point_json
 
     // Valid LineString
     json_t* line_json = parse_json_string("{\"type\": \"LineString\", \"coordinates\": [[0,0], [1,1], [2,2]]}");
@@ -118,13 +105,11 @@ static void test_valid_geometries() {
     assert(output_json == poly_hole_json);
     json_decref(poly_hole_json);
 
-
     // Valid MultiPoint
     json_t* mpoint_json = parse_json_string("{\"type\": \"MultiPoint\", \"coordinates\": [[0,0], [1,1]]}");
     status = validate_and_repair_geometry(mpoint_json, &val_cfg, &output_json);
     assert(status == GEOMETRY_STATUS_VALID);
     json_decref(mpoint_json);
-
 
     // Valid GeometryCollection (testing if conversion code handles it, GEOS will validate components)
     const char* gc_str = "{\"type\": \"GeometryCollection\", \"geometries\": [ {\"type\": \"Point\", \"coordinates\": [0,0]} ]}";
@@ -132,7 +117,6 @@ static void test_valid_geometries() {
     status = validate_and_repair_geometry(gc_json, &val_cfg, &output_json);
     assert(status == GEOMETRY_STATUS_VALID);
     json_decref(gc_json);
-
 
     printf("test_valid_geometries: PASSED\n");
 }
@@ -154,8 +138,6 @@ static void test_invalid_polygon_self_intersecting() {
     assert(output_json == bowtie_json); // No repair, output is input
 
     // Test 2: With repair
-    // Re-parse as bowtie_json might have been affected if GEOS did in-place checks (unlikely for json_t)
-    // Or simply use a new json_t for this test. For safety, re-parse.
     json_t* bowtie_json_for_repair = parse_json_string(bowtie_str);
     status = validate_and_repair_geometry(bowtie_json_for_repair, &val_cfg_with_repair, &output_json);
 
@@ -164,14 +146,11 @@ static void test_invalid_polygon_self_intersecting() {
     assert(output_json != NULL);
     assert(output_json != bowtie_json_for_repair); // Should be a new object
 
-    // Verify the output is now valid (optional, as REPAIRED_VALID implies it)
-    // For example, check if it's a MultiPolygon
     if (output_json) {
         json_t* type_val = json_object_get(output_json, "type");
         if (type_val) {
              const char* repaired_type = json_string_value(type_val);
              printf("Repaired geometry type: %s\n", repaired_type); // Expect MultiPolygon
-             // assert(strcmp(repaired_type, "MultiPolygon") == 0); // This can be very specific to GEOS version
         }
         json_decref(output_json); // We own the new object
     }
@@ -196,47 +175,81 @@ static void test_validation_disabled() {
     printf("test_validation_disabled: PASSED\n");
 }
 
-static void test_invalid_linestring_one_point() {
-    printf("Running test: test_invalid_linestring_one_point...\n");
+static void test_invalid_linestring() {
+    printf("Running test: test_invalid_linestring...\n");
     GeometricValidatorConfig val_cfg_no_repair = { .enabled = 1, .enable_repair = 0 };
+    GeometricValidatorConfig val_cfg_with_repair = { .enabled = 1, .enable_repair = 1 }; // Repair might not fix this
     json_t* output_json = NULL;
     GeometryValidationResultStatus status;
 
     // Invalid LineString (only one point)
-    const char* line_one_point_str = "{\"type\": \"LineString\", \"coordinates\": [[0,0]]}";
-    json_t* line_one_point_json = parse_json_string(line_one_point_str);
+    const char* one_point_line_str = "{\"type\": \"LineString\", \"coordinates\": [[0,0]]}";
+    json_t* one_point_line_json = parse_json_string(one_point_line_str);
 
-    status = validate_and_repair_geometry(line_one_point_json, &val_cfg_no_repair, &output_json);
-    assert(status == GEOMETRY_STATUS_INVALID); // GEOS considers a 1-point LineString invalid
-    assert(output_json == line_one_point_json);
-    json_decref(line_one_point_json);
+    // Test 1: No repair
+    status = validate_and_repair_geometry(one_point_line_json, &val_cfg_no_repair, &output_json);
+    assert(status == GEOMETRY_STATUS_INVALID);
+    assert(output_json == one_point_line_json); // No repair, output is input
 
-    printf("test_invalid_linestring_one_point: PASSED\n");
+    // Test 2: With repair
+    // GEOS may repair a single-point LineString into a Point.
+    json_t* one_point_line_json_for_repair = parse_json_string(one_point_line_str);
+    status = validate_and_repair_geometry(one_point_line_json_for_repair, &val_cfg_with_repair, &output_json);
+
+    // Expect it to be repaired to a valid Point.
+    if (status == GEOMETRY_STATUS_REPAIRED_VALID) {
+        assert(output_json != NULL);
+        assert(output_json != one_point_line_json_for_repair);
+        json_t* type_val = json_object_get(output_json, "type");
+        assert(type_val != NULL && strcmp(json_string_value(type_val), "Point") == 0); // Repaired to a Point
+        json_decref(output_json);
+    } else {
+        // If repair fails for some reason, ensure the status reflects it
+         assert(status == GEOMETRY_STATUS_INVALID || status == GEOMETRY_STATUS_REPAIRED_EMPTY_OR_INVALID);
+         if(output_json && output_json != one_point_line_json_for_repair) json_decref(output_json);
+    }
+
+    json_decref(one_point_line_json);
+    json_decref(one_point_line_json_for_repair);
+    printf("test_invalid_linestring: PASSED\n");
 }
 
-static void test_malformed_geojson_missing_type() {
-    printf("Running test: test_malformed_geojson_missing_type...\n");
+static void test_malformed_geojson_input() {
+    printf("Running test: test_malformed_geojson_input...\n");
     GeometricValidatorConfig val_cfg = { .enabled = 1, .enable_repair = 0 };
     json_t* output_json = NULL;
     GeometryValidationResultStatus status;
 
-    // Malformed GeoJSON (missing "type" field)
-    const char* malformed_str = "{\"coordinates\": [10, 20]}";
-    json_t* malformed_json = parse_json_string(malformed_str); // Jansson will parse it
+    // Malformed GeoJSON: Missing "type" field
+    const char* missing_type_str = "{\"coordinates\": [10, 20]}";
+    json_t* missing_type_json = parse_json_string(missing_type_str);
 
-    status = validate_and_repair_geometry(malformed_json, &val_cfg, &output_json);
-    // This should fail in the geojson_to_geos conversion phase
+    status = validate_and_repair_geometry(missing_type_json, &val_cfg, &output_json);
     assert(status == GEOMETRY_STATUS_ERROR_INPUT_FORMAT);
-    assert(output_json == NULL); // No output JSON should be set on format error
-    json_decref(malformed_json);
+    assert(output_json == missing_type_json); // Output should be the input object
+    json_decref(missing_type_json);
 
-    printf("test_malformed_geojson_missing_type: PASSED\n");
+    // Malformed GeoJSON: Missing "coordinates" field for a Point
+    const char* missing_coords_str = "{\"type\": \"Point\"}";
+    json_t* missing_coords_json = parse_json_string(missing_coords_str);
+
+    status = validate_and_repair_geometry(missing_coords_json, &val_cfg, &output_json);
+    assert(status == GEOMETRY_STATUS_ERROR_INPUT_FORMAT);
+    assert(output_json == missing_coords_json);
+    json_decref(missing_coords_json);
+
+    // Malformed GeoJSON: "coordinates" is not an array for Point
+    const char* invalid_coords_str = "{\"type\": \"Point\", \"coordinates\": \"not-an-array\"}";
+    json_t* invalid_coords_json = parse_json_string(invalid_coords_str);
+
+    status = validate_and_repair_geometry(invalid_coords_json, &val_cfg, &output_json);
+    assert(status == GEOMETRY_STATUS_ERROR_INPUT_FORMAT);
+    assert(output_json == invalid_coords_json);
+    json_decref(invalid_coords_json);
+
+    printf("test_malformed_geojson_input: PASSED\n");
 }
 
-
-// TODO: Add more tests:
-// - Invalid Polygon (unclosed, wrong orientation if GEOS cares without buffer(0))
-// - Test repair failures (geometries that buffer(0) can't fix or makes empty)
 
 int main() {
     // It's crucial that geometric_validator_init() is called once before tests
@@ -253,8 +266,8 @@ int main() {
     test_valid_geometries();
     test_invalid_polygon_self_intersecting();
     test_validation_disabled();
-    test_invalid_linestring_one_point();
-    test_malformed_geojson_missing_type();
+    test_invalid_linestring();
+    test_malformed_geojson_input();
     // Add calls to more tests here
 
     printf("All Geometric Validator tests completed.\n");

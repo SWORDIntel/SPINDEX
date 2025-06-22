@@ -3,10 +3,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h> // For isspace
 
 #include "plugin_interface.h"
 #include "data_types.h"
 #include "utils.h"
+
+// --- Plugin Static Information ---
+static const char* G_PLUGIN_NAME = "CSVParser";
+static const char* G_PLUGIN_VERSION = "0.1.0";
+static const char* G_PLUGIN_DESCRIPTION = "Parses CSV data into a JSON array of objects.";
 
 // Helper function to trim leading/trailing whitespace from a string (in-place)
 static char* trim_whitespace_csv(char *str) {
@@ -28,12 +34,6 @@ static char* trim_whitespace_csv(char *str) {
 
     return str;
 }
-
-
-// --- Plugin Static Information ---
-static const char* G_PLUGIN_NAME = "CSVParser";
-static const char* G_PLUGIN_VERSION = "0.1.0";
-static const char* G_PLUGIN_DESCRIPTION = "Parses CSV data into a JSON array of objects.";
 
 // Basic JSON string escaping
 static char* escape_json_string_csv(const char* input) {
@@ -76,11 +76,11 @@ static char* escape_json_string_csv(const char* input) {
         switch (*in_ptr) {
             case '\\': *out_ptr++ = '\\'; *out_ptr++ = '\\'; break;
             case '"':  *out_ptr++ = '\\'; *out_ptr++ = '"';  break;
-            case '\b': *out_ptr++ = '\\'; *out_ptr++ = 'b';  break; // Corrected literal
-            case '\f': *out_ptr++ = '\\'; *out_ptr++ = 'f';  break; // Corrected literal
-            case '\n': *out_ptr++ = '\\'; *out_ptr++ = 'n';  break; // Corrected literal
-            case '\r': *out_ptr++ = '\\'; *out_ptr++ = 'r';  break; // Corrected literal
-            case '\t': *out_ptr++ = '\\'; *out_ptr++ = 't';  break; // Corrected literal
+            case '\b': *out_ptr++ = '\\'; *out_ptr++ = 'b';  break;
+            case '\f': *out_ptr++ = '\\'; *out_ptr++ = 'f';  break;
+            case '\n': *out_ptr++ = '\\'; *out_ptr++ = 'n';  break;
+            case '\r': *out_ptr++ = '\\'; *out_ptr++ = 'r';  break;
+            case '\t': *out_ptr++ = '\\'; *out_ptr++ = 't';  break;
             default:
                 if ((unsigned char)*in_ptr < 0x20) {
                     sprintf(out_ptr, "\\u%04x", (unsigned char)*in_ptr);
@@ -148,8 +148,8 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
             char* trimmed_token = trim_whitespace_csv(token);
             headers[header_count] = strdup(trimmed_token);
             if (!headers[header_count]) {
-                 LOG_ERROR("[%s] Failed to strdup header token.", G_PLUGIN_NAME);
-                 if (headers) { for(int i=0; i<header_count; ++i) free(headers[i]); /* headers[header_count] was not set */ free(headers); }
+                 LOG_ERROR("[%s] Failed to strdup trimmed header token.", G_PLUGIN_NAME);
+                 if (headers) { for(int i=0; i<header_count; ++i) free(headers[i]); free(headers); }
                  free(csv_data_copy); return NULL;
             }
             header_count++;
@@ -160,7 +160,7 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
 
     if (header_count == 0) { // No headers or empty first line
         LOG_WARN("[%s] Empty or no header line in CSV for source_id: %s", G_PLUGIN_NAME, input_chunk->source_id ? input_chunk->source_id : "N/A");
-        if (headers) { for(int i=0; i<header_count; ++i) free(headers[i]); free(headers); } // header_count is 0, loop won't run.
+        if (headers) free(headers);
         free(csv_data_copy);
         char* empty_json_array = strdup("[]");
         if(!empty_json_array) { LOG_ERROR("[%s] strdup failed for empty json array", G_PLUGIN_NAME); return NULL;}
@@ -171,7 +171,6 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
         out->source_id = input_chunk->source_id ? strdup(input_chunk->source_id) : NULL;
         if (input_chunk->source_id && !out->source_id) {
             LOG_WARN("[%s] Strdup failed for source_id (empty CSV)", G_PLUGIN_NAME);
-            // Potentially continue without source_id or fail, for now continue
         }
         out->data = (void*)empty_json_array;
         out->length = strlen(empty_json_array);
@@ -197,12 +196,10 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
             continue;
         }
         if (!first_row) {
-            // No TODO needed here, realloc handled by snprintf logic below
             strcat(json_buffer, ","); current_len++;
         }
         first_row = 0;
 
-        // No TODO needed here, realloc handled by snprintf logic below
         strcat(json_buffer, "{"); current_len++;
 
         char* field_token_saveptr;
@@ -212,13 +209,11 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
 
         while (field_idx < header_count) {
             if (!first_field_in_row) {
-                // No TODO needed here, realloc handled by snprintf logic below
                 strcat(json_buffer, ","); current_len++;
             }
             first_field_in_row = 0;
 
             char* current_field_value = field ? trim_whitespace_csv(field) : "";
-            // headers[field_idx] is already trimmed when created
             char* escaped_header = escape_json_string_csv(headers[field_idx]);
             char* escaped_field = escape_json_string_csv(current_field_value);
 
@@ -232,7 +227,7 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
 
             size_t needed = strlen(escaped_header) + strlen(escaped_field) + 6;
             if (current_len + needed > buffer_size) {
-                 size_t new_size = buffer_size * 2 > current_len + needed ? buffer_size * 2 : current_len + needed + 256; // + some buffer
+                 size_t new_size = buffer_size * 2 > current_len + needed ? buffer_size * 2 : current_len + needed + 256;
                  char* new_buffer = (char*)realloc(json_buffer, new_size);
                  if (!new_buffer) {
                     LOG_ERROR("[%s] Failed to realloc JSON buffer.", G_PLUGIN_NAME);
@@ -240,16 +235,16 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
                     free(escaped_field);
                     if (headers) { for(int i=0; i<header_count; ++i) free(headers[i]); free(headers); }
                     free(csv_data_copy);
-                    free(json_buffer); // old json_buffer, new_buffer is NULL
+                    free(json_buffer);
                     return NULL;
                  }
                  json_buffer = new_buffer;
                  buffer_size = new_size;
             }
             int written = snprintf(json_buffer + current_len, buffer_size - current_len, "\"%s\":\"%s\"", escaped_header, escaped_field);
-            if (written < 0 || (size_t)written >= buffer_size - current_len) { /* error or truncation */ }
-            else current_len += written;
-
+            if (written > 0 && (size_t)written < buffer_size - current_len) {
+                current_len += written;
+            }
 
             free(escaped_header);
             free(escaped_field);
@@ -257,12 +252,10 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
             if(field) field = strtok_r(NULL, ",", &field_token_saveptr);
             field_idx++;
         }
-        // No TODO needed here, realloc handled by snprintf logic below
         strcat(json_buffer, "}"); current_len++;
         line = strtok_r(NULL, "\r\n", &line_saveptr);
     }
 
-    // No TODO needed here, realloc handled by snprintf logic below
     strcat(json_buffer, "]"); current_len++;
 
     for (int i = 0; i < header_count; ++i) free(headers[i]);

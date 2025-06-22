@@ -208,11 +208,34 @@ int openvino_predict(ModelHandle model_handle,
     ov_tensor_t* input_tensor = NULL;
     ov_tensor_t* output_tensor = NULL;
 
-    // 1. Get input tensor (assuming the model has one input port)
-    // TODO: Handle models with multiple inputs if necessary.
+    // 1. Get input tensor(s)
+    ov_model_t* actual_model;
+    status = ov_compiled_model_get_runtime_model(ov_model->compiled_model, &actual_model);
+    if (status != OV_STATUS_SUCCESS) {
+        fprintf(stderr, "Error: Failed to get runtime model to check inputs. Status: %d\n", status);
+        return 1;
+    }
+    size_t num_inputs = 0;
+    status = ov_model_inputs_size(actual_model, &num_inputs);
+    if (status != OV_STATUS_SUCCESS) {
+        fprintf(stderr, "Error: Failed to get model input count. Status: %d\n", status);
+        ov_model_free(actual_model);
+        return 1;
+    }
+    if (num_inputs > 1) {
+        fprintf(stderr, "Warning: Model has %zu inputs, but this code currently only handles the first input.\n", num_inputs);
+        // TODO: Handle models with multiple inputs if necessary. (Original TODO kept for tracking)
+    }
+    if (num_inputs == 0) {
+        fprintf(stderr, "Error: Model has no inputs.\n");
+        ov_model_free(actual_model);
+        return 1;
+    }
+    ov_model_free(actual_model); // Free the runtime model handle
+
     status = ov_infer_request_get_input_tensor(ov_model->infer_request, 0, &input_tensor);
     if (status != OV_STATUS_SUCCESS) {
-        fprintf(stderr, "Error: Failed to get input tensor. Status: %d\n", status);
+        fprintf(stderr, "Error: Failed to get input tensor (index 0). Status: %d\n", status);
         return 1;
     }
 
@@ -236,7 +259,8 @@ int openvino_predict(ModelHandle model_handle,
     if (input_data->size != input_tensor_byte_size) {
         fprintf(stderr, "Error: Input data size (%zu) does not match model input tensor byte size (%zu).\n",
                 input_data->size, input_tensor_byte_size);
-        // TODO: Implement proper preprocessing (resize, pad, convert type, etc.)
+        fprintf(stderr, "Critical: Proper preprocessing (e.g., resize, normalization, type conversion) is required to match model expectations and is currently NOT IMPLEMENTED. Inference will likely fail or produce incorrect results.\n");
+        // TODO: Implement proper preprocessing (resize, pad, convert type, etc.) (Original TODO kept for tracking)
         ov_tensor_free(input_tensor);
         return 1;
     }
@@ -263,12 +287,39 @@ int openvino_predict(ModelHandle model_handle,
         return 1;
     }
 
-    // 4. Get output tensor (assuming the model has one output port)
-    // TODO: Handle models with multiple outputs if necessary.
+    // 4. Get output tensor(s)
+    // Re-fetch runtime model to check output count (actual_model was freed earlier)
+    ov_model_t* runtime_model_for_output; // Use a new variable name to avoid confusion if actual_model was somehow still in scope
+    status = ov_compiled_model_get_runtime_model(ov_model->compiled_model, &runtime_model_for_output);
+    if (status != OV_STATUS_SUCCESS) {
+        fprintf(stderr, "Error: Failed to get runtime model to check outputs. Status: %d\n", status);
+        ov_tensor_free(input_tensor);
+        return 1;
+    }
+    size_t num_outputs = 0;
+    status = ov_model_outputs_size(runtime_model_for_output, &num_outputs);
+    if (status != OV_STATUS_SUCCESS) {
+        fprintf(stderr, "Error: Failed to get model output count. Status: %d\n", status);
+        ov_model_free(runtime_model_for_output);
+        ov_tensor_free(input_tensor);
+        return 1;
+    }
+    if (num_outputs > 1) {
+        fprintf(stderr, "Warning: Model has %zu outputs, but this code currently only handles the first output.\n", num_outputs);
+        // TODO: Handle models with multiple outputs if necessary. (Original TODO kept for tracking)
+    }
+    if (num_outputs == 0) {
+        fprintf(stderr, "Error: Model has no outputs.\n");
+        ov_model_free(runtime_model_for_output);
+        ov_tensor_free(input_tensor);
+        return 1;
+    }
+    ov_model_free(runtime_model_for_output); // Free the runtime model handle
+
     status = ov_infer_request_get_output_tensor(ov_model->infer_request, 0, &output_tensor);
     if (status != OV_STATUS_SUCCESS) {
-        fprintf(stderr, "Error: Failed to get output tensor. Status: %d\n", status);
-        ov_tensor_free(input_tensor); // Free input tensor from step 1
+        fprintf(stderr, "Error: Failed to get output tensor (index 0). Status: %d\n", status);
+        ov_tensor_free(input_tensor);
         return 1;
     }
 
@@ -320,8 +371,11 @@ int openvino_predict(ModelHandle model_handle,
     // Copy data from the output tensor to the ProcessedDataChunk
     memcpy((*output_data_ptr)->data, output_tensor_data, output_tensor_byte_size);
     (*output_data_ptr)->size = output_tensor_byte_size;
+    (*output_data_ptr)->metadata = NULL; // Explicitly NULL for now
 
-    // TODO: Populate (*output_data_ptr)->metadata if needed (e.g., classification scores, types)
+    // TODO: Populate (*output_data_ptr)->metadata if needed (e.g., classification scores, types) (Original TODO kept for tracking)
+    // Example: (*output_data_ptr)->metadata = strdup("{\"class_id\": 0, \"score\": 0.95}");
+    fprintf(stdout, "Placeholder: Output metadata not populated. Requires model-specific post-processing.\n");
 
     fprintf(stdout, "OpenVINO prediction complete. Output size: %zu bytes\n", output_tensor_byte_size);
 
@@ -332,13 +386,11 @@ int openvino_predict(ModelHandle model_handle,
     return 0; // Success
 }
 
-// TODO:
-// - Implement openvino_predict with actual OpenVINO API calls.
-// - Implement proper error handling and logging using a dedicated logger if available.
-// - Handle FP16 model specifics during model loading and inference.
-// - Integrate with hardware optimizations (NPU offloading for Meteor Lake, device selection).
-// - Ensure thread safety if models are shared across threads.
-// - Makefile changes for OpenVINO libraries.
+// TODO: Future Enhancements & Considerations:
+// - Further improve error handling and consider integrating with a core logging utility if available.
+// - Detailed FP16 handling: Ensure data type consistency and explore FP16-specific optimizations during inference if applicable beyond model conversion.
+// - Advanced hardware optimizations: Explore setting more OpenVINO performance hints or device-specific properties for optimal performance on target hardware (e.g., NPUs).
+// - Thread Safety: If a single ModelHandle is to be used concurrently by multiple threads, ensure openvino_predict is thread-safe. This typically means each thread needs its own ov_infer_request_t. The current implementation is not inherently thread-safe for concurrent predict calls on the same handle.
 
 // Assuming plugin_interface.h or a similar header would define
 // how plugins register themselves. For now, this is a conceptual include.
