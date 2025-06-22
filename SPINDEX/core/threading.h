@@ -10,7 +10,6 @@
 // (e.g., through a higher-level include like ingestion_pipeline.h or directly).
 // If a file only includes threading.h and needs logging, it should include utils.h.
 
-// TODO: Consider implementing a maximum queue size for TaskQueue to prevent excessive memory usage under high load.
 // For file processing in the ingestion pipeline, 'arg' for thread_pool_submit could be a
 // struct containing file path, metadata, processing parameters, etc. The submitted
 // 'function' would then be responsible for casting 'arg' to the appropriate type and processing the file.

@@ -95,6 +95,37 @@ static char* escape_json_string_csv(const char* input) {
     return escaped;
 }
 
+// Helper function to safely append to json_buffer, reallocating if necessary
+static char* append_to_json_buffer(char* buffer, size_t* buffer_size_ptr, size_t* current_len_ptr, const char* str_to_append) {
+    if (!str_to_append) return buffer; // Nothing to append
+    size_t append_len = strlen(str_to_append);
+    if (append_len == 0) return buffer; // Nothing to append
+
+    if (*current_len_ptr + append_len + 1 > *buffer_size_ptr) { // +1 for null terminator
+        size_t new_size = *buffer_size_ptr * 2;
+        if (new_size < *current_len_ptr + append_len + 1) {
+            new_size = *current_len_ptr + append_len + 1 + 256; // Ensure enough, plus some headroom
+        }
+        if (new_size < *buffer_size_ptr) { // Check for overflow if new_size wrapped around
+            LOG_ERROR("[%s] append_to_json_buffer: new_size calculation resulted in overflow.", G_PLUGIN_NAME);
+            return NULL; // Indicate critical error, caller must free original buffer
+        }
+        char* new_buffer_ptr = (char*)realloc(buffer, new_size);
+        if (!new_buffer_ptr) {
+            LOG_ERROR("[%s] Failed to realloc JSON buffer in append_to_json_buffer (current_size: %zu, new_size: %zu). Original buffer at %p is still valid but likely too small.", G_PLUGIN_NAME, *buffer_size_ptr, new_size, (void*)buffer);
+            return NULL; // Caller must free original buffer
+        }
+        buffer = new_buffer_ptr; // Update the buffer pointer for this scope and for return
+        *buffer_size_ptr = new_size; // Update the caller's buffer_size variable
+    }
+    // Using memcpy is safer than strcat if we know the lengths
+    memcpy(buffer + *current_len_ptr, str_to_append, append_len);
+    *current_len_ptr += append_len;
+    buffer[*current_len_ptr] = '\0'; // Ensure null termination
+    return buffer;
+}
+
+
 // --- Plugin API Functions ---
 void spindex_plugin_get_info(PluginInfo* info) {
     if (!info) return;
@@ -145,6 +176,7 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
                 free(csv_data_copy); return NULL;
             }
             headers = temp_headers;
+            // Whitespace is trimmed by trim_whitespace_csv call
             char* trimmed_token = trim_whitespace_csv(token);
             headers[header_count] = strdup(trimmed_token);
             if (!headers[header_count]) {
@@ -178,7 +210,7 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
         return out;
     }
 
-    size_t buffer_size = 1024;
+    size_t buffer_size = 1024; // Initial size
     char* json_buffer = (char*)malloc(buffer_size);
     if (!json_buffer) {
         LOG_ERROR("[%s] Failed to allocate initial JSON buffer.", G_PLUGIN_NAME);
@@ -186,21 +218,31 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
         free(csv_data_copy);
         return NULL;
     }
-    strcpy(json_buffer, "[");
-    size_t current_len = 1;
+    json_buffer[0] = '\0'; // Initialize as empty string for append_to_json_buffer
+    size_t current_len = 0;
+    char* new_ptr = NULL;
+
+    new_ptr = append_to_json_buffer(json_buffer, &buffer_size, &current_len, "[");
+    if (!new_ptr) { if (json_buffer) free(json_buffer); json_buffer = NULL; goto csv_parser_cleanup_final; }
+    json_buffer = new_ptr;
+
     int first_row = 1;
 
     while (line) {
-        if (strlen(line) == 0) {
+        if (strlen(line) == 0) { // Skip empty lines
             line = strtok_r(NULL, "\r\n", &line_saveptr);
             continue;
         }
         if (!first_row) {
-            strcat(json_buffer, ","); current_len++;
+            new_ptr = append_to_json_buffer(json_buffer, &buffer_size, &current_len, ",");
+            if (!new_ptr) { if (json_buffer) free(json_buffer); json_buffer = NULL; goto csv_parser_cleanup_final; }
+            json_buffer = new_ptr;
         }
         first_row = 0;
 
-        strcat(json_buffer, "{"); current_len++;
+        new_ptr = append_to_json_buffer(json_buffer, &buffer_size, &current_len, "{");
+        if (!new_ptr) { if (json_buffer) free(json_buffer); json_buffer = NULL; goto csv_parser_cleanup_final; }
+        json_buffer = new_ptr;
 
         char* field_token_saveptr;
         char* field = strtok_r(line, ",", &field_token_saveptr);
@@ -209,7 +251,9 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
 
         while (field_idx < header_count) {
             if (!first_field_in_row) {
-                strcat(json_buffer, ","); current_len++;
+                new_ptr = append_to_json_buffer(json_buffer, &buffer_size, &current_len, ",");
+                if (!new_ptr) { if (json_buffer) free(json_buffer); json_buffer = NULL; goto csv_parser_cleanup_final; }
+                json_buffer = new_ptr;
             }
             first_field_in_row = 0;
 
@@ -221,44 +265,99 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk* input_
                 LOG_ERROR("[%s] Failed to escape header/field.", G_PLUGIN_NAME);
                 if(escaped_header) free(escaped_header);
                 if(escaped_field) free(escaped_field);
-                if (headers) { for(int i=0; i<header_count; ++i) free(headers[i]); free(headers); }
-                free(csv_data_copy); free(json_buffer); return NULL;
+                if (json_buffer) free(json_buffer); json_buffer = NULL; // Free current json_buffer before exiting loop
+                goto csv_parser_cleanup_final;
             }
 
-            size_t needed = strlen(escaped_header) + strlen(escaped_field) + 6;
-            if (current_len + needed > buffer_size) {
-                 size_t new_size = buffer_size * 2 > current_len + needed ? buffer_size * 2 : current_len + needed + 256;
-                 char* new_buffer = (char*)realloc(json_buffer, new_size);
-                 if (!new_buffer) {
-                    LOG_ERROR("[%s] Failed to realloc JSON buffer.", G_PLUGIN_NAME);
+            size_t kv_pair_len_estimate = strlen(escaped_header) + strlen(escaped_field) + 5;
+            if (current_len + kv_pair_len_estimate > buffer_size) {
+                 size_t new_b_size = buffer_size * 2;
+                 if (new_b_size < current_len + kv_pair_len_estimate) {
+                    new_b_size = current_len + kv_pair_len_estimate + 256;
+                 }
+                 if (new_b_size < buffer_size) {
+                     LOG_ERROR("[%s] Buffer size overflow for KV pair", G_PLUGIN_NAME);
+                     free(escaped_header); free(escaped_field);
+                     if (json_buffer) free(json_buffer); json_buffer = NULL;
+                     goto csv_parser_cleanup_final;
+                 }
+
+                 char* new_alloc_buffer = (char*)realloc(json_buffer, new_b_size);
+                 if (!new_alloc_buffer) {
+                    LOG_ERROR("[%s] Failed to realloc JSON buffer for KV pair. Original buffer at %p still valid.", G_PLUGIN_NAME, (void*)json_buffer);
                     free(escaped_header);
                     free(escaped_field);
-                    if (headers) { for(int i=0; i<header_count; ++i) free(headers[i]); free(headers); }
-                    free(csv_data_copy);
-                    free(json_buffer);
-                    return NULL;
+                    if (json_buffer) free(json_buffer); json_buffer = NULL; // Free original json_buffer
+                    goto csv_parser_cleanup_final;
                  }
-                 json_buffer = new_buffer;
-                 buffer_size = new_size;
+                 json_buffer = new_alloc_buffer;
+                 buffer_size = new_b_size;
             }
+
             int written = snprintf(json_buffer + current_len, buffer_size - current_len, "\"%s\":\"%s\"", escaped_header, escaped_field);
-            if (written > 0 && (size_t)written < buffer_size - current_len) {
-                current_len += written;
+            if (written < 0 || (size_t)written >= buffer_size - current_len) {
+                 LOG_ERROR("[%s] snprintf failed or truncated for KV pair.", G_PLUGIN_NAME);
+                 free(escaped_header); free(escaped_field);
+                 if (json_buffer) free(json_buffer); json_buffer = NULL;
+                 goto csv_parser_cleanup_final;
             }
+            current_len += written;
 
             free(escaped_header);
             free(escaped_field);
+            // No need to NULL escaped_header/field here as we goto final cleanup on error
 
             if(field) field = strtok_r(NULL, ",", &field_token_saveptr);
             field_idx++;
-        }
-        strcat(json_buffer, "}"); current_len++;
+        } // End of while (field_idx < header_count)
+
+        new_ptr = append_to_json_buffer(json_buffer, &buffer_size, &current_len, "}");
+        if (!new_ptr) { if (json_buffer) free(json_buffer); json_buffer = NULL; goto csv_parser_cleanup_final; }
+        json_buffer = new_ptr;
         line = strtok_r(NULL, "\r\n", &line_saveptr);
+    } // End of while (line)
+
+    new_ptr = append_to_json_buffer(json_buffer, &buffer_size, &current_len, "]");
+    if (!new_ptr) { if (json_buffer) free(json_buffer); json_buffer = NULL; goto csv_parser_cleanup_final; }
+    json_buffer = new_ptr;
+
+csv_parser_cleanup_final: // Unified cleanup point
+    if (csv_data_copy) {
+        free(csv_data_copy);
+        // csv_data_copy = NULL; // Not strictly needed as function scope ends
+    }
+    if (headers) {
+        for (int i = 0; i < header_count; ++i) free(headers[i]);
+        free(headers);
+        // headers = NULL; // Not strictly needed
     }
 
-    strcat(json_buffer, "]"); current_len++;
+    if (!json_buffer) {
+        LOG_DEBUG("[%s] CSV parsing resulted in NULL json_buffer, likely due to error.", G_PLUGIN_NAME);
+        return NULL;
+    }
 
-    for (int i = 0; i < header_count; ++i) free(headers[i]);
+    // Success path:
+    ProcessedDataChunk* output_chunk = (ProcessedDataChunk*)malloc(sizeof(ProcessedDataChunk));
+    if (!output_chunk) {
+        LOG_ERROR("[%s] Failed to allocate output chunk.", G_PLUGIN_NAME);
+        free(json_buffer); // json_buffer is valid here
+        return NULL;
+    }
+    output_chunk->source_id = input_chunk->source_id ? strdup(input_chunk->source_id) : NULL;
+    if(input_chunk->source_id && !output_chunk->source_id) { LOG_WARN("[%s] strdup source_id failed for output", G_PLUGIN_NAME); }
+
+    output_chunk->data = (void*)json_buffer; // json_buffer is now owned by output_chunk
+    output_chunk->length = current_len;
+    output_chunk->data_type = CHUNK_TYPE_CSV_PARSED;
+
+    LOG_DEBUG("[%s] Finished processing source_id: %s. Output JSON length: %zu",
+              G_PLUGIN_NAME, output_chunk->source_id ? output_chunk->source_id : "N/A", output_chunk->length);
+    return output_chunk;
+}
+
+void spindex_plugin_shutdown() {
+    LOG_INFO("[%s v%s] Shutting down...", G_PLUGIN_NAME, G_PLUGIN_VERSION);
     free(headers);
     free(csv_data_copy);
 

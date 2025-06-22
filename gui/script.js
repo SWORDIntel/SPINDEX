@@ -400,8 +400,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const indexNameInput = document.getElementById('index-name-input');
     const indexDescriptionInput = document.getElementById('index-description-input');
     const indexTypeSelect = document.getElementById('index-type-select');
-    // TODO: Add logic for dynamic index-specific params based on indexTypeSelect.value
+    const rtreeParamsContainer = document.getElementById('rtree-params-container');
     const rtreeMaxEntriesInput = document.getElementById('rtree-max-entries');
+    const elasticsearchParamsContainer = document.getElementById('elasticsearch-params-container');
+    const esShardsInput = document.getElementById('es-shards-input');
+    const esReplicasInput = document.getElementById('es-replicas-input');
+
+    if (indexTypeSelect) {
+        indexTypeSelect.addEventListener('change', function() {
+            if (rtreeParamsContainer) rtreeParamsContainer.style.display = this.value === 'RTree' ? 'block' : 'none';
+            if (elasticsearchParamsContainer) elasticsearchParamsContainer.style.display = this.value === 'Elasticsearch' ? 'block' : 'none';
+            // Add more cases for other index types
+        });
+        // Trigger change on load to set initial visibility
+        indexTypeSelect.dispatchEvent(new Event('change'));
+    }
+
 
     // Step 4 elements
     const summaryDataPath = document.getElementById('summary-data-path');
@@ -490,10 +504,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if(wizardValGeom) wizardValGeom.textContent = geomSummary;
 
-        // TODO: Populate wizardAttributesSelect based on actual attributes from data (requires backend to provide this)
-        // For now, using placeholder
+        // TODO: Populate wizardAttributesSelect. Requires backend to provide feature attributes,
+        // ideally in selectedProcessedJobData.feature_attributes (as a list of strings)
+        // or via a new endpoint that returns the schema/attributes of the processed data.
         if (wizardAttributesSelect) {
-            wizardAttributesSelect.innerHTML = '<option value="attr1">Placeholder Attribute 1</option><option value="attr2">Placeholder Attribute 2</option>';
+            wizardAttributesSelect.innerHTML = ''; // Clear existing
+            let attributes = [];
+            if (selectedProcessedJobData && selectedProcessedJobData.schema_preview) { // Assuming schema_preview might exist
+                // Example: selectedProcessedJobData.schema_preview = {"properties": {"name": "string", "value": "number"}}
+                // This is hypothetical, adapt if backend provides attributes differently
+                if (selectedProcessedJobData.schema_preview.properties) {
+                    attributes = Object.keys(selectedProcessedJobData.schema_preview.properties);
+                } else if (Array.isArray(selectedProcessedJobData.schema_preview)) { // Or if it's just a list of strings
+                     attributes = selectedProcessedJobData.schema_preview;
+                }
+            }
+
+            if (attributes.length === 0) { // Fallback if no attributes found
+                attributes = ['Placeholder Property A', 'Placeholder Property B', 'geometry'];
+            }
+
+            attributes.forEach(attr => {
+                const option = document.createElement('option');
+                option.value = attr;
+                option.textContent = attr;
+                wizardAttributesSelect.appendChild(option);
+            });
         }
     }
 
@@ -570,8 +606,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const indexParams = {};
-        if (indexTypeSelect.value === "RTree" && rtreeMaxEntriesInput) indexParams.max_entries = parseInt(rtreeMaxEntriesInput.value, 10);
-        // TODO: Collect other params based on index type
+        if (indexTypeSelect.value === "RTree" && rtreeMaxEntriesInput) {
+            if (rtreeMaxEntriesInput.value) indexParams.max_entries = parseInt(rtreeMaxEntriesInput.value, 10);
+        } else if (indexTypeSelect.value === "Elasticsearch") {
+            if (esShardsInput && esShardsInput.value) indexParams.number_of_shards = parseInt(esShardsInput.value, 10);
+            if (esReplicasInput && esReplicasInput.value) indexParams.number_of_replicas = parseInt(esReplicasInput.value, 10);
+            // Add other Elasticsearch specific params here
+        }
+        // Add more 'else if' blocks for other index types
 
         const requestBody = {
             promoted_data_path: selectedProcessedJobData.location_of_promoted_data,
@@ -929,9 +971,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 li.onclick = () => { // Basic re-population
                     queryIndexSelect.value = item.request_data.index_id;
                     queryTypeSelect.value = item.request_data.query_type;
-                    updateQueryParamsUI(item.request_data.query_type);
-                    // TODO: Populate specific param inputs from item.request_data.parameters
-                    alert("Query form populated. Parameter input re-population is basic.");
+                    updateQueryParamsUI(item.request_data.query_type); // This creates the elements
+
+                    const params = item.request_data.parameters;
+                    if (item.request_data.query_type === 'bbox' && params.bbox && params.bbox.length === 4) {
+                        const minXInput = document.getElementById('query-bbox-minx');
+                        const minYInput = document.getElementById('query-bbox-miny');
+                        const maxXInput = document.getElementById('query-bbox-maxx');
+                        const maxYInput = document.getElementById('query-bbox-maxy');
+                        if (minXInput) minXInput.value = params.bbox[0];
+                        if (minYInput) minYInput.value = params.bbox[1];
+                        if (maxXInput) maxXInput.value = params.bbox[2];
+                        if (maxYInput) maxYInput.value = params.bbox[3];
+                    } else if (item.request_data.query_type === 'point_radius' && params.point && params.point.length === 2 && params.radius !== undefined) {
+                        const pointXInput = document.getElementById('query-point-x');
+                        const pointYInput = document.getElementById('query-point-y');
+                        const radiusInput = document.getElementById('query-radius');
+                        if (pointXInput) pointXInput.value = params.point[0];
+                        if (pointYInput) pointYInput.value = params.point[1];
+                        if (radiusInput) radiusInput.value = params.radius;
+                    }
+                    // Add more cases for other query types as they are implemented
+
+                    alert("Query form populated from history.");
                 };
                 queryHistoryList.appendChild(li);
             });

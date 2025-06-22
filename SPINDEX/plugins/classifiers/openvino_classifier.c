@@ -223,8 +223,10 @@ int openvino_predict(ModelHandle model_handle,
         return 1;
     }
     if (num_inputs > 1) {
-        fprintf(stderr, "Warning: Model has %zu inputs, but this code currently only handles the first input.\n", num_inputs);
-        // TODO: Handle models with multiple inputs if necessary. (Original TODO kept for tracking)
+        fprintf(stderr, "Error: Model has %zu inputs. This classifier implementation currently supports only single-input models.\n", num_inputs);
+        // TODO: To handle models with multiple inputs, ProcessedDataChunk might need to be adapted or a new input data structure provided that can represent multiple input tensors. The loop for getting input tensors and preprocessing would also need to be updated.
+        ov_model_free(actual_model);
+        return 1; // Indicate error due to unsupported multi-input model
     }
     if (num_inputs == 0) {
         fprintf(stderr, "Error: Model has no inputs.\n");
@@ -248,19 +250,56 @@ int openvino_predict(ModelHandle model_handle,
     //    - The input_data->data is already in the correct format and size.
     //    - We'll check if input_data->size matches the tensor's byte size.
 
-    size_t input_tensor_byte_size;
-    status = ov_tensor_get_byte_size(input_tensor, &input_tensor_byte_size);
+    ov_shape_t input_shape;
+    status = ov_tensor_get_shape(input_tensor, &input_shape);
     if (status != OV_STATUS_SUCCESS) {
-        fprintf(stderr, "Error: Failed to get input tensor byte size. Status: %d\n", status);
+        fprintf(stderr, "Error: Failed to get input tensor shape. Status: %d\n", status);
         ov_tensor_free(input_tensor);
         return 1;
     }
 
+    ov_element_type_e input_element_type;
+    status = ov_tensor_get_element_type(input_tensor, &input_element_type);
+    if (status != OV_STATUS_SUCCESS) {
+        fprintf(stderr, "Error: Failed to get input tensor element type. Status: %d\n", status);
+        ov_shape_free(&input_shape);
+        ov_tensor_free(input_tensor);
+        return 1;
+    }
+
+    char shape_str[256] = {0};
+    snprintf(shape_str, sizeof(shape_str)-1, "[");
+    for (size_t i = 0; i < input_shape.rank; ++i) {
+        char dim_str[32];
+        snprintf(dim_str, sizeof(dim_str)-1, "%lld", (long long int)input_shape.dims[i]); // Use lld for int64_t
+        strncat(shape_str, dim_str, sizeof(shape_str) - strlen(shape_str) -1);
+        if (i < input_shape.rank - 1) {
+            strncat(shape_str, ",", sizeof(shape_str) - strlen(shape_str) -1);
+        }
+    }
+    strncat(shape_str, "]", sizeof(shape_str) - strlen(shape_str) -1);
+
+    const char* element_type_str = ov_element_type_get_string(input_element_type);
+
+    size_t input_tensor_byte_size;
+    status = ov_tensor_get_byte_size(input_tensor, &input_tensor_byte_size);
+    if (status != OV_STATUS_SUCCESS) {
+        fprintf(stderr, "Error: Failed to get input tensor byte size. Status: %d\n", status);
+        ov_shape_free(&input_shape);
+        ov_tensor_free(input_tensor);
+        return 1;
+    }
+
+    fprintf(stdout, "Model expects input tensor with shape: %s, element type: %s, total byte size: %zu\n",
+            shape_str, element_type_str ? element_type_str : "UNKNOWN", input_tensor_byte_size);
+    ov_shape_free(&input_shape); // Free the shape object
+
     if (input_data->size != input_tensor_byte_size) {
-        fprintf(stderr, "Error: Input data size (%zu) does not match model input tensor byte size (%zu).\n",
+        fprintf(stderr, "Error: Provided input data size (%zu) does not match model's expected input tensor byte size (%zu).\n",
                 input_data->size, input_tensor_byte_size);
-        fprintf(stderr, "Critical: Proper preprocessing (e.g., resize, normalization, type conversion) is required to match model expectations and is currently NOT IMPLEMENTED. Inference will likely fail or produce incorrect results.\n");
-        // TODO: Implement proper preprocessing (resize, pad, convert type, etc.) (Original TODO kept for tracking)
+        fprintf(stderr, "Critical: Proper preprocessing (e.g., resizing, normalization, type conversion, layout changes like NCHW/NHWC) is required to match model expectations. This is currently NOT IMPLEMENTED in this plugin.\n");
+        fprintf(stderr, "Recommendation: Use OpenVINO Model Optimizer to embed preprocessing steps into the model (.xml) itself, or ensure input data is perfectly preprocessed before calling this plugin.\n");
+        // TODO: For robust general-purpose classification, this plugin would need to incorporate or allow registration of model-specific preprocessing routines (e.g., image resizing, normalization, tokenization). Consider using OpenVINO's G-API or Preprocessing API if embedding into the model is not feasible.
         ov_tensor_free(input_tensor);
         return 1;
     }
@@ -305,8 +344,11 @@ int openvino_predict(ModelHandle model_handle,
         return 1;
     }
     if (num_outputs > 1) {
-        fprintf(stderr, "Warning: Model has %zu outputs, but this code currently only handles the first output.\n", num_outputs);
-        // TODO: Handle models with multiple outputs if necessary. (Original TODO kept for tracking)
+        fprintf(stderr, "Error: Model has %zu outputs. This classifier implementation currently supports only single-output models.\n", num_outputs);
+        // TODO: To handle models with multiple outputs, ProcessedDataChunk might need to be adapted or a new output data structure designed to hold multiple output tensors. The loop for getting output tensors and postprocessing would also need to be updated.
+        ov_model_free(runtime_model_for_output);
+        ov_tensor_free(input_tensor); // Free the input tensor allocated earlier
+        return 1; // Indicate error due to unsupported multi-output model
     }
     if (num_outputs == 0) {
         fprintf(stderr, "Error: Model has no outputs.\n");
@@ -373,11 +415,36 @@ int openvino_predict(ModelHandle model_handle,
     (*output_data_ptr)->size = output_tensor_byte_size;
     (*output_data_ptr)->metadata = NULL; // Explicitly NULL for now
 
-    // TODO: Populate (*output_data_ptr)->metadata if needed (e.g., classification scores, types) (Original TODO kept for tracking)
-    // Example: (*output_data_ptr)->metadata = strdup("{\"class_id\": 0, \"score\": 0.95}");
-    fprintf(stdout, "Placeholder: Output metadata not populated. Requires model-specific post-processing.\n");
+    // TODO: Populate (*output_data_ptr)->metadata with model-specific post-processing results.
+    // This typically involves:
+    // 1. Interpreting the output_tensor_data based on the model's architecture (e.g., logits, probabilities).
+    // 2. Applying any necessary post-processing (e.g., softmax, finding max score index).
+    // 3. Mapping numerical results to human-readable labels (requires a label mapping file/mechanism).
+    // 4. Formatting the results as a JSON string.
+    // Example for a hypothetical classification model outputting a float array of scores:
+    /*
+    if (output_tensor_byte_size > 0 && (*output_data_ptr)->data) {
+        // Assuming output is float scores and we have a labels array char* class_labels[]
+        // float* scores = (float*)(*output_data_ptr)->data;
+        // size_t num_classes = output_tensor_byte_size / sizeof(float);
+        // int max_idx = 0;
+        // float max_score = scores[0];
+        // for (size_t i = 1; i < num_classes; ++i) {
+        //     if (scores[i] > max_score) {
+        //         max_score = scores[i];
+        //         max_idx = i;
+        //     }
+        // }
+        // char temp_metadata[256];
+        // snprintf(temp_metadata, sizeof(temp_metadata),
+        //          "{\"class_label\": \"%s\", \"class_id\": %d, \"score\": %.4f, \"device_used\": \"%s\"}",
+        //          (max_idx < NUM_LABELS ? class_labels[max_idx] : "Unknown"), max_idx, max_score, ov_model->compiled_on_device);
+        // (*output_data_ptr)->metadata = strdup(temp_metadata);
+    }
+    */
+    fprintf(stdout, "Placeholder: Output metadata not populated. Requires model-specific post-processing and label mapping.\n");
 
-    fprintf(stdout, "OpenVINO prediction complete. Output size: %zu bytes\n", output_tensor_byte_size);
+    fprintf(stdout, "OpenVINO prediction complete. Output size: %zu bytes. Device used: %s\n", output_tensor_byte_size, ov_model->compiled_on_device);
 
     // Free OpenVINO tensors
     ov_tensor_free(input_tensor);

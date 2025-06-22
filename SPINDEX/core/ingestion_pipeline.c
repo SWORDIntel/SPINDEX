@@ -6,6 +6,7 @@
 #include "geometric_validator.h"      // For geometric validation
 #include "complex_geometry_handler.h" // For complex geometry handling
 #include "geojson_processor.h"        // For the new GeoJSON processing orchestrator
+#include "geocoding_service.h"      // For AEGIS-007 Geocoding
 #include <pthread.h>                  // For pthread_self in task wrapper, and mutex ops
 #include <stdio.h>
 #include <stdlib.h>
@@ -422,22 +423,35 @@ ProcessedDataChunk* pipeline_process_file(SpindexIngestionPipeline *pipeline, co
         if (ner_status == AEGIS_PROCESSING_SUCCESS && num_extracted_locs > 0) {
             LOG_INFO("Thread %lu: NLP/NER extracted %d locations from %s.", thread_id_for_log, num_extracted_locs, file_path);
             if (num_extracted_locs > 0) {
-                // Placeholder for Geocoding Module call
-                LOG_INFO("Thread %lu: Extracted locations require geocoding (AEGIS-007). Placeholder active.", thread_id_for_log);
+                LOG_INFO("Thread %lu: Attempting to geocode %d extracted locations for %s (AEGIS-007).", thread_id_for_log, num_extracted_locs, file_path);
                 for (int i = 0; i < num_extracted_locs; ++i) {
-                    LOG_INFO("Thread %lu: NER Location %d for %s: %s (Geocoding needed).", thread_id_for_log, i + 1, file_path, extracted_locs[i]);
-                    // Example of what a geocoding call might look like:
-                    // GeocodeResult geo_result;
-                    // int geocode_status = geocode_location(extracted_locs[i], &geo_result);
-                    // if (geocode_status == 0) {
-                    //     LOG_INFO("Thread %lu: Geocoded %s to (lat: %f, lon: %f)", thread_id_for_log, extracted_locs[i], geo_result.latitude, geo_result.longitude);
-                    //     // Further processing with geocoded data...
-                    // } else {
-                    //     LOG_WARN("Thread %lu: Failed to geocode location: %s", thread_id_for_log, extracted_locs[i]);
-                    // }
+                    if (extracted_locs[i] == NULL || strlen(extracted_locs[i]) == 0) {
+                        LOG_DEBUG("Thread %lu: Skipping empty location string at index %d for %s.", thread_id_for_log, i, file_path);
+                        continue;
+                    }
+                    LOG_DEBUG("Thread %lu: Geocoding location %d for %s: \"%s\"", thread_id_for_log, i + 1, file_path, extracted_locs[i]);
+                    GeocodeResult geo_result;
+                    memset(&geo_result, 0, sizeof(GeocodeResult)); // Initialize struct
+
+                    int geocode_status = geocode_location(extracted_locs[i], &geo_result);
+                    if (geocode_status == 0) {
+                        LOG_INFO("Thread %lu: Geocoded \"%s\" to (lat: %f, lon: %f, details: %s) for %s.",
+                                 thread_id_for_log, extracted_locs[i], geo_result.latitude, geo_result.longitude,
+                                 geo_result.address_details ? geo_result.address_details : "N/A", file_path);
+                        // Further processing with geocoded data can be added here.
+                        // For example, adding it to a list, or augmenting the current_chunk's metadata.
+                        free_geocode_result(&geo_result); // Free any dynamic memory in geo_result
+                    } else {
+                        LOG_WARN("Thread %lu: Failed to geocode location: \"%s\" for %s. Status: %d.", thread_id_for_log, extracted_locs[i], file_path, geocode_status);
+                    }
                 }
-                // If processing a full list was intended for the geocoding module:
-                // process_locations_for_geocoding(extracted_locs, num_extracted_locs);
+                // If a batch processing function was implemented and preferred:
+                // GeocodeResult* all_geo_results = NULL;
+                // int num_geocoded = process_locations_for_geocoding(extracted_locs, num_extracted_locs, &all_geo_results);
+                // if (num_geocoded > 0 && all_geo_results) {
+                //    for (int i=0; i < num_geocoded; ++i) { /* process individual results */ }
+                //    free_geocode_results_array(all_geo_results, num_geocoded);
+                // }
             }
             free_extracted_locations(extracted_locs, num_extracted_locs);
         } else if (ner_status != AEGIS_PROCESSING_SUCCESS && ner_status != AEGIS_PROCESSING_NLP_NER_DISABLED) {

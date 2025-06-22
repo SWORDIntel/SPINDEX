@@ -246,7 +246,7 @@ def execute_aegis_pipeline(job_id: str, db: Session, logger_instance: logging.Lo
     scan_results = scan_file(
         file_path=job.staged_file_path, # type: ignore
         original_filename=job.original_filename, # type: ignore
-        content_type=None, # TODO: Pass content_type if available on job model
+        content_type=job.content_type, # Use content_type from job model
         config=scan_config
     )
 

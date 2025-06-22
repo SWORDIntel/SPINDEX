@@ -192,11 +192,10 @@ void avx512_shutdown() {
     // No specific resources to release for this basic version.
 }
 
-// TODO: The plugin_interface.h currently only supports one input chunk for process_data.
-// This plugin ideally needs two inputs: one for the text to search and one for the phrases.
-// This will need to be addressed by either modifying the interface or by devising a way
-// to pack both inputs into a single ProcessedDataChunk (e.g., using a custom data structure
-// within the chunk's data field, or by having the plugin retrieve the phrases via a configuration mechanism).
+// This plugin receives its parameters (including the text to search and the phrases to find)
+// via the input_chunk->data field, which is cast to an AvxSearchParams structure.
+// This structure effectively packs multiple logical inputs into the single ProcessedDataChunk
+// that the current plugin_interface.h supports for its process_data function.
 ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
     if (!input_chunk || !input_chunk->data) {
         LOG_ERROR("AVX Search: Input chunk or its data is NULL.");

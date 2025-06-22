@@ -1,9 +1,0 @@
-/app/SPINDEX/build_cmake/CMakeFiles/edit_cache.dir
-/app/SPINDEX/build_cmake/CMakeFiles/rebuild_cache.dir
-/app/SPINDEX/build_cmake/core/CMakeFiles/spindex_core_objects.dir
-/app/SPINDEX/build_cmake/core/CMakeFiles/spindex_app.dir
-/app/SPINDEX/build_cmake/core/CMakeFiles/edit_cache.dir
-/app/SPINDEX/build_cmake/core/CMakeFiles/rebuild_cache.dir
-/app/SPINDEX/build_cmake/plugins/aegis_modules/CMakeFiles/aegis_modules.dir
-/app/SPINDEX/build_cmake/plugins/aegis_modules/CMakeFiles/edit_cache.dir
-/app/SPINDEX/build_cmake/plugins/aegis_modules/CMakeFiles/rebuild_cache.dir
