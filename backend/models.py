@@ -16,6 +16,7 @@ class IngestionJobDB(Base):
     job_id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
 
     original_filename = Column(String, nullable=True)
+    content_type = Column(String, nullable=True) # Added field for MIME type
     upload_timestamp = Column(DateTime, default=datetime.utcnow)
     user_id = Column(String, nullable=True, index=True) # Assuming user_id is a string
     source_type = Column(String, default="file_upload")

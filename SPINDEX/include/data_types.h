@@ -15,7 +15,8 @@ typedef enum {
     CHUNK_TYPE_RAW_BYTES,
     CHUNK_TYPE_UTF8_TEXT,
     CHUNK_TYPE_PREPROCESSED_TEXT, // e.g. after whitespace/comment stripping
-    CHUNK_TYPE_STRUCTURED_DATA, // Representing actual parsed data in future
+    CHUNK_TYPE_STRUCTURED_DATA, // Representing actual parsed data in future (generic)
+    CHUNK_TYPE_PARSED_JSON,       // Specifically for parsed JSON content
     CHUNK_TYPE_TEXT_PARSED,       // For TXTParser output
     CHUNK_TYPE_CSV_PREPROCESSED,  // For CSV preprocessor
     CHUNK_TYPE_CSV_PARSED         // For CSV parser

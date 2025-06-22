@@ -1,6 +1,6 @@
 from conan import ConanFile
 from conan.tools.cmake import CMakeToolchain, CMakeDeps
-from conan.tools.layout import cmake_layout # For standard layout
+# from conan.tools.layout import cmake_layout # For standard layout - Not used, layout is manual
 
 class SpindexConan(ConanFile):
     name = "spindex"

@@ -38,17 +38,9 @@ int load_complex_geometry_handler_config(const Config* config, ComplexGeometryHa
 
 // Helper function to process a single feature
 static AEGIS_PROCESSING_STATUS process_feature(json_t* feature, const ComplexGeometryHandlerConfig* config, json_t* output_features_array) {
-    // Logic based on design:
-    // 1. Get geometry type from feature.
-    // 2. If GeometryCollection:
-    //    - STRATEGY_SPLIT: Iterate geometries, create new features, add to output_features_array.
-    //    - STRATEGY_FILTER: Discard (or selectively add sub-geometries if design evolves).
-    //    - STRATEGY_REJECT: Return AEGIS_PROCESSING_REJECT_COMPLEX_GEOMETRY.
-    // 3. If simple type:
-    //    - STRATEGY_SPLIT: Add feature to output_features_array.
-    //    - STRATEGY_FILTER: Add feature if type matches config, else discard.
-    //    - STRATEGY_REJECT: Add feature (reject mainly for GeometryCollection).
-    // Ensure to properly handle JSON references (json_incref/json_decref) with Jansson.
+    // This function implements the logic for handling complex geometries based on the configured strategy.
+    // It processes a single GeoJSON feature and adds resulting feature(s) to output_features_array
+    // or returns a status indicating rejection.
 
     json_t *geometry = json_object_get(feature, "geometry");
     if (!json_is_object(geometry)) {

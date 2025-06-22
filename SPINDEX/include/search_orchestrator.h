@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <time.h> // For time_t
 
 // SPINDEX specific headers
 #include "plugin_interface.h" // For SpindexPlugin (adjust path if necessary from SPINDEX/include)
@@ -16,7 +17,10 @@ typedef struct SearchOrchestrator SearchOrchestrator;
 typedef struct {
     const char* main_query_text; // For broader ES search
     const char* avx_phrases;     // Newline-separated phrases for AVX search
-    // TODO: Add other query parameters as needed, e.g., date ranges, filters
+    time_t date_start;           // Optional start date for filtering (0 if not used)
+    time_t date_end;             // Optional end date for filtering (0 if not used)
+    const char* filter_string;   // Optional additional filter criteria (e.g., "type:report AND author:smith")
+    // Consider adding pagination parameters: int page_number; int results_per_page;
 } UserQuery;
 
 // SearchResultItem structure for individual search hits
@@ -26,7 +30,12 @@ typedef struct {
     double score;                    // Relevance score (e.g., from Elasticsearch)
     bool avx_match_found;            // True if any of the AVX phrases were found in this item
     char* avx_match_details;         // Detailed string from AVX plugin (e.g., "Found: phrase1\nNot Found: phrase2")
-    // TODO: Add other result fields as needed
+    char* file_path;                 // Original file path or source identifier
+    char* document_title;            // Title of the document, if available
+    time_t last_modified_date;       // Last modified timestamp of the document (0 if not available)
+    char* file_type;                 // Detected file type (e.g., "PDF", "TXT")
+    size_t file_size;                // Size of the file in bytes (0 if not available)
+    // Consider adding fields like: author, keywords, direct_url_to_hit, etc.
 } SearchResultItem;
 
 // SearchResults structure to hold a collection of search results
