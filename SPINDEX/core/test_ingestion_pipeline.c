@@ -82,7 +82,7 @@ int main() {
         assert(json_pipeline_output != NULL && "Pipeline should return data when no indexer is active for JSON.");
         if (json_pipeline_output) {
             LOG_INFO("JSON Test: No active indexer. Pipeline returned chunk (type %d). Verifying...", json_pipeline_output->data_type);
-            assert(json_pipeline_output->data_type == CHUNK_TYPE_PARSED_JSON_PLACEHOLDER);
+            assert(json_pipeline_output->data_type == CHUNK_TYPE_STRUCTURED_DATA);
             assert(json_pipeline_output->data != NULL);
             assert(strncmp((char*)json_pipeline_output->data, "Parsed: ", strlen("Parsed: ")) == 0);
             free_processed_data_chunk(json_pipeline_output);

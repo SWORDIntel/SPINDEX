@@ -7,11 +7,11 @@ from backend.main import app # For direct Pydantic model import if needed, thoug
 from backend.models import IndexMetadataDB # For direct DB checks
 # Pydantic model for IndexMetadata is in main.py, will be used for response validation
 from backend.main import IndexMetadata as IndexMetadataPydantic
-from backend.main import SECURE_PLACEHOLDER_TOKEN_ADMIN # Using admin token for these tests
+from backend.main import TOKEN_ADMIN # Using admin token for these tests (environment default or set)
 
 # Helper to get auth headers
 def admin_auth_headers() -> Dict[str, str]:
-    return {"X-Auth-Token": SECURE_PLACEHOLDER_TOKEN_ADMIN}
+    return {"X-Auth-Token": TOKEN_ADMIN}
 
 # Test data
 sample_index_payload_1 = {

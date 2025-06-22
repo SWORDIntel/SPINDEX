@@ -30,29 +30,27 @@ int main(int argc, char *argv[]) {
 
     // 1. Initialize and Load Configuration
     SpindexConfig config;
-    // Initialize config with zeros or specific invalid markers if necessary
-    // For example, ensure string paths are empty or pointers are NULL before set_default_config
+    // Initialize config with zeros for safety before applying defaults.
     memset(&config, 0, sizeof(SpindexConfig));
     set_default_config(&config); // Apply defaults first
 
-    // Parse the configuration file
+    // Parse the configuration file, overriding defaults
     if (parse_config_file(config_file_path, &config) != 0) {
         LOG_ERROR("Failed to parse configuration file: %s. Exiting.", config_file_path);
-        free_config_resources(&config); // Free any defaults that might have been strdup'd
+        free_config_resources(&config); // Free any defaults that might have been allocated
         spindex_log_shutdown();
         return EXIT_FAILURE;
     }
 
     // Re-initialize the logger with settings from the configuration file.
-    // The spindex_log_init function handles closing the previous log file (stderr in this case)
+    // The spindex_log_init function should handle closing the previous log file (stderr)
     // and opening the new one.
     spindex_log_init(config.log_file_path, config.log_level);
     LOG_INFO("Logging re-initialized from configuration: path='%s', level=%d", config.log_file_path, config.log_level);
-    // The original TODO for configurable log path/level is now addressed.
-
     LOG_INFO("Configuration loaded successfully.");
-    // Print config only if log level from config allows (or use a fixed level for this debug output)
-    if (config.log_level >= LOG_LEVEL_DEBUG) {
+
+    // Print config only if log level from config is DEBUG or more verbose
+    if (config.log_level <= LOG_LEVEL_DEBUG) {
         print_config(&config);
     }
 
@@ -79,8 +77,8 @@ int main(int argc, char *argv[]) {
         if (loaded_plugins) {
             unload_plugins(loaded_plugins, plugin_count);
         }
-        // free_config_resources(&config); // If config had dynamic parts
-        // spindex_logger_cleanup();
+        free_config_resources(&config);
+        spindex_log_shutdown();
         return EXIT_FAILURE;
     }
     LOG_INFO("Ingestion pipeline initialized successfully.");
@@ -124,10 +122,10 @@ int main(int argc, char *argv[]) {
         LOG_INFO("Plugins unloaded.");
     }
 
-    // 6. Free Config Resources (if any were dynamic)
-    // free_config_resources(&config); // Currently, config struct is simple.
+    // 6. Free Config Resources
+    free_config_resources(&config);
 
     LOG_INFO("Spindex Application Shutting Down Gracefully.");
-    // spindex_logger_cleanup(); // If logger needs explicit cleanup
+    spindex_log_shutdown(); // Final cleanup for the logger
     return EXIT_SUCCESS;
 }
