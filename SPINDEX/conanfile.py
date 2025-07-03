@@ -59,8 +59,30 @@ class SpindexConan(ConanFile):
         # cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=build/generators/conan_toolchain.cmake
         # cmake --build build
         # This is a common and clean setup.
-        self.folders.build = "build_conan_generated" # Keep conan generated files somewhat separate
-        self.folders.generators = "build_conan_generated/conan_generators"
+        # If `conan install . --output-folder=build` is used, Conan will place
+        # generated files (like conan_toolchain.cmake) into "build/generators/" by default
+        # when using CMakeToolchain and CMakeDeps.
+        # Explicitly setting self.folders.generators ensures this behavior,
+        # especially for local conan commands like `conan build .` if used.
+        # self.folders.build typically refers to where the project itself would be built
+        # if `conan build .` was invoked.
+        # The README directs users to an out-of-source build using `cmake -S . -B build`.
+        # So, the key is that CMakeToolchain/CMakeDeps output to a predictable subfolder
+        # of the directory specified in `conan install --output-folder`.
+        # "<output_folder>/generators" is the default for these generators.
+
+        # To align with README's `conan install . --output-folder=build` and
+        # `CMAKE_TOOLCHAIN_FILE=build/generators/conan_toolchain.cmake`:
+        self.folders.source = "." # Default, location of conanfile.py
+        # self.folders.build can be set if you use `conan build .` command.
+        # For the user flow in README_BUILD.md, this particular self.folders.build
+        # is less critical than self.folders.generators relative to the --output-folder.
+        # Let's set it to "build" for consistency if `conan build .` were used.
+        self.folders.build = "build"
+        # This ensures that if `conan install .` is run (no --output-folder),
+        # files go to "build/generators". If `conan install . --output-folder=mybuild` is run,
+        # they go to "mybuild/generators". This matches the README.
+        self.folders.generators = "generators" # Relative to the installation folder (e.g. 'build' or what --output-folder specifies)
 
 
     def generate(self):

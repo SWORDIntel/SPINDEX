@@ -14,6 +14,11 @@ target_link_libraries(spindex_core PUBLIC
 add_executable(spindex_app main.c)
 target_link_libraries(spindex_app PRIVATE spindex_core spindex_aegis)
 
+# Ensure symbols from the main executable are available to plugins, similar to -rdynamic
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_options(spindex_app PRIVATE "-Wl,--export-dynamic")
+endif()
+
 # Add tests
 set(CORE_TEST_SOURCES
     test_config_manager.c
