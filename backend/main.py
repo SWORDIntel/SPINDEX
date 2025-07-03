@@ -39,10 +39,29 @@ from celery.result import AsyncResult # Keep if task status check endpoint uses 
 # from geopy.geocoders import Nominatim # Moved
 # from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError # Moved
 
+# --- Elasticsearch Client ---
+from elasticsearch import Elasticsearch, exceptions as es_exceptions # For Pass 1
+# Initialize Elasticsearch client
+# This should ideally come from configuration (e.g., settings management)
+ES_HOST = os.getenv("ELASTICSEARCH_HOST", "http://localhost:9200")
+es_client: Optional[Elasticsearch] = None
+try:
+    es_client = Elasticsearch(ES_HOST)
+    if not es_client.ping():
+        logger.error(f"Elasticsearch not reachable at {ES_HOST}. Search functionality might be impaired.")
+        es_client = None # Set to None if ping fails
+    else:
+        logger.info(f"Elasticsearch client initialized and connected to {ES_HOST}")
+except Exception as e:
+    logger.error(f"Failed to initialize Elasticsearch client at {ES_HOST}: {e}", exc_info=True)
+    es_client = None
+
+
 # --- Custom Pipeline Logic ---
 from backend import pipeline_logic # New import
 
 # --- Application Setup & Pydantic Models ---
+import ctypes
 
 # --- Constants (those NOT moved to pipeline_logic) ---
 STAGING_AREA_PATH = "staging_area" # Still needed for upload endpoint
@@ -134,6 +153,263 @@ class TaskStatusResponse(BaseModel): task_id: str; status: str; result: Optional
 class TaskCreationRequest(BaseModel): param_x: int; param_y: int
 class TaskCreationResponse(BaseModel): task_id: str; message: str
 class FileUploadResponse(BaseModel): job_id: str; filename: str; message: str; staged_filepath: Optional[str] = None
+
+# --- Pydantic Models for AVX Search ---
+class AvxSearchQueryRequest(BaseModel):
+    index_name: Optional[str] = PydanticField(None, description="Target Elasticsearch index name. Uses default if not provided.")
+    query_text: str = PydanticField(..., description="Main query text for Elasticsearch.")
+    avx_phrases: Optional[str] = PydanticField(None, description="Newline-separated phrases for AVX-512 search.")
+    use_avx: bool = PydanticField(True, description="Whether to use AVX-512 post-filtering.")
+    avx_case_sensitive: bool = PydanticField(False, description="Perform case-sensitive AVX search.")
+    avx_find_all_occurrences: bool = PydanticField(True, description="Find all occurrences of AVX phrases in a document.")
+    avx_max_hits_per_doc: int = PydanticField(0, description="Max AVX hits per document (0 for unlimited).")
+    # Add other ES query parameters as needed, e.g., size, from, filters
+
+class AvxSearchResultItem(BaseModel):
+    document_id: str = PydanticField(..., description="ID of the matching document.")
+    document_content_preview: Optional[str] = PydanticField(None, description="A preview snippet of the document's content.")
+    score: float = PydanticField(..., description="Relevance score from Elasticsearch (or combined scoring).")
+    avx_match_found: bool = PydanticField(..., description="True if AVX phrases were found in this document during the AVX pass.")
+    avx_match_details: Optional[Dict[str, Any]] = PydanticField(None, description="Parsed JSON output from the AVX search plugin, detailing found phrases and their offsets within this document. Null if AVX pass was not performed or no matches.")
+
+class AvxSearchQueryResponse(BaseModel):
+    es_query_time_ms: Optional[int] = PydanticField(None, description="Time taken for the Elasticsearch query phase in milliseconds.")
+    avx_processing_time_ms: Optional[int] = PydanticField(None, description="Time taken for the AVX processing phase in milliseconds (if performed).")
+    total_results_before_avx: Optional[int] = PydanticField(None, description="Total number of hits returned by Elasticsearch before AVX processing.")
+    total_results_after_avx: int = PydanticField(..., description="Total number of results after AVX processing (if performed) or total ES hits if AVX was skipped.")
+    results: List[AvxSearchResultItem] = PydanticField(..., description="List of search results.")
+    message: Optional[str] = PydanticField(None, description="Optional message about the search execution (e.g., status, warnings).")
+
+
+# --- ctypes Structures for C Interface ---
+# Must match the C struct definitions in search_orchestrator.h (or inferred from .c)
+
+# --- Configuration Variables ---
+DEFAULT_ES_INDEX_NAME = os.getenv("DEFAULT_ES_INDEX_NAME", "spindex_default_index")
+FEATURE_FLAG_AVX_SEARCH_ENABLED = os.getenv("FEATURE_FLAG_AVX_SEARCH_ENABLED", "true").lower() == "true"
+if FEATURE_FLAG_AVX_SEARCH_ENABLED:
+    logger.info("Feature flag: AVX Search is ENABLED.")
+else:
+    logger.info("Feature flag: AVX Search is DISABLED.")
+
+
+# Attempt to load the C library
+# This path might need adjustment based on where the compiled .so file is located.
+# For development, it might be in SPINDEX/build/lib or similar.
+# In a deployed environment, it should be in a standard library path.
+SPINDEX_C_LIB_PATH = os.getenv("SPINDEX_C_LIB_PATH", "libspindex_core_cffi.so") # Updated name
+spindex_c_lib = None
+try:
+    # Try loading with a more specific path first if in development context
+    # This assumes the backend/main.py is run from /app, and SPINDEX is in /app/SPINDEX
+    # So the library would be in /app/SPINDEX/build/lib/libspindex_core_cffi.so
+    dev_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'SPINDEX', 'build', 'lib', os.path.basename(SPINDEX_C_LIB_PATH))
+    if os.path.exists(dev_path):
+        logger.info(f"Attempting to load SPINDEX C library from dev path: {dev_path}")
+        spindex_c_lib = ctypes.CDLL(dev_path)
+    else:
+        logger.info(f"Dev path {dev_path} not found. Attempting to load SPINDEX C library from system path: {SPINDEX_C_LIB_PATH}")
+        spindex_c_lib = ctypes.CDLL(SPINDEX_C_LIB_PATH)
+    logger.info(f"Successfully loaded SPINDEX C library from: {SPINDEX_C_LIB_PATH}")
+except OSError as e:
+    logger.error(f"Failed to load SPINDEX C library from {SPINDEX_C_LIB_PATH}: {e}. AVX search functionality will be disabled.")
+    # AVX search will not be available if the library fails to load.
+    # Endpoints using it should check if spindex_c_lib is None.
+
+# Define placeholder C types if their full structure isn't needed by Python directly
+# For pointers, often just an opaque pointer type is enough if Python doesn't dereference.
+# However, for function arguments, actual structures might be needed if passed by value,
+# or POINTER(ActualStruct) if by pointer and Python needs to construct them.
+
+class CSpindexConfig(ctypes.Structure): # Opaque struct for SpindexConfig*
+    pass
+
+class CSpindexPlugin(ctypes.Structure): # Opaque struct for SpindexPlugin*
+    pass
+
+class CSearchOrchestrator(ctypes.Structure): # Opaque struct for SearchOrchestrator*
+    pass
+
+
+class CUserQuery(ctypes.Structure):
+    _fields_ = [
+        ("main_query_text", ctypes.c_char_p),
+        ("avx_phrases", ctypes.c_char_p),
+        ("avx_case_sensitive", ctypes.c_bool),
+        ("avx_find_all_occurrences", ctypes.c_bool),
+        ("avx_max_hits_per_doc", ctypes.c_int),
+    ]
+
+class CSearchResultItem(ctypes.Structure):
+    pass # Forward declaration for self-referential or pointer types if any; not strictly needed here
+
+CSearchResultItem._fields_ = [
+    ("document_id", ctypes.c_char_p),
+    ("document_content_preview", ctypes.c_char_p),
+    ("score", ctypes.c_double),
+    ("avx_match_found", ctypes.c_bool),
+    ("avx_match_details", ctypes.c_char_p), # JSON string from AVX plugin
+]
+
+class CSearchResults(ctypes.Structure):
+    _fields_ = [
+        ("items", ctypes.POINTER(CSearchResultItem)),
+        ("count", ctypes.c_size_t),
+        ("capacity", ctypes.c_size_t),
+    ]
+
+# Define function signatures if the library loaded successfully
+if spindex_c_lib:
+    # Config Manager functions
+    spindex_c_lib.config_manager_load.argtypes = [ctypes.c_char_p]
+    spindex_c_lib.config_manager_load.restype = ctypes.POINTER(CSpindexConfig)
+    spindex_c_lib.config_manager_unload.argtypes = [ctypes.POINTER(CSpindexConfig)]
+    spindex_c_lib.config_manager_unload.restype = None
+
+    # Plugin Loader functions
+    # For load_plugins, Python needs to prepare a pointer to a SpindexPlugin pointer
+    # and a pointer to an int.
+    spindex_c_lib.load_plugins.argtypes = [
+        ctypes.c_char_p, # plugin_dir_path
+        ctypes.POINTER(ctypes.POINTER(CSpindexPlugin)), # loaded_plugins_array (SpindexPlugin**)
+        ctypes.POINTER(ctypes.c_int) # plugin_count
+    ]
+    spindex_c_lib.load_plugins.restype = ctypes.c_int
+    spindex_c_lib.unload_plugins.argtypes = [ctypes.POINTER(CSpindexPlugin), ctypes.c_int]
+    spindex_c_lib.unload_plugins.restype = None
+
+    # Search Orchestrator functions
+    spindex_c_lib.search_orchestrator_create.argtypes = [
+        ctypes.POINTER(CSpindexPlugin), # all_loaded_plugins
+        ctypes.c_int,                   # num_all_plugins
+        ctypes.POINTER(CSpindexConfig)  # config
+    ]
+    spindex_c_lib.search_orchestrator_create.restype = ctypes.POINTER(CSearchOrchestrator)
+
+    spindex_c_lib.search_orchestrator_execute_query.argtypes = [
+        ctypes.POINTER(CSearchOrchestrator),
+        ctypes.POINTER(CUserQuery)
+    ]
+    spindex_c_lib.search_orchestrator_execute_query.restype = ctypes.POINTER(CSearchResults)
+
+    spindex_c_lib.search_results_destroy.argtypes = [ctypes.POINTER(CSearchResults)]
+    spindex_c_lib.search_results_destroy.restype = None
+
+    spindex_c_lib.search_orchestrator_destroy.argtypes = [ctypes.POINTER(CSearchOrchestrator)]
+    spindex_c_lib.search_orchestrator_destroy.restype = None
+
+# Global instances for C components (managed by Python)
+# This simple global setup is for ease of use in a single-process FastAPI app.
+# For multi-process workers (like Gunicorn), this state would need careful management
+# (e.g., initialized per worker, or a shared service).
+c_config: Optional[ctypes.POINTER(CSpindexConfig)] = None
+c_plugins_array: Optional[ctypes.POINTER(CSpindexPlugin)] = None
+c_plugin_count = ctypes.c_int(0)
+c_search_orchestrator: Optional[ctypes.POINTER(CSearchOrchestrator)] = None
+
+# Configuration paths (can be env vars)
+SPINDEX_CONFIG_FILE = os.getenv("SPINDEX_CONFIG_FILE", "test_spindex_es.conf") # Path relative to SPINDEX CWD
+SPINDEX_PLUGIN_DIR = os.getenv("SPINDEX_PLUGIN_DIR", "build/lib") # Path relative to SPINDEX CWD, where .so plugins are
+
+def initialize_spindex_c_components():
+    global c_config, c_plugins_array, c_plugin_count, c_search_orchestrator, spindex_c_lib
+    if not spindex_c_lib:
+        logger.error("SPINDEX C library not loaded. Cannot initialize C components.")
+        return
+
+    if c_search_orchestrator: # Already initialized
+        logger.info("SPINDEX C components already initialized.")
+        return
+
+    try:
+        logger.info(f"Loading SPINDEX config from: {SPINDEX_CONFIG_FILE}")
+        # Assume SPINDEX_CONFIG_FILE is relative to where the C library expects it,
+        # or an absolute path. The CWD of the C lib might be SPINDEX/
+        # For now, assume CWD for C lib is SPINDEX/
+        config_path_bytes = SPINDEX_CONFIG_FILE.encode('utf-8')
+        c_config = spindex_c_lib.config_manager_load(config_path_bytes)
+        if not c_config:
+            raise RuntimeError(f"Failed to load SPINDEX config from {SPINDEX_CONFIG_FILE}")
+        logger.info("SPINDEX config loaded successfully.")
+
+        logger.info(f"Loading SPINDEX plugins from: {SPINDEX_PLUGIN_DIR}")
+        plugin_dir_bytes = SPINDEX_PLUGIN_DIR.encode('utf-8')
+        # For load_plugins, we need to pass a pointer to a pointer for the array
+        # and a pointer to an int for the count.
+        c_plugins_array_ptr = ctypes.POINTER(CSpindexPlugin)() # This creates a NULL SpindexPlugin**
+        ret_code = spindex_c_lib.load_plugins(plugin_dir_bytes, ctypes.byref(c_plugins_array_ptr), ctypes.byref(c_plugin_count))
+        if ret_code != 0 or not c_plugins_array_ptr:
+            # Even if ret_code is 0, if c_plugins_array_ptr is still NULL, it means no plugins loaded or error.
+            # However, load_plugins itself should handle freeing its internal array if count is 0.
+            # The responsibility of freeing c_plugins_array_ptr (which is `*loaded_plugins_array` in C)
+            # is on `unload_plugins`.
+            # If ret_code !=0, it's a failure in loading.
+             if ret_code != 0:
+                raise RuntimeError(f"Failed to load SPINDEX plugins from {SPINDEX_PLUGIN_DIR}. Ret code: {ret_code}")
+             else: # ret_code == 0 but no plugins might be okay.
+                logger.warning(f"SPINDEX plugins loaded from {SPINDEX_PLUGIN_DIR}, but no plugins found or loaded (count: {c_plugin_count.value}).")
+                # c_plugins_array will remain NULL or point to an empty list handled by C.
+
+        c_plugins_array = c_plugins_array_ptr # Store the actual pointer to the array of plugins.
+        logger.info(f"SPINDEX plugins loaded. Count: {c_plugin_count.value}")
+
+
+        c_search_orchestrator = spindex_c_lib.search_orchestrator_create(c_plugins_array, c_plugin_count, c_config)
+        if not c_search_orchestrator:
+            raise RuntimeError("Failed to create SPINDEX search orchestrator.")
+        logger.info("SPINDEX search orchestrator created successfully.")
+
+    except Exception as e:
+        logger.error(f"Error initializing SPINDEX C components: {e}", exc_info=True)
+        # Cleanup partially initialized components
+        if c_search_orchestrator: spindex_c_lib.search_orchestrator_destroy(c_search_orchestrator); c_search_orchestrator = None
+        if c_plugins_array and c_plugin_count.value > 0: spindex_c_lib.unload_plugins(c_plugins_array, c_plugin_count); c_plugins_array = None; c_plugin_count.value = 0
+        if c_config: spindex_c_lib.config_manager_unload(c_config); c_config = None
+        raise # Re-raise to prevent app from starting in a bad state or to signal issue
+
+def shutdown_spindex_c_components():
+    global c_config, c_plugins_array, c_plugin_count, c_search_orchestrator, spindex_c_lib
+    if not spindex_c_lib: return
+    logger.info("Shutting down SPINDEX C components...")
+    if c_search_orchestrator:
+        spindex_c_lib.search_orchestrator_destroy(c_search_orchestrator)
+        c_search_orchestrator = None
+        logger.info("SPINDEX search orchestrator destroyed.")
+    if c_plugins_array and c_plugin_count.value > 0: # Check c_plugin_count as c_plugins_array might be non-NULL but point to 0 items if load_plugins was successful but found none.
+        spindex_c_lib.unload_plugins(c_plugins_array, c_plugin_count)
+        c_plugins_array = None
+        c_plugin_count.value = 0
+        logger.info("SPINDEX plugins unloaded.")
+    elif c_plugins_array : # if c_plugins_array is not NULL but count is 0 (e.g. load_plugins allocated but found none)
+        # The C side load_plugins frees the 'plugins' array if count is 0 before returning.
+        # So, Python's c_plugins_array would be NULL.
+        # If it's not NULL here and count is 0, it implies a slight mismatch in how
+        # `loaded_plugins_array` is handled by C on zero plugins vs Python's expectation.
+        # For safety, ensure it's None.
+        c_plugins_array = None # It should already be NULL from load_plugins if count is 0.
+        logger.info("SPINDEX plugins (no actual plugins loaded previously) array reset.")
+
+    if c_config:
+        spindex_c_lib.config_manager_unload(c_config)
+        c_config = None
+        logger.info("SPINDEX config unloaded.")
+    logger.info("SPINDEX C components shutdown complete.")
+
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Application startup: Initializing SPINDEX C components...")
+    try:
+        initialize_spindex_c_components()
+    except Exception as e:
+        logger.error(f"Fatal error during C component initialization on startup: {e}. Application might not function correctly.", exc_info=True)
+        # Depending on severity, might want to sys.exit() or prevent app start.
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("Application shutdown: Cleaning up SPINDEX C components...")
+    shutdown_spindex_c_components()
+
 
 # --- Mock Authentication and User Data ---
 dummy_admin_role = Role(name="Admin", permissions=["create_index", "delete_index", "query_data", "manage_users", "upload_data"])
@@ -500,6 +776,199 @@ async def get_my_query_history(
         db=db, user_id=current_user.username, skip=skip, limit=limit
     )
     return user_query_history
+
+# --- Main Application Runner ---
+if __name__ == "__main__":
+    import uvicorn
+    logger.info("Starting Uvicorn server for SPINDEX Backend.")
+    # In a real application, you would import 'app' from this file.
+    # e.g., uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+# --- Search Endpoint with AVX Integration ---
+@app.post("/search_with_avx", response_model=AvxSearchQueryResponse, tags=["Search"])
+async def search_with_avx_endpoint(
+    query_request: AvxSearchQueryRequest,
+    current_user: User = Depends(get_current_user) # Assuming auth is needed
+):
+    """
+    Performs a search, optionally using AVX-512 for phrase matching on Elasticsearch results.
+    """
+    logger.info(f"User '{current_user.username}' performing search: query='{query_request.query_text}', use_avx={query_request.use_avx}, avx_phrases='{query_request.avx_phrases}'")
+
+    if not es_client:
+        logger.error("Elasticsearch client not available for search.")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Search service (Elasticsearch backend) is currently unavailable.")
+
+    # --- Pass 1: Elasticsearch Broad Search ---
+    es_search_start_time = time.time()
+    try:
+        # Example: Simple match query on a 'content' field.
+        # TODO: Replace with actual index name and more sophisticated query construction.
+        # The index name should likely come from QueryRequest or be globally configured.
+        es_response = es_client.search(
+            index=query_request.index_name or DEFAULT_ES_INDEX_NAME, # Use index from request or default
+            body={
+                "query": {
+                    "match": {
+                        # Assuming documents have a field named "text_content" or similar
+                        "text_content": query_request.query_text
+                    }
+                },
+                "size": 100 # Limit candidate set for AVX processing
+            }
+        )
+        es_hits = es_response.get("hits", {}).get("hits", [])
+        total_results_before_avx = len(es_hits)
+        logger.info(f"Elasticsearch query returned {total_results_before_avx} hits.")
+    except es_exceptions.ConnectionError:
+        logger.error("Elasticsearch connection error during search.")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Search service (Elasticsearch backend) connection error.")
+    except Exception as e:
+        logger.error(f"Error during Elasticsearch search: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error during Elasticsearch search: {str(e)}")
+    es_query_time_ms = int((time.time() - es_search_start_time) * 1000)
+
+
+    # --- Pass 2: AVX-512 Precise Search (if applicable) ---
+    avx_processing_start_time = time.time()
+    processed_results: List[AvxSearchResultItem] = []
+
+    if FEATURE_FLAG_AVX_SEARCH_ENABLED and query_request.use_avx and query_request.avx_phrases and spindex_c_lib and c_search_orchestrator:
+        logger.info("Proceeding with AVX-512 pass.")
+        # The C search_orchestrator_execute_query simulates ES results internally for now.
+        # For a real integration, we would pass the actual ES results (doc IDs and content)
+        # to a modified C function.
+        # For this iteration, we'll call the existing C function which has simulated content,
+        # and then "map" its results back to our conceptual ES results if IDs match.
+        # This is a temporary bridge until search_orchestrator_execute_query takes real ES content.
+
+        # Prepare CUserQuery
+        c_query = CUserQuery()
+        main_query_text_bytes = query_request.query_text.encode('utf-8')
+        c_query.main_query_text = ctypes.c_char_p(main_query_text_bytes)
+
+        avx_phrases_bytes = query_request.avx_phrases.encode('utf-8')
+        c_query.avx_phrases = ctypes.c_char_p(avx_phrases_bytes)
+
+        # Pass new AVX parameters to CUserQuery
+        c_query.avx_case_sensitive = query_request.avx_case_sensitive
+        c_query.avx_find_all_occurrences = query_request.avx_find_all_occurrences
+        c_query.avx_max_hits_per_doc = query_request.avx_max_hits_per_doc
+
+        # Call C function
+        c_results_ptr = spindex_c_lib.search_orchestrator_execute_query(c_search_orchestrator, ctypes.byref(c_query))
+
+        if not c_results_ptr:
+            logger.error("Call to search_orchestrator_execute_query returned NULL.")
+            # Fallback to just ES results or return error
+            # For now, let's simulate that AVX pass yielded no refinement if C call failed.
+            for hit in es_hits:
+                processed_results.append(AvxSearchResultItem(
+                    document_id=hit.get("_id", "unknown_id"),
+                    score=hit.get("_score", 0.0),
+                    document_content_preview=hit.get("_source", {}).get("text_content_preview", hit.get("_source", {}).get("text_content", "")[:200]), # Example preview
+                    avx_match_found=False,
+                    avx_match_details={"error": "AVX C-call failed"}
+                ))
+        else:
+            c_results = c_results_ptr.contents
+            logger.info(f"AVX search orchestrator returned {c_results.count} items.")
+
+            # Convert CSearchResults to Python list of AvxSearchResultItem
+            # This part needs to be careful: the C results are based on its *simulated* docs.
+            # We need a strategy to map them back or use them.
+            # For now, let's directly use the C results, assuming they are the refined set.
+            # In a real scenario, you'd iterate `es_hits`, extract text, pass to a C function
+            # that processes *that specific text* with AVX, then merge.
+            # The current C function `search_orchestrator_execute_query` does both ES (simulated) and AVX.
+
+            temp_c_results_map = {} # doc_id -> CSearchResultItem
+            for i in range(c_results.count):
+                c_item = c_results.items[i]
+                doc_id = c_item.document_id.decode('utf-8') if c_item.document_id else f"c_gen_id_{i}"
+
+                avx_details_json = {}
+                if c_item.avx_match_details:
+                    try:
+                        avx_details_json = json.loads(c_item.avx_match_details.decode('utf-8'))
+                    except json.JSONDecodeError:
+                        logger.warning(f"Failed to parse AVX match details JSON for doc {doc_id}")
+                        avx_details_json = {"error": "failed to parse AVX details JSON", "raw": c_item.avx_match_details.decode('utf-8', errors='replace')}
+
+                temp_c_results_map[doc_id] = AvxSearchResultItem(
+                    document_id=doc_id,
+                    document_content_preview=c_item.document_content_preview.decode('utf-8') if c_item.document_content_preview else None,
+                    score=c_item.score, # This score is from C orchestrator's simulation
+                    avx_match_found=c_item.avx_match_found,
+                    avx_match_details=avx_details_json
+                )
+
+            # Filter/Re-rank original es_hits based on temp_c_results_map
+            # For now, simple filter: only include if AVX match was found by C orchestrator's logic
+            # This is still a bit of a conceptual leap due to the C simulation.
+            # A true two-pass would involve feeding ES content to an AVX-only C function.
+
+            # Let's refine: if AVX was used, we only care about documents where AVX found a match.
+            # The C orchestrator already does this filtering conceptually.
+            # So, we use the results directly from C if AVX pass was done.
+            for doc_id, avx_item in temp_c_results_map.items():
+                 if avx_item.avx_match_found: # Only add if AVX found something
+                    processed_results.append(avx_item)
+
+            if not processed_results and total_results_before_avx > 0 and query_request.avx_phrases:
+                 logger.info("AVX pass was performed, but no documents matched the AVX phrases.")
+
+            # Free C memory
+            spindex_c_lib.search_results_destroy(c_results_ptr)
+
+        if not processed_results and query_request.use_avx and query_request.avx_phrases:
+            # If AVX was intended but yielded no results (either C call failed or no matches)
+            # and we want to return nothing in that case.
+            logger.info("AVX search used, but no results post-AVX processing or C-call failed. Returning empty.")
+            # processed_results remains empty.
+            pass # Or, if we want to return ES results with "avx_match_found=False", that's another strategy.
+                 # For now, strict: AVX used + AVX phrases = only AVX matches.
+        elif not (query_request.use_avx and query_request.avx_phrases): # AVX not used, or no phrases
+            logger.info("AVX-512 pass skipped or no AVX phrases provided. Using Elasticsearch results directly.")
+            for hit in es_hits:
+                processed_results.append(AvxSearchResultItem(
+                    document_id=hit.get("_id", "unknown_id"),
+                    score=hit.get("_score", 0.0),
+                    document_content_preview=hit.get("_source", {}).get("text_content_preview", hit.get("_source", {}).get("text_content", "")[:200]),
+                    avx_match_found=False,
+                    avx_match_details={"info": "AVX search not performed for this item"}
+                ))
+
+    else: # AVX not used, or C lib not available
+        logger.info("AVX-512 pass skipped (use_avx=False, no phrases, or C library/orchestrator not available). Using Elasticsearch results directly.")
+        for hit in es_hits:
+            doc_preview = ""
+            source = hit.get("_source", {})
+            if source: # Ensure _source exists
+                # Try to get a specific text field, fallback to string representation of _source
+                doc_preview = source.get("text_content_preview", source.get("text_content", str(source))[:200])
+
+
+            processed_results.append(AvxSearchResultItem(
+                document_id=hit.get("_id", "unknown_id"),
+                score=hit.get("_score", 0.0),
+                document_content_preview=doc_preview,
+                avx_match_found=False,
+                avx_match_details={"info": "AVX search not performed"}
+            ))
+
+    avx_processing_time_ms = int((time.time() - avx_processing_start_time) * 1000) if (query_request.use_avx and query_request.avx_phrases) else None
+
+    return AvxSearchQueryResponse(
+        es_query_time_ms=es_query_time_ms,
+        avx_processing_time_ms=avx_processing_time_ms,
+        total_results_before_avx=total_results_before_avx,
+        total_results_after_avx=len(processed_results),
+        results=processed_results,
+        message="Search complete."
+    )
 
 # --- Main Application Runner ---
 if __name__ == "__main__":

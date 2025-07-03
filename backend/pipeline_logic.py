@@ -10,7 +10,7 @@ from collections import defaultdict
 from typing import List, Dict, Any, Optional
 
 from sqlalchemy.orm import Session
-from backend.models import IngestionJobDB
+from backend.models import IngestionJobDB, JobModuleStatus # Added JobModuleStatus
 from backend.security_scanner import scan_file # For security scanning
 
 # --- Data Processing & Scientific Computing Imports ---
@@ -50,6 +50,22 @@ CGH_REJECT_IF_TYPES_FOUND: List[str] = json.loads(os.getenv("CGH_REJECT_IF_TYPES
 # It's better if the main application ensures directories exist.
 # For now, adding it here for completeness of moved logic.
 os.makedirs(PROCESSED_AREA_PATH, exist_ok=True)
+
+# --- Helper Function for Checksum ---
+import hashlib
+
+def calculate_sha256_checksum(file_path: str) -> str:
+    """Calculates the SHA256 checksum of a file."""
+    sha256_hash = hashlib.sha256()
+    try:
+        with open(file_path, "rb") as f:
+            # Read and update hash string value in blocks of 4K
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
+    except FileNotFoundError:
+        # Or handle as per specific requirements, e.g., log and return None
+        raise
 
 
 # --- Helper Functions (moved from main.py) ---
@@ -456,73 +472,184 @@ def execute_aegis_pipeline(job_id: str, db: Session, logger_instance: logging.Lo
             return False # Potentially not critical, depends on requirements
 
     # --- Data Promotion Stage ---
-    if job.processing_status == "completed_complex_geometry":
+    if job.processing_status == "completed_complex_geometry": # This status means prior stages are okay
         logger_instance.info(f"Starting data promotion for job {job_id}")
         job.processing_status = "PROCESSING_PROMOTION"
-        module_start_time = datetime.utcnow()
+        promotion_module_start_time = datetime.utcnow()
         current_log = list(job.pipeline_stages_executed_log or [])
         current_log.append({
-            "timestamp": module_start_time.isoformat(),
+            "timestamp": promotion_module_start_time.isoformat(),
             "stage": "Data Promotion",
             "status": "started",
             "message": "Initiated data promotion to trusted area."
         })
         job.pipeline_stages_executed_log = current_log
-        db.commit()
+        # Create JobModuleStatus entry
+        promo_module_status = JobModuleStatus(
+            job_id=job.job_id,
+            module_name="DataPromotion",
+            module_status="RUNNING",
+            started_at=promotion_module_start_time,
+            input_data_path=job.intermediate_geojson_path
+        )
+        db.add(promo_module_status)
+        db.commit() # Commit start of promotion
 
-        if not job.intermediate_geojson_path or not os.path.isfile(job.intermediate_geojson_path):
-            error_message = f"Intermediate GeoJSON path '{job.intermediate_geojson_path}' not found or not a file for job {job_id}."
+        source_path = job.intermediate_geojson_path
+        source_checksum = None
+        destination_checksum = None
+
+        if not source_path or not os.path.isfile(source_path):
+            error_message = f"Intermediate GeoJSON path '{source_path}' not found or not a file for job {job_id}."
             logger_instance.error(error_message)
             job.processing_status = "FAILED_PROMOTION"
-            current_log = list(job.pipeline_stages_executed_log or [])
+            promo_module_status.module_status = "FAILED"
+            promo_module_status.status_message = error_message
+            promo_module_status.completed_at = datetime.utcnow()
             current_log.append({
-                "timestamp": datetime.utcnow().isoformat(),
-                "stage": "Data Promotion",
-                "status": "failed",
-                "message": error_message,
-                "details": {"reason": "Intermediate file missing or invalid"}
+                "timestamp": datetime.utcnow().isoformat(), "stage": "Data Promotion", "status": "failed",
+                "message": error_message, "details": {"reason": "Intermediate file missing or invalid"}
             })
             job.pipeline_stages_executed_log = current_log
             db.commit()
         else:
             try:
+                # 1. Calculate source checksum
+                logger_instance.info(f"Calculating checksum for source file: {source_path}")
+                source_checksum = calculate_sha256_checksum(source_path)
+                current_log.append({
+                    "timestamp": datetime.utcnow().isoformat(), "stage": "Data Promotion", "status": "checksum_source_calculated",
+                    "message": f"Source checksum ({source_path}): {source_checksum}"
+                })
+                job.pipeline_stages_executed_log = current_log
+                # Potentially commit log update: db.commit()
+
+                # 2. Determine destination path
                 original_filename_base = os.path.splitext(job.original_filename or f"job_{job_id}")[0]
                 promoted_filename = f"{original_filename_base}_promoted.geojson"
                 destination_path = os.path.join(TRUSTED_AREA_PATH, promoted_filename)
+                os.makedirs(os.path.dirname(destination_path), exist_ok=True)
 
-                shutil.move(job.intermediate_geojson_path, destination_path)
 
-                job.location_of_promoted_data = destination_path
-                job.promotion_timestamp = datetime.utcnow()
-                job.processing_status = "PROMOTED"
-                success_message = f"Data successfully promoted to: {destination_path}"
-                logger_instance.info(success_message)
-                current_log = list(job.pipeline_stages_executed_log or [])
+                # 3. Copy file
+                logger_instance.info(f"Copying {source_path} to {destination_path}")
+                shutil.copy2(source_path, destination_path)
                 current_log.append({
-                    "timestamp": job.promotion_timestamp.isoformat(),
-                    "stage": "Data Promotion",
-                    "status": "success",
-                    "message": success_message,
-                    "details": {"destination_path": destination_path}
+                    "timestamp": datetime.utcnow().isoformat(), "stage": "Data Promotion", "status": "file_copied",
+                    "message": f"File copied to {destination_path}"
                 })
                 job.pipeline_stages_executed_log = current_log
-                db.commit()
-            except Exception as e_promote:
-                error_message = f"Exception during data promotion for job {job_id}: {e_promote}"
-                logger_instance.error(error_message)
-                job.processing_status = "FAILED_PROMOTION"
-                current_log = list(job.pipeline_stages_executed_log or [])
+                # Potentially commit log update: db.commit()
+
+                # 4. Calculate destination checksum
+                logger_instance.info(f"Calculating checksum for destination file: {destination_path}")
+                destination_checksum = calculate_sha256_checksum(destination_path)
                 current_log.append({
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "stage": "Data Promotion",
-                    "status": "failed",
-                    "message": error_message,
-                    "details": {"exception": str(e_promote)}
+                    "timestamp": datetime.utcnow().isoformat(), "stage": "Data Promotion", "status": "checksum_destination_calculated",
+                    "message": f"Destination checksum ({destination_path}): {destination_checksum}"
+                })
+                job.pipeline_stages_executed_log = current_log
+                # Potentially commit log update: db.commit()
+
+                # 5. Compare checksums
+                if source_checksum == destination_checksum:
+                    logger_instance.info(f"Checksums match for job {job_id}. Proceeding with DB update.")
+                    # Checksum matches, proceed to update DB and then remove source
+                    job.location_of_promoted_data = destination_path
+                    job.promotion_timestamp = datetime.utcnow()
+                    job.processing_status = "PROMOTED"
+                    job.data_hash_processed = source_checksum # Store the verified checksum
+
+                    promo_module_status.module_status = "COMPLETED_SUCCESS"
+                    promo_module_status.status_message = f"Data promoted successfully to {destination_path} with checksum {source_checksum}."
+                    promo_module_status.completed_at = job.promotion_timestamp
+                    promo_module_status.output_data_path = destination_path
+
+                    success_message = f"Data successfully promoted to: {destination_path}. Checksum: {source_checksum}"
+                    logger_instance.info(success_message)
+                    current_log.append({
+                        "timestamp": job.promotion_timestamp.isoformat(), "stage": "Data Promotion", "status": "success_db_updated",
+                        "message": success_message, "details": {"destination_path": destination_path, "checksum": source_checksum}
+                    })
+                    job.pipeline_stages_executed_log = current_log
+                    db.commit() # Commit DB changes for job and module status
+
+                    # 6. Remove source file AFTER successful DB commit
+                    try:
+                        logger_instance.info(f"Removing source file: {source_path}")
+                        os.remove(source_path)
+                        current_log.append({
+                            "timestamp": datetime.utcnow().isoformat(), "stage": "Data Promotion", "status": "source_file_removed",
+                            "message": f"Source file {source_path} removed."
+                        })
+                        job.pipeline_stages_executed_log = current_log
+                        # Optionally update job.intermediate_geojson_path to None or log removal
+                        # job.intermediate_geojson_path = None # If we want to signify it's gone
+                        db.commit() # Commit final log update
+                    except Exception as e_remove:
+                        remove_error_message = f"Failed to remove source file {source_path} after promotion: {e_remove}"
+                        logger_instance.error(remove_error_message)
+                        # This is not ideal, but promotion is done. Log this clearly.
+                        current_log.append({
+                            "timestamp": datetime.utcnow().isoformat(), "stage": "Data Promotion", "status": "warning_source_remove_failed",
+                            "message": remove_error_message
+                        })
+                        job.pipeline_stages_executed_log = current_log
+                        # Update module status message to reflect this warning
+                        promo_module_status.status_message += f" WARNING: {remove_error_message}"
+                        db.commit()
+
+                else: # Checksums do not match
+                    checksum_error_message = f"Checksum mismatch for job {job_id}. Source ({source_checksum}) != Destination ({destination_checksum}). Cleaning up destination file."
+                    logger_instance.error(checksum_error_message)
+                    job.processing_status = "FAILED_PROMOTION_CHECKSUM_MISMATCH"
+
+                    promo_module_status.module_status = "FAILED"
+                    promo_module_status.status_message = checksum_error_message
+                    promo_module_status.completed_at = datetime.utcnow()
+
+                    current_log.append({
+                        "timestamp": datetime.utcnow().isoformat(), "stage": "Data Promotion", "status": "failed_checksum_mismatch",
+                        "message": checksum_error_message, "details": {"source_checksum": source_checksum, "destination_checksum": destination_checksum}
+                    })
+                    job.pipeline_stages_executed_log = current_log
+                    # Clean up the invalid destination file
+                    try:
+                        os.remove(destination_path)
+                        logger_instance.info(f"Removed invalid destination file: {destination_path}")
+                        current_log.append({
+                            "timestamp": datetime.utcnow().isoformat(), "stage": "Data Promotion", "status": "cleanup_destination_removed",
+                            "message": f"Invalid destination file {destination_path} removed due to checksum mismatch."
+                        })
+                        job.pipeline_stages_executed_log = current_log
+                    except Exception as e_cleanup:
+                        cleanup_err_msg = f"Failed to remove corrupted destination file {destination_path}: {e_cleanup}"
+                        logger_instance.error(cleanup_err_msg)
+                        current_log.append({
+                            "timestamp": datetime.utcnow().isoformat(), "stage": "Data Promotion", "status": "error_cleanup_failed",
+                            "message": cleanup_err_msg
+                        })
+                        job.pipeline_stages_executed_log = current_log
+                        promo_module_status.status_message += f" CRITICAL: {cleanup_err_msg}"
+                    db.commit()
+
+            except Exception as e_promote:
+                general_error_message = f"Exception during data promotion for job {job_id}: {e_promote}"
+                logger_instance.error(general_error_message)
+                job.processing_status = "FAILED_PROMOTION"
+
+                promo_module_status.module_status = "FAILED"
+                promo_module_status.status_message = general_error_message
+                promo_module_status.completed_at = datetime.utcnow()
+
+                current_log.append({
+                    "timestamp": datetime.utcnow().isoformat(), "stage": "Data Promotion", "status": "failed_exception",
+                    "message": general_error_message, "details": {"exception": str(e_promote)}
                 })
                 job.pipeline_stages_executed_log = current_log
                 db.commit()
 
     logger_instance.info(f"Pipeline execution finished for job_id: {job_id} with status {job.processing_status}")
-    # Final check: if any "failed_" status was set (including FAILED_PROMOTION), overall success is False.
+    # Final check: if any "failed_" status was set (including FAILED_PROMOTION or FAILED_PROMOTION_CHECKSUM_MISMATCH), overall success is False.
     # Otherwise, if it reached a "completed_" or "PROMOTED" state, it's True.
     return not job.processing_status.startswith("failed_") and not job.processing_status.startswith("FAILED_")
