@@ -36,6 +36,37 @@ foreach(test_source ${CORE_TEST_SOURCES})
     add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()
 
+# --- Shared Library for CFFI (Python ctypes interface) ---
+# This library will bundle the core functionalities needed by the Python backend.
+# It includes the same sources as spindex_core static library, but built as SHARED.
+add_library(spindex_core_cffi SHARED
+    ${CORE_SOURCES}
+    # Add other necessary C files that are part of the core logic to be exposed
+    # e.g., search_orchestrator.c, plugin_loader.c, config_manager.c, utils.c, hardware_detection.c
+    # These are already in CORE_SOURCES if CORE_SOURCES globbed them correctly
+    # and they were not filtered out.
+    # Explicitly list them if CORE_SOURCES is too broad or misses some.
+    # For now, assume CORE_SOURCES includes them.
+    # If spindex_aegis is also needed by this CFFI lib (e.g. orchestrator calls it),
+    # then its sources or the library itself would need to be linked.
+    # For now, assume spindex_core_cffi primarily needs spindex_core's own files.
+)
+
+target_link_libraries(spindex_core_cffi PUBLIC
+    Threads::Threads
+    libcurl::libcurl
+    Jansson::jansson
+    GEOS::geos
+    # Link spindex_aegis if CFFI functions will call into it
+    # spindex_aegis # This is a STATIC library, so it would be linked in.
+)
+# Ensure symbols are exported if needed (usually default for SHARED library)
+# On Linux, this should be fine. On Windows, might need __declspec(dllexport).
+
+# Set output directory for this shared library (usually handled by global CMAKE_LIBRARY_OUTPUT_DIRECTORY)
+# set_target_properties(spindex_core_cffi PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+
 # Test ingestion pipeline
 add_executable(test_ingestion_pipeline test_ingestion_pipeline.c)
 target_link_libraries(test_ingestion_pipeline PRIVATE spindex_core spindex_aegis)

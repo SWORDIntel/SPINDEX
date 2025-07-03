@@ -161,6 +161,10 @@ SearchResults* search_orchestrator_execute_query(
                 AvxSearchParams avx_params;
                 avx_params.text_to_search = text_to_search_chunk;
                 avx_params.phrases_to_find = phrases_chunk;
+                // Use AVX parameters from UserQuery
+                avx_params.case_sensitive = query->avx_case_sensitive;
+                avx_params.find_all_occurrences = query->avx_find_all_occurrences;
+                avx_params.max_hits_per_doc = query->avx_max_hits_per_doc;
 
                 ProcessedDataChunk wrapper_chunk_for_avx;
                 wrapper_chunk_for_avx.data = (unsigned char*)&avx_params;

@@ -17,6 +17,12 @@ typedef struct SearchOrchestrator SearchOrchestrator;
 typedef struct {
     const char* main_query_text; // For broader ES search
     const char* avx_phrases;     // Newline-separated phrases for AVX search
+
+    // AVX specific parameters, to be passed down to AvxSearchParams
+    bool avx_case_sensitive;
+    bool avx_find_all_occurrences;
+    int avx_max_hits_per_doc;
+
     time_t date_start;           // Optional start date for filtering (0 if not used)
     time_t date_end;             // Optional end date for filtering (0 if not used)
     const char* filter_string;   // Optional additional filter criteria (e.g., "type:report AND author:smith")
