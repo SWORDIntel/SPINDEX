@@ -1,27 +1,48 @@
-# SPINDEX/plugins/classifiers/CMakeLists.txt
-cmake_minimum_required(VERSION 3.15)
+# --- Classifier Plugins CMakeLists.txt ---
 
-set(PLUGIN_NAME "openvino_classifier")
-set(PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/${PLUGIN_NAME}.c")
+macro(add_classifier_plugin plugin_id source_file)
+    set(plugin_target_name "${plugin_id}_classifier_so")
 
-add_library(${PLUGIN_NAME} SHARED ${PLUGIN_SOURCES})
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${source_file}")
+        add_library(${plugin_target_name} MODULE ${source_file})
+        set_target_properties(${plugin_target_name} PROPERTIES PREFIX "")
+        set_target_properties(${plugin_target_name} PROPERTIES OUTPUT_NAME "${plugin_id}_classifier")
 
-# openvino_classifier plugin depends on utils from spindex_core
-# and OpenVINO libraries.
-# Assumes OpenVINO has been found by find_package(OpenVINO) in a higher-level CMakeLists.txt
-# and provides imported targets.
-# Link against spindex_core for utils.o
-target_link_libraries(${PLUGIN_NAME} PRIVATE
-    spindex_core
-    # This is a placeholder for the actual OpenVINO imported target.
-    # Common targets could be OpenVINO::runtime, OpenVINO::Core, etc.
-    # This will be resolved when FindOpenVINO.cmake is fully integrated.
-    OpenVINO::openvino
-)
+        target_include_directories(${plugin_target_name} PUBLIC
+            "${CMAKE_SOURCE_DIR}/include"
+        )
+        target_compile_options(${plugin_target_name} PRIVATE ${CMAKE_C_FLAGS})
 
-# Include directories from OpenVINO should be handled by target_link_libraries
-# if FindOpenVINO.cmake sets up the imported targets correctly with INTERFACE_INCLUDE_DIRECTORIES.
-# e.g., target_include_directories(${PLUGIN_NAME} PRIVATE ${OpenVINO_INCLUDE_DIRS}) might not be needed.
+        if("${plugin_id}" STREQUAL "openvino")
+            if(OPENVINO_FOUND) # This variable is set by find_package(OpenVINO CONFIG) in root CMake
+                # Assumes OpenVINO::OpenVINO or similar target is provided by Conan's OpenVINO recipe
+                # This target should handle include directories.
+                target_link_libraries(${plugin_target_name} PRIVATE spindex_core_lib OpenVINO::OpenVINO)
+                # RPATH settings are typically handled by Conan toolchain or OpenVINO's recipe.
+                # If specific RPATH is still needed for the plugin, it could be added here,
+                # but it's better if Conan's setup makes it unnecessary.
+            else()
+                message(WARNING "OpenVINO not found/configured by Conan. ${plugin_target_name} will not be built correctly or skipped.")
+                # Depending on how add_classifier_plugin is called, this plugin might not be added if OPENVINO_FOUND is false.
+            endif()
+        endif()
 
-# General include directories for plugin_interface.h are expected to be handled globally.
-# Output directory for .so files is handled by CMAKE_LIBRARY_OUTPUT_DIRECTORY.
+        list(APPEND SPINDEX_ALL_PLUGIN_TARGETS ${plugin_target_name})
+        set(SPINDEX_ALL_PLUGIN_TARGETS ${SPINDEX_ALL_PLUGIN_TARGETS} CACHE INTERNAL "List of all plugin targets" FORCE)
+        message(STATUS "Configured classifier plugin: ${plugin_target_name} (${plugin_id}_classifier.so)")
+    else()
+        message(WARNING "Source file ${source_file} not found for ${plugin_id}_classifier.")
+    endif()
+endmacro()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/openvino_classifier.c")
+    if(OPENVINO_FOUND) # Only attempt to build if OpenVINO was found by root CMake
+        add_classifier_plugin(openvino openvino_classifier.c)
+    else()
+        message(STATUS "OpenVINO not found, OpenVINO classifier plugin will be skipped.")
+    endif()
+else()
+    message(STATUS "openvino_classifier.c not found, skipping OpenVINO classifier plugin.")
+endif()
+
+message(STATUS "Classifier plugins CMakeLists.txt processing complete.")
