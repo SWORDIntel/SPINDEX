@@ -79,3 +79,21 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk *input)
 
     return output_chunk;
 }
+
+// Implementation of spindex_plugin_get_dependencies
+// Dummy plugin has no dependencies.
+SpindexPluginDependency* spindex_plugin_get_dependencies(int* count) {
+    if (count) {
+        *count = 0;
+    }
+    return NULL; // No dependencies
+}
+
+// Implementation of spindex_plugin_free_dependencies_list
+// Since get_dependencies returns NULL, this function doesn't need to do anything.
+void spindex_plugin_free_dependencies_list(SpindexPluginDependency* dependencies, int count) {
+    // No-op for dummy plugin as it allocates nothing for dependencies.
+    (void)dependencies; // Suppress unused parameter warning
+    (void)count;        // Suppress unused parameter warning
+    printf("[%s] Freeing dependencies list (no-op as no dependencies).\n", PLUGIN_NAME);
+}

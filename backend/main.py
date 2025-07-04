@@ -422,6 +422,19 @@ dummy_users_db = {
 }
 X_AUTH_TOKEN_SCHEME = APIKeyHeader(name="X-Auth-Token", auto_error=False)
 
+from fastapi.requests import Request # For type hinting in exception handlers
+from backend.exceptions import (
+    SpindexBaseException,
+    ResourceNotFoundException,
+    DatabaseErrorException,
+    InvalidOperationException,
+    DuplicateResourceException,
+    ElasticsearchConnectionException,
+    ElasticsearchQueryException,
+    CComponentException
+)
+
+
 # --- OpenAPI Tags Metadata ---
 tags_metadata = [
     {
@@ -436,6 +449,57 @@ app = FastAPI(
     version="0.1.0",
     openapi_tags=tags_metadata  # Add tags metadata to FastAPI app
 )
+
+# --- Custom Exception Handlers ---
+@app.exception_handler(SpindexBaseException)
+async def spindex_base_exception_handler(request: Request, exc: SpindexBaseException):
+    logger.error(f"SpindexBaseException caught: {exc.detail} (Error Code: {exc.error_code})", exc_info=True)
+    content = {"detail": exc.detail}
+    if exc.error_code:
+        content["error_code"] = exc.error_code
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=content,
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler_logging(request: Request, exc: HTTPException):
+    # Log standard HTTPErrors as well, especially if they are 500s not caught by other specific handlers
+    # This ensures consistent logging for errors FastAPI might raise internally or those raised directly.
+    if exc.status_code >= 500:
+        logger.error(f"HTTPException (server error) caught: Status {exc.status_code}, Detail: {exc.detail}", exc_info=True)
+    else:
+        logger.warning(f"HTTPException (client error) caught: Status {exc.status_code}, Detail: {exc.detail}")
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}, # Standard FastAPI HTTPException content
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    # This will catch any exception not caught by more specific handlers
+    # or by FastAPI's default HTTPException handling.
+    # It's crucial for catching unexpected errors from dependencies like SQLAlchemy, ES client, C lib, etc.
+    request_id = str(uuid.uuid4()) # Generate a unique ID for this error instance
+    logger.error(f"Unhandled exception caught (assigned Error ID: {request_id}): {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "detail": "An unexpected internal server error occurred. Please contact support.",
+            "error_id": request_id # Provide this ID to the user/client
+        },
+    )
+
+# Note: Order of exception handlers might matter if exceptions have inheritance.
+# FastAPI processes them in the order they are added or by specificity.
+# More specific handlers (like for SpindexBaseException subclasses) should be triggered
+# before a generic SpindexBaseException handler if they were registered separately.
+# However, since ResourceNotFoundException etc. inherit from SpindexBaseException,
+# the spindex_base_exception_handler will catch them unless they have their own dedicated handler.
+# For now, one handler for SpindexBaseException and its children is fine as it uses their properties.
+
 
 # --- Token Configuration ---
 # Load tokens from environment variables with defaults for local development if not set.
@@ -649,7 +713,16 @@ async def aegis_secure_upload_file(
 
 # --- Index Metadata Endpoints ---
 
-@app.post("/indexes", response_model=IndexMetadata, status_code=status.HTTP_201_CREATED, tags=["Index Management"])
+@app.post(
+    "/indexes",
+    response_model=IndexMetadata,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Index Management"],
+    responses={
+        409: {"description": "Conflict - Resource already exists", "content": {"application/json": {"example": {"detail": "IndexMetadata with index_name 'xxx' already exists.", "error_code": "DUPLICATE_RESOURCE"}}}},
+        500: {"description": "Internal server error (e.g., database issue)", "content": {"application/json": {"example": {"detail": "A database error occurred.", "error_code": "DATABASE_ERROR"}}}}
+    }
+)
 async def create_new_index_metadata(
     index_data: IndexMetadata, # Pydantic model for request body, defaults will be applied by Pydantic
     db: Session = Depends(get_db),
@@ -667,7 +740,14 @@ async def create_new_index_metadata(
     logger.info(f"Index metadata created successfully with ID: {db_index_meta.index_id}")
     return db_index_meta
 
-@app.get("/indexes", response_model=List[IndexMetadata], tags=["Index Management"])
+@app.get(
+    "/indexes",
+    response_model=List[IndexMetadata],
+    tags=["Index Management"],
+    responses={
+        500: {"description": "Internal server error (e.g., database issue)", "content": {"application/json": {"example": {"detail": "A database error occurred.", "error_code": "DATABASE_ERROR"}}}}
+    }
+)
 async def list_all_index_metadata(
     skip: int = 0,
     limit: int = 100,
@@ -681,7 +761,15 @@ async def list_all_index_metadata(
     indexes = crud.get_all_index_metadata(db=db, skip=skip, limit=limit)
     return indexes
 
-@app.get("/indexes/{index_id}", response_model=IndexMetadata, tags=["Index Management"])
+@app.get(
+    "/indexes/{index_id}",
+    response_model=IndexMetadata,
+    tags=["Index Management"],
+    responses={
+        404: {"description": "Resource not found", "content": {"application/json": {"example": {"detail": "IndexMetadata with ID 'xxx' not found.", "error_code": "RESOURCE_NOT_FOUND"}}}},
+        500: {"description": "Internal server error (e.g., database issue)", "content": {"application/json": {"example": {"detail": "A database error occurred.", "error_code": "DATABASE_ERROR"}}}}
+    }
+)
 async def get_specific_index_metadata(
     index_id: str,
     db: Session = Depends(get_db),
@@ -691,13 +779,21 @@ async def get_specific_index_metadata(
     Retrieve a specific index metadata record by its ID.
     """
     logger.info(f"User '{current_user.username}' requesting index metadata for ID: {index_id}")
+    # crud.get_index_metadata will now raise ResourceNotFoundException if not found,
+    # which will be handled by the spindex_base_exception_handler.
     db_index_meta = crud.get_index_metadata(db=db, index_id=index_id)
-    if db_index_meta is None:
-        logger.warning(f"Index metadata with ID '{index_id}' not found for user '{current_user.username}'.")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Index metadata not found")
     return db_index_meta
 
-@app.put("/indexes/{index_id}", response_model=IndexMetadata, tags=["Index Management"])
+@app.put(
+    "/indexes/{index_id}",
+    response_model=IndexMetadata,
+    tags=["Index Management"],
+    responses={
+        404: {"description": "Resource not found", "content": {"application/json": {"example": {"detail": "IndexMetadata with ID 'xxx' not found for update.", "error_code": "RESOURCE_NOT_FOUND"}}}},
+        409: {"description": "Conflict - e.g. trying to update to a name that already exists", "content": {"application/json": {"example": {"detail": "IndexMetadata with index_name 'yyy' already exists.", "error_code": "DUPLICATE_RESOURCE"}}}},
+        500: {"description": "Internal server error (e.g., database issue)", "content": {"application/json": {"example": {"detail": "A database error occurred.", "error_code": "DATABASE_ERROR"}}}}
+    }
+)
 async def update_existing_index_metadata(
     index_id: str,
     update_payload: Dict[str, Any], # Allow flexible updates
@@ -711,14 +807,20 @@ async def update_existing_index_metadata(
     """
     logger.info(f"User '{current_user.username}' attempting to update index metadata for ID: {index_id} with payload: {update_payload}")
     # Check permissions if necessary
+    # crud.update_index_metadata will raise ResourceNotFoundException or DatabaseErrorException
     updated_meta = crud.update_index_metadata(db=db, index_id=index_id, update_data=update_payload)
-    if updated_meta is None:
-        logger.warning(f"Update failed: Index metadata with ID '{index_id}' not found for user '{current_user.username}'.")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Index metadata not found for update")
     logger.info(f"Index metadata ID '{index_id}' updated successfully by user '{current_user.username}'.")
     return updated_meta
 
-@app.delete("/indexes/{index_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Index Management"])
+@app.delete(
+    "/indexes/{index_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["Index Management"],
+    responses={
+        404: {"description": "Resource not found", "content": {"application/json": {"example": {"detail": "IndexMetadata with ID 'xxx' not found for deletion.", "error_code": "RESOURCE_NOT_FOUND"}}}},
+        500: {"description": "Internal server error (e.g., database issue)", "content": {"application/json": {"example": {"detail": "A database error occurred.", "error_code": "DATABASE_ERROR"}}}}
+    }
+)
 async def delete_existing_index_metadata(
     index_id: str,
     db: Session = Depends(get_db),
@@ -730,16 +832,22 @@ async def delete_existing_index_metadata(
     """
     logger.info(f"User '{current_user.username}' attempting to delete index metadata for ID: {index_id}")
     # Check permissions if necessary
-    success = crud.delete_index_metadata(db=db, index_id=index_id)
-    if not success:
-        logger.warning(f"Deletion failed: Index metadata with ID '{index_id}' not found for user '{current_user.username}'.")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Index metadata not found for deletion")
+    # crud.delete_index_metadata will raise ResourceNotFoundException or DatabaseErrorException
+    crud.delete_index_metadata(db=db, index_id=index_id)
     logger.info(f"Index metadata ID '{index_id}' deleted successfully by user '{current_user.username}'.")
     return None # For HTTP 204, no response body should be sent. FastAPI handles this.
 
 # --- Query History Endpoints ---
 
-@app.post("/users/me/query_history", response_model=QueryHistoryItem, status_code=status.HTTP_201_CREATED, tags=["Query History"])
+@app.post(
+    "/users/me/query_history",
+    response_model=QueryHistoryItem,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Query History"],
+    responses={
+        500: {"description": "Internal server error (e.g., database issue)", "content": {"application/json": {"example": {"detail": "A database error occurred.", "error_code": "DATABASE_ERROR"}}}}
+    }
+)
 async def log_query_for_current_user(
     query_data: QueryRequest, # This is the body of the request, representing the query itself
     db: Session = Depends(get_db),
@@ -761,7 +869,14 @@ async def log_query_for_current_user(
     logger.info(f"Query logged successfully for user '{current_user.username}' with history ID: {db_query_history_item.query_id}")
     return db_query_history_item
 
-@app.get("/users/me/query_history", response_model=List[QueryHistoryItem], tags=["Query History"])
+@app.get(
+    "/users/me/query_history",
+    response_model=List[QueryHistoryItem],
+    tags=["Query History"],
+    responses={
+        500: {"description": "Internal server error (e.g., database issue)", "content": {"application/json": {"example": {"detail": "A database error occurred.", "error_code": "DATABASE_ERROR"}}}}
+    }
+)
 async def get_my_query_history(
     skip: int = 0,
     limit: int = 100,
@@ -786,8 +901,25 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
+# --- Test Endpoint for Generic Error Handler ---
+@app.get("/test_generic_error", tags=["Tests"], include_in_schema=False) # include_in_schema=False to hide from prod docs
+async def trigger_generic_error():
+    # This will cause a ZeroDivisionError
+    x = 1 / 0
+    return {"result": x} # Should not be reached
+
+
 # --- Search Endpoint with AVX Integration ---
-@app.post("/search_with_avx", response_model=AvxSearchQueryResponse, tags=["Search"])
+@app.post(
+    "/search_with_avx",
+    response_model=AvxSearchQueryResponse,
+    tags=["Search"],
+    responses={
+        503: {"description": "Search service unavailable (e.g., Elasticsearch connection issue)", "content": {"application/json": {"example": {"detail": "Search service (Elasticsearch backend) is currently unavailable."}}}},
+        500: {"description": "Internal server error (e.g., Elasticsearch query error, C component error)", "content": {"application/json": {"example": {"detail": "An unexpected error occurred while searching.", "error_code": "ELASTICSEARCH_QUERY_ERROR"}}}}
+        # Note: CComponentException could also be caught by the generic SpindexBaseException handler.
+    }
+)
 async def search_with_avx_endpoint(
     query_request: AvxSearchQueryRequest,
     current_user: User = Depends(get_current_user) # Assuming auth is needed
@@ -826,8 +958,10 @@ async def search_with_avx_endpoint(
         logger.error("Elasticsearch connection error during search.")
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Search service (Elasticsearch backend) connection error.")
     except Exception as e:
+        # Log the detailed error including stack trace
         logger.error(f"Error during Elasticsearch search: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error during Elasticsearch search: {str(e)}")
+        # Raise a custom exception or a more generic HTTPException for the client
+        raise ElasticsearchQueryException(detail="An unexpected error occurred while searching.") # This will be caught by spindex_base_exception_handler
     es_query_time_ms = int((time.time() - es_search_start_time) * 1000)
 
 

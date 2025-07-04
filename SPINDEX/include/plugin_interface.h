@@ -46,6 +46,37 @@ typedef ProcessedDataChunk* (*spindex_plugin_process_func)(const ProcessedDataCh
  */
 typedef void (*spindex_plugin_get_info_func)(PluginInfo *info);
 
+/**
+ * @brief Structure to define a plugin dependency.
+ */
+typedef struct {
+    const char* name;                 // Name of the depended-upon plugin (must match its PluginInfo.name)
+    const char* required_version_spec; // Version specifier (e.g., "1.2.3", ">=1.2.0")
+} SpindexPluginDependency;
+
+/**
+ * @brief Function pointer type for getting plugin dependencies.
+ *
+ * This function is called by the plugin loader to retrieve a list of dependencies
+ * for this plugin. The plugin is responsible for allocating memory for the
+ * array of SpindexPluginDependency structs and the strings within them.
+ * The plugin_loader will call plugin_free_dependencies_list to free this memory.
+ *
+ * @param count A pointer to an integer that will be filled with the number of dependencies.
+ * @return A pointer to an array of SpindexPluginDependency structs, or NULL if no dependencies.
+ */
+typedef SpindexPluginDependency* (*spindex_plugin_get_dependencies_func)(int* count);
+
+/**
+ * @brief Function pointer type for freeing the dependency list.
+ *
+ * Called by the plugin loader to free the memory allocated by plugin_get_dependencies_func.
+ *
+ * @param dependencies The array of SpindexPluginDependency structs to free.
+ * @param count The number of dependencies in the array.
+ */
+typedef void (*spindex_plugin_free_dependencies_list_func)(SpindexPluginDependency* dependencies, int count);
+
 
 /**
  * @brief Represents a loaded SPINDEX plugin.

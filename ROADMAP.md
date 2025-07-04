@@ -71,8 +71,8 @@ Status: **DONE ✅**
 
 |  #  |  Task‑Code          |  Description                                                                                                                                    |  Priority  |  Status  |
 | --- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- |
-|  1  |  **BUILD‑ARC‑001**  |  **Migrate build system from legacy *Make* to modern, cross‑platform *CMake*. Improves automatic dependency detection & multi‑config builds.**  |  High      |  To Do   |
-|  2  |  **BUILD‑ARC‑002**  |  **Introduce a C/C++ package‑manager (Conan or vcpkg) to pin exact versions of external libraries (libcurl, libzip, OpenVINO, …).**             |  High      |  To Do   |
+|  1  |  **BUILD‑ARC‑001**  |  **Migrate build system from legacy *Make* to modern, cross‑platform *CMake*. Improves automatic dependency detection & multi‑config builds.**  |  High      |  DONE ✅  |
+|  2  |  **BUILD‑ARC‑002**  |  **Introduce a C/C++ package‑manager (Conan or vcpkg) to pin exact versions of external libraries (libcurl, libzip, OpenVINO, …).**             |  High      |  DONE ✅  |
 
 ---
 
@@ -196,18 +196,18 @@ Status: Pending
 1.  **Task: [BE-001] Implement persistent storage for IndexMetadata** (Refined from original BE-001)
     *   Description: Replace current in-memory list for `IndexMetadata` with a persistent storage solution.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 2.  **Task: [BE-002] Implement persistent storage for Query History**
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 3.  **Task: [BE-006] Implement robust error handling and user notification for general backend operations** (Refined from original BE-006)
     *   Description: Enhance error handling for general backend API calls, provide clearer error messages, and establish user notifications where applicable (beyond AEGIS pipeline).
     *   Priority: Medium
-    *   Status: To Do
+    *   Status: DONE ✅
 4.  **Task: [BE-007] Testing and Refinement of Backend APIs and Services** (Refined from original BE-007)
     *   Description: Conduct thorough testing of all backend endpoints and services (excluding AEGIS pipeline which is tested in [AEGIS-016]).
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
     *   (Original BE-003, BE-004, BE-005 are now covered by AEGIS tasks [AEGIS-011], [AEGIS-012], [AEGIS-009] respectively)
 
 **Phase 9: Comprehensive GUI Implementation** (Previously Phase 8 - "GUI Development")
@@ -230,37 +230,37 @@ Status: Pending
 
 *   **User Experience (UX) Enhancements:**
     4.  **Task: [GUI-UX-001] Implement multi-step Index Creation Wizard.**
-        *   Description: Develop the full wizard flow as per `GUI_DESIGN.md` and `gui/GUI_MOCKUPS.md`.
-        *   Priority: High
-        *   Status: To Do
+        *   **Description:** Develop the full wizard flow as per `GUI_DESIGN.md` and `gui/GUI_MOCKUPS.md`.
+        *   **Priority:** High
+        *   **Status:** To Do
     5.  **Task: [GUI-UX-002] Add Data Preview & Validation display within the wizard.**
-        *   Description: Integrate preview of AEGIS-processed data and its validation summary in the Index Creation Wizard.
-        *   Priority: Medium
-        *   Status: To Do
+        *   **Description:** Integrate preview of AEGIS-processed data and its validation summary in the Index Creation Wizard.
+        *   **Priority:** Medium
+        *   **Status:** To Do
     6.  **Task: [GUI-UX-003] Implement Breadcrumb Navigation.**
-        *   Description: Add breadcrumbs for easier navigation in nested views.
-        *   Priority: Medium
-        *   Status: To Do
+        *   **Description:** Add breadcrumbs for easier navigation in nested views.
+        *   **Priority:** Medium
+        *   **Status:** To Do
     7.  **Task: [GUI-UX-004] Integrate Contextual Help & Tooltips throughout the GUI.**
-        *   Description: Add "?" icons and informative tooltips for complex UI elements.
-        *   Priority: Medium
-        *   Status: To Do
+        *   **Description:** Add "?" icons and informative tooltips for complex UI elements.
+        *   **Priority:** Medium
+        *   **Status:** To Do
     8.  **Task: [GUI-UX-005] Implement Progressive Disclosure in tables.**
-        *   Description: Use pagination/load-more for tables like Index Management.
-        *   Priority: Medium
-        *   Status: To Do
+        *   **Description:** Use pagination/load-more for tables like Index Management.
+        *   **Priority:** Medium
+        *   **Status:** To Do
     9.  **Task: [GUI-UX-006] Implement Loading States & Skeleton Screens.**
-        *   Description: Add visual feedback during data loading and asynchronous operations.
-        *   Priority: High
-        *   Status: To Do
+        *   **Description:** Add visual feedback during data loading and asynchronous operations.
+        *   **Priority:** High
+        *   **Status:** To Do
     10. **Task: [GUI-UX-007] Implement Query History & Favorites feature in Query Interface.**
-        *   Description: Allow users to view past queries and save favorites.
-        *   Priority: High
-        *   Status: To Do
+        *   **Description:** Allow users to view past queries and save favorites.
+        *   **Priority:** High
+        *   **Status:** To Do
     11. **Task: [GUI-UX-008] Refactor Query Interface for a Unified Map (draw/results modes).**
-        *   Description: Implement the single map component that switches between geometry drawing and results display.
-        *   Priority: Medium
-        *   Status: To Do
+        *   **Description:** Implement the single map component that switches between geometry drawing and results display.
+        *   **Priority:** Medium
+        *   **Status:** To Do
 
 *   **Data Management GUI Tasks:**
     12. **Task: [GUI-DMGT-001] Display Query Performance Metrics after query execution.**
@@ -317,10 +317,10 @@ Status: Pending
     *   Status: To Do
 |  #  |  Task‑Code       |  Description                                                               |  Priority  |  Status       |  Depends On  |
 | --- | ---------------- | -------------------------------------------------------------------------- | ---------- | ------------- | ------------ |
-|  1  |  **CORE‑009**    |  **Enhance plugin loader with versioning & dependency‑graph resolution.**  |  Medium    |  To Do        |  —           |
-|  2  |  **DEPLOY‑001**  |  **Dockerfile for SPINDEX worker (C side).**                               |  High      |  To Do        |  —           |
-|  3  |  **DEPLOY‑002**  |  **Docker Swarm stack/compose files (services, networks, scaling).**       |  Medium    |  To Do        |  DEPLOY‑001  |
-|  4  |  CORE‑008        |  Threading model (`threading.c`).                                          |  Medium    |  To Do        |  —           |
+|  1  |  **CORE‑009**    |  **Enhance plugin loader with versioning & dependency‑graph resolution.**  |  Medium    |  DONE ✅       |  —           |
+|  2  |  **DEPLOY‑001**  |  **Dockerfile for SPINDEX worker (C side).**                               |  High      |  DONE ✅       |  —           |
+|  3  |  **DEPLOY‑002**  |  **Docker Swarm stack/compose files (services, networks, scaling).**       |  Medium    |  DONE ✅       |  DEPLOY‑001  |
+|  4  |  CORE‑008        |  Threading model (`threading.c`).                                          |  Medium    |  DONE ✅       |  —           |
 |  5  |  OPT‑001         |  General hardware‑optimisation plugins.                                    |  Low       |  To Do        |  —           |
 |  6  |  SEC‑001         |  C‑level security‑analysis plugins.                                        |  Low       |  To Do        |  —           |
 |  7  |  DOCS‑001        |  README & usage docs (ongoing).                                            |  Medium    |  DONE ✅        |  —           |
@@ -332,15 +332,15 @@ Status: Pending
 1.  **Task: [DEV-DOC-001] Document Core Architecture and Design Principles**
     *   Description: Create a high-level overview of the SPINDEX architecture, including the core engine, plugin system, AEGIS-ECHO pipeline, backend API, and GUI. Document key design principles and decisions.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 2.  **Task: [DEV-DOC-002] Document AEGIS-ECHO Data Ingestion Pipeline**
     *   Description: Detail the pipeline's stages, modules, data flow, configuration options, and how to extend it with new processing or validation modules. Reference `docs/AEGIS_PIPELINE_DESIGN.md` but provide more developer-specific details.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 3.  **Task: [DEV-DOC-003] Document Backend API**
     *   Description: Provide detailed documentation for all backend API endpoints, including request/response schemas, authentication requirements, and usage examples. Leverage FastAPI's auto-generated OpenAPI docs and supplement as needed.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 4.  **Task: [DEV-DOC-004] Document SPINDEX Core and Plugin Development**
     *   Description: Explain how to develop new plugins for the SPINDEX core (parsers, preprocessors, indexers, etc.). Detail the plugin interface, build process, and testing best practices.
     *   Priority: Medium
@@ -356,7 +356,7 @@ Status: Pending
 7.  **Task: [DEV-DOC-007] Setup and Deployment Guide**
     *   Description: Provide instructions for setting up a development environment and deploying SPINDEX (including backend, core, and GUI components).
     *   Priority: Medium
-    *   Status: To Do
+    *   Status: DONE ✅
 8.  **Task: [DEV-DOC-008] Review and Publish Developer Documentation**
     *   Description: Collate all developer documentation into a coherent structure (e.g., a documentation website or a set of markdown files in a `/devdocs` directory). Review for clarity, accuracy, and completeness.
     *   Priority: Medium

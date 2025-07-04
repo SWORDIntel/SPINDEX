@@ -1,83 +1,48 @@
-# SPINDEX/plugins/CMakeLists.txt
+# --- SPINDEX Plugins Aggregator CMakeLists.txt ---
 
-# Add subdirectories for different categories of plugins
-add_subdirectory(dummy_plugin)
-add_subdirectory(preprocessors)
-add_subdirectory(parsers)
-add_subdirectory(indexers)
-add_subdirectory(analyzers)
-add_subdirectory(classifiers)
-add_subdirectory(search_algorithms)
-add_subdirectory(decompressors)
+# This file adds subdirectories for each plugin category.
+# AEGIS modules are handled in core/CMakeLists.txt as they are statically linked.
 
-# Note: AEGIS modules are in a separate directory (plugins/aegis_modules)
-# and already handled by the top-level SPINDEX/CMakeLists.txt.
-# Other plugin types can be added here if/when they are migrated.
+# Define a custom target that other targets (like tests needing all plugins) can depend on.
+# This target itself doesn't build anything but serves as a dependency hub.
+add_custom_target(plugins_built DEPENDS spindex_plugins_list) # Depends on a list of all plugin targets
 
-# --- Plugin Staging for Core Tests ---
-set(CORE_TEST_PLUGIN_STAGING_DIR ${PROJECT_BINARY_DIR}/plugins_for_test)
+# Global list to hold all plugin library targets
+set(SPINDEX_ALL_PLUGIN_TARGETS "" CACHE INTERNAL "List of all plugin targets")
 
-# List all plugin library targets that should be staged.
-# These names must match the add_library() names for each plugin.
-set(ALL_PLUGIN_LIBRARY_TARGETS
-    dummy_plugin
-    json_preprocessor
-    txt_preprocessor
-    csv_preprocessor
-    doc_preprocessor
-    xls_preprocessor
-    pdf_preprocessor
-    rtf_preprocessor
-    dic_preprocessor
-    sqlite_preprocessor
-    json_parser
-    txt_parser
-    csv_parser
-    doc_parser
-    xls_parser
-    pdf_parser
-    rtf_parser
-    dic_parser
-    sqlite_parser
-    elasticsearch_indexer
-    content_analyzer
-    openvino_classifier
-    avx512_phrase_search
-    # Add new decompressor plugins
-    gzip_decompressor
-    zip_decompressor
-    zstd_decompressor
-)
+# Helper function to add a plugin subdirectory
+macro(add_plugin_subdirectory subdir_name)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${subdir_name}/CMakeLists.txt")
+        add_subdirectory(${subdir_name})
+        message(STATUS "Added plugin subdirectory: ${subdir_name}")
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${subdir_name}")
+        message(WARNING "Plugin subdirectory ${subdir_name} exists, but its CMakeLists.txt was not found. Skipping.")
+    else()
+        message(STATUS "Plugin subdirectory ${subdir_name} not found. Skipping.")
+    endif()
+endmacro()
 
-# Create a custom target that will be responsible for staging these plugins.
-# Core tests that need these plugins will depend on this target.
-add_custom_target(stage_all_plugins_for_core_tests
-    COMMENT "Staging all relevant plugins to ${CORE_TEST_PLUGIN_STAGING_DIR}"
-)
+add_plugin_subdirectory(dummy_plugin)
+add_plugin_subdirectory(preprocessors)
+add_plugin_subdirectory(parsers)
+add_plugin_subdirectory(indexers)
+add_plugin_subdirectory(analyzers)
+add_plugin_subdirectory(classifiers)
+add_plugin_subdirectory(search_algorithms)
+# add_plugin_subdirectory(decompressors) # Add when these are actively being built
+# add_plugin_subdirectory(optimizations)
+# add_plugin_subdirectory(security)
 
-# Command to create the staging directory.
-# This command is part of the 'stage_all_plugins_for_core_tests' target's execution.
-add_custom_command(
-    TARGET stage_all_plugins_for_core_tests
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CORE_TEST_PLUGIN_STAGING_DIR}
-    COMMENT "Creating plugin staging directory: ${CORE_TEST_PLUGIN_STAGING_DIR}"
-    VERBATIM
-)
+# Create an interface library that groups all actual plugin targets.
+# Tests or other components can link against this interface library
+# to ensure all plugins are built before them.
+add_library(spindex_plugins_list INTERFACE)
+if(SPINDEX_ALL_PLUGIN_TARGETS)
+    add_dependencies(spindex_plugins_list ${SPINDEX_ALL_PLUGIN_TARGETS})
+endif()
 
-# For each plugin library, make 'stage_all_plugins_for_core_tests' depend on it,
-# and add a command to copy the plugin to the staging directory.
-foreach(plugin_lib_target ${ALL_PLUGIN_LIBRARY_TARGETS})
-    # Ensure the plugin library is built before attempting to stage it.
-    add_dependencies(stage_all_plugins_for_core_tests ${plugin_lib_target})
 
-    # Add a command to copy the built plugin library to the staging directory.
-    # This command is also part of the 'stage_all_plugins_for_core_tests' target's execution.
-    add_custom_command(
-        TARGET stage_all_plugins_for_core_tests
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:${plugin_lib_target}>
-                ${CORE_TEST_PLUGIN_STAGING_DIR}/$<TARGET_FILE_NAME:${plugin_lib_target}>
-        COMMENT "Staging $<TARGET_FILE_NAME:${plugin_lib_target}> to ${CORE_TEST_PLUGIN_STAGING_DIR}"
-        VERBATIM
-    )
-endforeach()
+message(STATUS "Plugins aggregator CMakeLists.txt processing complete.")
+# Make sure the plugins directory is added in the root CMakeLists.txt
+# Ensure `add_subdirectory(plugins)` is present in `SPINDEX/CMakeLists.txt`
+# (This will be done by editing the root CMakeLists.txt later if not already there)

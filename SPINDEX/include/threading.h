@@ -15,16 +15,18 @@ typedef struct {
 typedef struct ThreadPool ThreadPool;
 
 /**
- * @brief Creates a thread pool with a specified number of worker threads.
+ * @brief Creates a thread pool with a specified number of worker threads and task queue size.
  *
- * @param num_threads The number of worker threads to create in the pool.
+ * @param num_threads The number of worker threads to create in the pool. Must be > 0.
+ * @param max_queue_size The maximum number of tasks that can be pending in the queue.
+ *                       If 0, the queue is unbounded (within memory limits).
  * @return ThreadPool* A pointer to the created thread pool, or NULL if an error occurred.
  */
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-ThreadPool* thread_pool_create(size_t num_threads);
+ThreadPool* thread_pool_create(size_t num_threads, size_t max_queue_size);
 
 /**
  * @brief Submits a task to the thread pool for execution.
