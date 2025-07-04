@@ -1,108 +1,167 @@
-file(GLOB CORE_SOURCES "*.c")
-list(FILTER CORE_SOURCES EXCLUDE REGEX "main\\.c")
-list(FILTER CORE_SOURCES EXCLUDE REGEX "test_.*\\.c")
+# --- SPINDEX Core CMakeLists.txt ---
 
-add_library(spindex_core STATIC ${CORE_SOURCES})
+# Identify Core Source Files (excluding test files)
+file(GLOB CORE_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.c"
+)
+list(FILTER CORE_SOURCES EXCLUDE REGEX "_test\\.c$")
+list(FILTER CORE_SOURCES EXCLUDE REGEX "test_.*\\.c$") # More robust test file exclusion
+list(FILTER CORE_SOURCES EXCLUDE REGEX "main\\.c$") # Exclude main.c if it's separate for the executable
 
-target_link_libraries(spindex_core PUBLIC
-    Threads::Threads
-    libcurl::libcurl   # Conan-provided target for libcurl
-    Jansson::jansson   # Conan-provided target for Jansson
-    GEOS::geos         # Conan-provided target for GEOS
+# Identify AEGIS Module Source Files
+# These are treated as part of the core application build as per Makefile.legacy
+file(GLOB AEGIS_MODULE_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/aegis_modules/*.c"
 )
 
-add_executable(spindex_app main.c)
-target_link_libraries(spindex_app PRIVATE spindex_core spindex_aegis)
+# --- Create a static library for core components + AEGIS modules ---
+add_library(spindex_core_lib STATIC
+    ${CORE_SOURCES}
+    ${AEGIS_MODULE_SOURCES}
+)
 
-# Ensure symbols from the main executable are available to plugins, similar to -rdynamic
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_link_options(spindex_app PRIVATE "-Wl,--export-dynamic")
+# Include directories for spindex_core_lib
+target_include_directories(spindex_core_lib PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/../include"  # Main include directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/aegis_modules" # AEGIS headers
+    "${CMAKE_CURRENT_SOURCE_DIR}" # For core internal headers if any
+)
+
+# Propagate usage requirements for include directories from dependencies
+if(Jansson_FOUND)
+    if(TARGET Jansson::Jansson)
+        # Handled by target_link_libraries with Jansson::Jansson
+    else()
+        target_include_directories(spindex_core_lib INTERFACE ${JANSSON_INCLUDE_DIRS})
+    endif()
+endif()
+if(GEOS_FOUND)
+    if(TARGET GEOS::GEOS)
+        # Handled by target_link_libraries with GEOS::GEOS
+    else()
+        # GEOS_INCLUDE_DIRS was set from geos-config in root CMakeLists.txt
+        # This was added globally via include_directories() command.
+        # If we want to be more specific:
+        # target_include_directories(spindex_core_lib INTERFACE ${GEOS_INCLUDE_DIRS})
+    endif()
+endif()
+if(OPENVINO_FOUND AND OpenVINO_C_INCLUDE_DIR)
+    target_include_directories(spindex_core_lib INTERFACE ${OpenVINO_C_INCLUDE_DIR})
 endif()
 
-# Add tests
-set(CORE_TEST_SOURCES
-    test_config_manager.c
-    test_plugin_loader.c
-    test_logger.c
-    test_hardware_detection.c
-    test_elasticsearch_client.c
-)
-
-foreach(test_source ${CORE_TEST_SOURCES})
-    get_filename_component(test_name ${test_source} NAME_WE)
-    add_executable(${test_name} ${test_source})
-    target_link_libraries(${test_name} PRIVATE spindex_core)
-    # Enable testing for each test executable
-    add_test(NAME ${test_name} COMMAND ${test_name})
-endforeach()
-
-# --- Shared Library for CFFI (Python ctypes interface) ---
-# This library will bundle the core functionalities needed by the Python backend.
-# It includes the same sources as spindex_core static library, but built as SHARED.
-add_library(spindex_core_cffi SHARED
-    ${CORE_SOURCES}
-    # Add other necessary C files that are part of the core logic to be exposed
-    # e.g., search_orchestrator.c, plugin_loader.c, config_manager.c, utils.c, hardware_detection.c
-    # These are already in CORE_SOURCES if CORE_SOURCES globbed them correctly
-    # and they were not filtered out.
-    # Explicitly list them if CORE_SOURCES is too broad or misses some.
-    # For now, assume CORE_SOURCES includes them.
-    # If spindex_aegis is also needed by this CFFI lib (e.g. orchestrator calls it),
-    # then its sources or the library itself would need to be linked.
-    # For now, assume spindex_core_cffi primarily needs spindex_core's own files.
-)
-
-target_link_libraries(spindex_core_cffi PUBLIC
+# Link external libraries to spindex_core_lib
+target_link_libraries(spindex_core_lib PUBLIC
     Threads::Threads
-    libcurl::libcurl
-    Jansson::jansson
-    GEOS::geos
-    # Link spindex_aegis if CFFI functions will call into it
-    # spindex_aegis # This is a STATIC library, so it would be linked in.
+    CURL::CURL
 )
-# Ensure symbols are exported if needed (usually default for SHARED library)
-# On Linux, this should be fine. On Windows, might need __declspec(dllexport).
+if(Jansson_FOUND)
+    if(TARGET Jansson::Jansson)
+        target_link_libraries(spindex_core_lib PUBLIC Jansson::Jansson)
+    else()
+        target_link_libraries(spindex_core_lib PUBLIC ${JANSSON_LIBRARIES})
+    endif()
+endif()
+if(GEOS_FOUND)
+    if(TARGET GEOS::GEOS)
+        target_link_libraries(spindex_core_lib PUBLIC GEOS::GEOS)
+    else()
+        # GEOS_CONFIG_LIBRARIES is a string of flags e.g. "-L/path -lgeos_c"
+        # This needs to be parsed or added to LINK_FLAGS.
+        # For now, assuming it's just library names or paths that CMake can handle.
+        # A better way is to parse it in root and provide a list of libraries.
+        # Or, if FindGEOS.cmake sets GEOS_LIBRARIES:
+        # target_link_libraries(spindex_core_lib PUBLIC ${GEOS_LIBRARIES})
+        # For now, we rely on link_directories and direct lib names if GEOS_CONFIG_LIBRARIES is simple.
+        # This is a common tricky part when moving from Makefiles.
+        # Let's assume GEOS_CONFIG_LIBRARIES contains something like "geos_c" or full paths.
+        # If it contains -L flags, those should be handled by link_directories in root.
+        separate_arguments(GEOS_LINK_ARGS NATIVE_COMMAND ${GEOS_CONFIG_LIBRARIES})
+        target_link_libraries(spindex_core_lib PUBLIC ${GEOS_LINK_ARGS})
+    endif()
+endif()
 
-# Set output directory for this shared library (usually handled by global CMAKE_LIBRARY_OUTPUT_DIRECTORY)
-# set_target_properties(spindex_core_cffi PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+if(OPENVINO_FOUND AND OpenVINO_C_LIBRARIES)
+    target_link_libraries(spindex_core_lib PUBLIC ${OpenVINO_C_LIBRARIES})
+    if(OpenVINO_C_LIBRARY_DIR AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
+        # RPATH for OpenVINO libraries if they are in a non-standard location
+        target_link_options(spindex_core_lib INTERFACE "-Wl,-rpath,${OpenVINO_C_LIBRARY_DIR}")
+    endif()
+endif()
+
+# Set common compile flags for the core library
+target_compile_options(spindex_core_lib INTERFACE ${CMAKE_C_FLAGS})
 
 
-# Test ingestion pipeline
-add_executable(test_ingestion_pipeline test_ingestion_pipeline.c)
-target_link_libraries(test_ingestion_pipeline PRIVATE spindex_core spindex_aegis)
-add_dependencies(test_ingestion_pipeline stage_all_plugins_for_core_tests)
-add_test(NAME test_ingestion_pipeline COMMAND test_ingestion_pipeline WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
+# --- Main Application: spindex_app ---
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/main.c")
+    add_executable(spindex_app main.c)
+    target_link_libraries(spindex_app PRIVATE spindex_core_lib ${CMAKE_DL_LIBS}) # For dlopen/dlsym
+    target_compile_options(spindex_app PRIVATE ${CMAKE_C_FLAGS})
 
-# Test Elasticsearch indexing
-add_executable(test_elasticsearch_indexing test_elasticsearch_indexing.c)
-target_link_libraries(test_elasticsearch_indexing PRIVATE spindex_core spindex_aegis)
-add_dependencies(test_elasticsearch_indexing stage_all_plugins_for_core_tests)
-add_test(NAME test_elasticsearch_indexing COMMAND test_elasticsearch_indexing WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
+    if(OPENVINO_FOUND AND OpenVINO_C_LIBRARY_DIR AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
+         target_link_options(spindex_app PRIVATE "-Wl,-rpath,${OpenVINO_C_LIBRARY_DIR}")
+    endif()
+else()
+    message(WARNING "main.c not found in core directory. spindex_app target not created.")
+endif()
 
-# --- AEGIS Module Tests ---
-# These tests use source files from core/ (e.g., test_complex_geometry_handler.c)
-# but test functionalities from plugins/aegis_modules/ (e.g., complex_geometry_handler.c).
-# The aegis_modules are compiled into the spindex_aegis static library.
-# These tests also depend on utilities from spindex_core.
 
-# Test for complex_geometry_handler
-# Source: core/test_complex_geometry_handler.c
-add_executable(test_complex_geometry_handler test_complex_geometry_handler.c)
-target_link_libraries(test_complex_geometry_handler PRIVATE spindex_core spindex_aegis)
-add_test(NAME test_complex_geometry_handler COMMAND test_complex_geometry_handler)
+# --- Core Test Programs ---
+macro(add_core_test test_exe_name test_src_file)
+    add_executable(${test_exe_name} ${test_src_file})
+    target_link_libraries(${test_exe_name} PRIVATE spindex_core_lib ${CMAKE_DL_LIBS})
+    target_compile_options(${test_exe_name} PRIVATE ${CMAKE_C_FLAGS})
+    add_test(NAME ${test_exe_name} COMMAND ${test_exe_name})
 
-# Test for nlp_ner_parser
-# Source: core/test_nlp_ner_parser.c
-add_executable(test_nlp_ner_parser test_nlp_ner_parser.c)
-# spindex_aegis PUBLICly links Jansson::Jansson, so this test should inherit it.
-# Adding Jansson::jansson explicitly if test code directly uses Jansson API.
-target_link_libraries(test_nlp_ner_parser PRIVATE spindex_core spindex_aegis Jansson::jansson)
-add_test(NAME test_nlp_ner_parser COMMAND test_nlp_ner_parser)
+    if(OPENVINO_FOUND AND OpenVINO_C_LIBRARY_DIR AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
+        # Example: if test_ingestion_pipeline loads OpenVINO plugins indirectly
+        if("${test_exe_name}" STREQUAL "test_ingestion_pipeline" OR "${test_exe_name}" STREQUAL "test_elasticsearch_indexing")
+             target_link_options(${test_exe_name} PRIVATE "-Wl,-rpath,${OpenVINO_C_LIBRARY_DIR}")
+        endif()
+    endif()
 
-# Test for geometric_validator
-# Source: core/test_geometric_validator.c
-add_executable(test_geometric_validator test_geometric_validator.c)
-# spindex_aegis PUBLICly links GEOS::geos, so this test should inherit it.
-# Adding GEOS::geos explicitly if test code directly uses GEOS API.
-target_link_libraries(test_geometric_validator PRIVATE spindex_core spindex_aegis GEOS::geos)
-add_test(NAME test_geometric_validator COMMAND test_geometric_validator)
+    # For tests that load plugins
+    if("${test_exe_name}" STREQUAL "test_ingestion_pipeline" OR \
+       "${test_exe_name}" STREQUAL "test_elasticsearch_indexing" OR \
+       "${test_exe_name}" STREQUAL "test_plugin_loader"
+      )
+        set_tests_properties(${test_exe_name} PROPERTIES
+            ENVIRONMENT "SPINDEX_PLUGIN_DIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+        # Ensure plugins are built before these tests run
+        add_dependencies(${test_exe_name} spindex_plugins_list)
+    endif()
+endmacro()
+
+# Define core tests
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_config_manager.c")
+    add_core_test(test_config_manager test_config_manager.c)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_plugin_loader.c")
+    add_core_test(test_plugin_loader test_plugin_loader.c)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_logger.c")
+    add_core_test(test_logger test_logger.c)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_detection.c")
+    add_core_test(test_hardware_detection test_hardware_detection.c)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_ingestion_pipeline.c")
+    add_core_test(test_ingestion_pipeline test_ingestion_pipeline.c)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_elasticsearch_client.c")
+    add_core_test(test_elasticsearch_client test_elasticsearch_client.c)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_elasticsearch_indexing.c")
+    add_core_test(test_elasticsearch_indexing test_elasticsearch_indexing.c)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_complex_geometry_handler.c")
+    add_core_test(test_complex_geometry_handler test_complex_geometry_handler.c)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_nlp_ner_parser.c")
+    add_core_test(test_nlp_ner_parser test_nlp_ner_parser.c)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_geometric_validator.c")
+    add_core_test(test_geometric_validator test_geometric_validator.c)
+endif()
+
+message(STATUS "Core CMakeLists.txt processing complete.")

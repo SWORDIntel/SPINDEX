@@ -1,4 +1,4 @@
-# SPINDEX Project Build Instructions
+# SPINDEX Project Build Instructions (CMake)
 
 This document outlines the necessary steps to build the SPINDEX project using CMake.
 
@@ -9,76 +9,91 @@ Ensure you have the following software installed:
 *   **CMake** (version 3.15 or higher)
 *   **A C Compiler** (e.g., GCC, Clang) that supports C11.
 *   **Make or Ninja** (or another build tool supported by CMake generators).
-*   **pkg-config** (for detecting dependencies like Jansson, GEOS).
-*   **Conan Package Manager:**
-    *   Conan is used to manage C/C++ dependencies for this project.
-    *   Install Conan by following the official documentation (e.g., `pip install conan`).
-*   **Development Libraries (Managed by Conan):**
-    *   Jansson
-    *   libcurl
-    *   GEOS
-    *   (pthreads is usually part of the C compiler/standard library)
+*   **pkg-config** (recommended, helps CMake find some dependencies).
+*   **Development Libraries:**
+    *   **Jansson:** For JSON processing.
+        *   E.g., on Debian/Ubuntu: `sudo apt install libjansson-dev`
+        *   E.g., on Fedora: `sudo dnf install jansson-devel`
+        *   E.g., on macOS (Homebrew): `brew install jansson`
+    *   **libcurl:** For network operations (e.g., Elasticsearch client).
+        *   E.g., on Debian/Ubuntu: `sudo apt install libcurl4-openssl-dev` or `libcurl-gnutls-dev`
+        *   E.g., on Fedora: `sudo dnf install libcurl-devel`
+        *   E.g., on macOS (Homebrew): `brew install curl`
+    *   **GEOS:** For geometric operations.
+        *   E.g., on Debian/Ubuntu: `sudo apt install libgeos-dev` (ensure `geos-config` is available)
+        *   E.g., on Fedora: `sudo dnf install geos-devel`
+        *   E.g., on macOS (Homebrew): `brew install geos`
+    *   **pthreads:** Usually part of the C compiler/standard library; no separate installation typically needed.
 *   **Optional: Intel OpenVINO Toolkit**
-    *   If you need the `openvino_classifier` plugin or to run `test_openvino_classifier_hw`.
-    *   Ensure the OpenVINO environment is initialized (e.g., by sourcing `setupvars.sh`) or that CMake can find it (e.g., by setting the `OpenVINO_DIR` environment variable or CMake variable).
+    *   Required if you need the `openvino_classifier` plugin or want to run the `test_openvino_classifier_hw`.
+    *   Install the toolkit according to Intel's documentation.
+    *   Ensure the OpenVINO environment is initialized (e.g., by sourcing `setupvars.sh` from the OpenVINO installation directory) so that the `INTEL_OPENVINO_DIR` environment variable is set, OR
+    *   You can specify the path during CMake configuration using `-DOpenVINO_DIR=/path/to/your/openvino`.
 
 ## 2. Build Steps
 
-**The canonical way to build this project is now via CMake, using Conan for dependency management.**
-
 1.  **Create a build directory:**
-    It's recommended to perform an out-of-source build. From the `SPINDEX` root directory:
+    It's highly recommended to perform an out-of-source build. From the `SPINDEX` root directory:
     ```sh
-    mkdir build
+    mkdir build_cmake
+    cd build_cmake
     ```
+    *(Using `build_cmake` to distinguish from any potential legacy `build` directory from Makefiles).*
 
-2.  **Install Dependencies with Conan:**
-    From the `SPINDEX` root directory, run Conan to install dependencies. This command will download the required libraries and generate necessary files for CMake.
+2.  **Configure with CMake:**
+    From your `build_cmake` directory, run CMake to configure the project:
     ```sh
-    conan install . --output-folder=build --build=missing
+    cmake ..
     ```
-    Ensure your Conan profile is configured correctly (e.g., C++ standard, compiler). If you encounter issues, you might need to create or update your default Conan profile (`conan profile detect`).
-
-3.  **Configure with CMake:**
-    From the `SPINDEX` root directory, run CMake to configure the project, pointing it to the Conan-generated toolchain file.
-    ```sh
-    cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=build/generators/conan_toolchain.cmake
-    ```
-    *   If OpenVINO is installed in a non-standard path and not managed by Conan, you might still need to specify its location:
+    *   **OpenVINO Path:** If `INTEL_OPENVINO_DIR` is not set and OpenVINO is installed in a non-standard location, specify its path:
         ```sh
-        cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=build/generators/conan_toolchain.cmake -DOpenVINO_DIR=/path/to/your/openvino
+        cmake .. -DOpenVINO_DIR=/path/to/your/openvino
         ```
-    *   Review CMake output for any errors or warnings.
+    *   **Build Type:** To specify a build type (e.g., Release), use:
+        ```sh
+        cmake .. -DCMAKE_BUILD_TYPE=Release
+        ```
+        (Default is Debug if not specified).
+    *   **AVX-512 Plugin:** The AVX-512 plugin is built by default if the source file exists. To disable it:
+        ```sh
+        cmake .. -DBUILD_AVX512_PLUGIN=OFF
+        ```
+    *   Review CMake output carefully for any errors or warnings, especially regarding found or missing dependencies.
 
-4.  **Compile the Project:**
-    After configuration, navigate to the build directory and compile.
+3.  **Compile the Project:**
+    After successful configuration, still within your `build_cmake` directory, compile the project:
     ```sh
-    cd build
     cmake --build .
     ```
-    Or, if using Make:
+    Or, if using Make directly:
     ```sh
-    make -j$(nproc) # Builds in parallel
+    make -j$(nproc) # Builds in parallel using all available processors
     ```
     Or, if using Ninja:
     ```sh
     ninja
     ```
-    This will compile the main `spindex_app` executable, all plugins (`.so` files), and all test executables.
-    *   Executables (application and tests) will be placed in `build/bin/` (or a similar path depending on your CMake configuration).
-    *   Libraries (`.a` and `.so` files) will be placed in `build/lib/` (or a similar path).
+    This will compile:
+    *   The main application: `build_cmake/bin/spindex_app`
+    *   Core library: `build_cmake/lib/libspindex_core_lib.a`
+    *   Plugins: `build_cmake/lib/spindex/plugins/*.so`
+    *   Test executables: `build_cmake/bin/test_*`
 
 ## 3. Running Tests
 
-After a successful build, you can run the tests using CTest from the build directory:
+After a successful build, you can run the tests using CTest from your `build_cmake` directory:
 
 ```sh
 ctest --verbose
 ```
-This will execute all defined tests. Some tests might require specific conditions:
-*   `test_ingestion_pipeline` and `test_elasticsearch_indexing` require plugins to be loaded. The CMake build system stages these plugins into `build/plugins_for_test/`, and the tests are configured to run from `build/` (their CWD for CTest) to find them via the relative path `"plugins_for_test"`.
-*   `test_openvino_classifier_hw` is designed for specific hardware and requires OpenVINO. It might be skipped or fail if these conditions aren't met.
+Or, to see output from failing tests only:
+```sh
+ctest --output-on-failure
+```
+This will execute all defined tests.
+*   Tests that load plugins (e.g., `test_ingestion_pipeline`, `test_plugin_loader`, `test_elasticsearch_indexing`, `test_openvino_classifier_hw`) are configured by CMake to find plugins from the `build_cmake/lib/spindex/plugins/` directory via the `SPINDEX_PLUGIN_DIR` environment variable set during testing.
+*   `test_openvino_classifier_hw` is designed for specific hardware and requires a correctly configured OpenVINO environment. It might be skipped during the build if OpenVINO is not found, or fail at runtime if conditions aren't met.
 
 ## 4. Legacy Makefile
 
-A legacy Makefile might still be present in `SPINDEX/Makefile`. **The canonical way to build this project is now via CMake with Conan for dependency management.** The Makefile is considered legacy and will be renamed.
+A legacy Makefile (`Makefile.legacy`) exists in the `SPINDEX/` directory. **This CMake build system is now the primary way to build the project.** The legacy Makefile should not be used for new builds.
