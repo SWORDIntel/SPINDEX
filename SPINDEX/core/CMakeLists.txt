@@ -28,64 +28,33 @@ target_include_directories(spindex_core_lib PUBLIC
 )
 
 # Propagate usage requirements for include directories from dependencies
-if(Jansson_FOUND)
-    if(TARGET Jansson::Jansson)
-        # Handled by target_link_libraries with Jansson::Jansson
-    else()
-        target_include_directories(spindex_core_lib INTERFACE ${JANSSON_INCLUDE_DIRS})
-    endif()
-endif()
-if(GEOS_FOUND)
-    if(TARGET GEOS::GEOS)
-        # Handled by target_link_libraries with GEOS::GEOS
-    else()
-        # GEOS_INCLUDE_DIRS was set from geos-config in root CMakeLists.txt
-        # This was added globally via include_directories() command.
-        # If we want to be more specific:
-        # target_include_directories(spindex_core_lib INTERFACE ${GEOS_INCLUDE_DIRS})
-    endif()
-endif()
-if(OPENVINO_FOUND AND OpenVINO_C_INCLUDE_DIR)
-    target_include_directories(spindex_core_lib INTERFACE ${OpenVINO_C_INCLUDE_DIR})
-endif()
+# With Conan and CMakeDeps, linking the imported target (e.g., Jansson::Jansson)
+# handles include directories automatically. So, manual target_include_directories for these is not needed.
 
 # Link external libraries to spindex_core_lib
 target_link_libraries(spindex_core_lib PUBLIC
-    Threads::Threads
-    CURL::CURL
+    Threads::Threads # System library
+    CURL::libcurl    # Conan imported target (typical name)
+    Jansson::jansson # Conan imported target (typical name)
+    GEOS::geos       # Conan imported target (typical name)
 )
-if(Jansson_FOUND)
-    if(TARGET Jansson::Jansson)
-        target_link_libraries(spindex_core_lib PUBLIC Jansson::Jansson)
-    else()
-        target_link_libraries(spindex_core_lib PUBLIC ${JANSSON_LIBRARIES})
-    endif()
-endif()
-if(GEOS_FOUND)
-    if(TARGET GEOS::GEOS)
-        target_link_libraries(spindex_core_lib PUBLIC GEOS::GEOS)
-    else()
-        # GEOS_CONFIG_LIBRARIES is a string of flags e.g. "-L/path -lgeos_c"
-        # This needs to be parsed or added to LINK_FLAGS.
-        # For now, assuming it's just library names or paths that CMake can handle.
-        # A better way is to parse it in root and provide a list of libraries.
-        # Or, if FindGEOS.cmake sets GEOS_LIBRARIES:
-        # target_link_libraries(spindex_core_lib PUBLIC ${GEOS_LIBRARIES})
-        # For now, we rely on link_directories and direct lib names if GEOS_CONFIG_LIBRARIES is simple.
-        # This is a common tricky part when moving from Makefiles.
-        # Let's assume GEOS_CONFIG_LIBRARIES contains something like "geos_c" or full paths.
-        # If it contains -L flags, those should be handled by link_directories in root.
-        separate_arguments(GEOS_LINK_ARGS NATIVE_COMMAND ${GEOS_CONFIG_LIBRARIES})
-        target_link_libraries(spindex_core_lib PUBLIC ${GEOS_LINK_ARGS})
-    endif()
-endif()
 
-if(OPENVINO_FOUND AND OpenVINO_C_LIBRARIES)
-    target_link_libraries(spindex_core_lib PUBLIC ${OpenVINO_C_LIBRARIES})
-    if(OpenVINO_C_LIBRARY_DIR AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
-        # RPATH for OpenVINO libraries if they are in a non-standard location
-        target_link_options(spindex_core_lib INTERFACE "-Wl,-rpath,${OpenVINO_C_LIBRARY_DIR}")
-    endif()
+if(OPENVINO_FOUND)
+    # Assuming OpenVINO Conan recipe provides an imported target like OpenVINO::OpenVINO or OpenVINO::runtime etc.
+    # The exact target name depends on the Conan recipe for OpenVINO.
+    # Common names could be OpenVINO::OpenVINO, OpenVINO::openvino, or specific components.
+    # Let's assume OpenVINO::OpenVINO is a common pattern or an interface target.
+    # If the recipe provides specific component targets (e.g., OpenVINO::inference_engine_c_api),
+    # those might be linked instead.
+    target_link_libraries(spindex_core_lib PUBLIC OpenVINO::OpenVINO) # Example target name
+    # RPATH settings are usually handled by Conan's toolchain or the recipe itself for its artifacts.
+    # Manual RPATH for OpenVINO might not be needed here if Conan sets it up.
+    # If still needed:
+    # get_target_property(OPENVINO_LIB_DIR OpenVINO::OpenVINO INTERFACE_LINK_LIBRARIES)
+    # string(REGEX REPLACE "/lib[^/]*$" "" OPENVINO_INSTALL_PREFIX "${OPENVINO_LIB_DIR}")
+    # if(OPENVINO_INSTALL_PREFIX AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
+    #    target_link_options(spindex_core_lib INTERFACE "-Wl,-rpath,${OPENVINO_INSTALL_PREFIX}/lib") # Adjust path as needed
+    # endif()
 endif()
 
 # Set common compile flags for the core library
@@ -98,9 +67,12 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/main.c")
     target_link_libraries(spindex_app PRIVATE spindex_core_lib ${CMAKE_DL_LIBS}) # For dlopen/dlsym
     target_compile_options(spindex_app PRIVATE ${CMAKE_C_FLAGS})
 
-    if(OPENVINO_FOUND AND OpenVINO_C_LIBRARY_DIR AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
-         target_link_options(spindex_app PRIVATE "-Wl,-rpath,${OpenVINO_C_LIBRARY_DIR}")
-    endif()
+    # RPATH for OpenVINO on the final executable if linked dynamically through spindex_core_lib
+    # and if not handled by Conan toolchain for the executable itself.
+    # This might be redundant if spindex_core_lib's INTERFACE rpath is effective or Conan handles it.
+    # if(OPENVINO_FOUND AND <condition_for_openvino_lib_path_known>)
+    #      target_link_options(spindex_app PRIVATE "-Wl,-rpath,${OpenVINO_LIBRARY_DIR_FROM_CONAN_OR_TARGET}")
+    # endif()
 else()
     message(WARNING "main.c not found in core directory. spindex_app target not created.")
 endif()
@@ -113,12 +85,12 @@ macro(add_core_test test_exe_name test_src_file)
     target_compile_options(${test_exe_name} PRIVATE ${CMAKE_C_FLAGS})
     add_test(NAME ${test_exe_name} COMMAND ${test_exe_name})
 
-    if(OPENVINO_FOUND AND OpenVINO_C_LIBRARY_DIR AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
-        # Example: if test_ingestion_pipeline loads OpenVINO plugins indirectly
-        if("${test_exe_name}" STREQUAL "test_ingestion_pipeline" OR "${test_exe_name}" STREQUAL "test_elasticsearch_indexing")
-             target_link_options(${test_exe_name} PRIVATE "-Wl,-rpath,${OpenVINO_C_LIBRARY_DIR}")
-        endif()
-    endif()
+    # RPATH for OpenVINO on tests, if they link OpenVINO and it's not handled by Conan toolchain.
+    # if(OPENVINO_FOUND AND <condition_for_openvino_lib_path_known>)
+    #     if("${test_exe_name}" STREQUAL "test_ingestion_pipeline" OR "${test_exe_name}" STREQUAL "test_elasticsearch_indexing")
+    #          target_link_options(${test_exe_name} PRIVATE "-Wl,-rpath,${OpenVINO_LIBRARY_DIR_FROM_CONAN_OR_TARGET}")
+    #     endif()
+    # endif()
 
     # For tests that load plugins
     if("${test_exe_name}" STREQUAL "test_ingestion_pipeline" OR \

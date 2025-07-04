@@ -13,14 +13,17 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_openvino_classifier_hw.c")
             # This test dynamically loads the OpenVINO classifier plugin.
             # It needs OpenVINO libraries for its own code if it calls OpenVINO APIs directly,
             # and dl libs for loading.
+            # We assume OpenVINO::OpenVINO is the imported target from Conan.
             target_link_libraries(test_openvino_classifier_hw PRIVATE
                 ${CMAKE_DL_LIBS} # For dlopen
-                ${OpenVINO_C_LIBRARIES} # Link against OpenVINO libs (e.g. openvino_c)
+                OpenVINO::OpenVINO # Link against Conan's OpenVINO target
             )
 
-            if(OpenVINO_C_LIBRARY_DIR AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
-                target_link_options(test_openvino_classifier_hw PRIVATE "-Wl,-rpath,${OpenVINO_C_LIBRARY_DIR}")
-            endif()
+            # RPATH settings should be handled by Conan's toolchain or OpenVINO recipe.
+            # Manual RPATH might not be needed.
+            # if(OpenVINO_C_LIBRARY_DIR AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
+            #     target_link_options(test_openvino_classifier_hw PRIVATE "-Wl,-rpath,${OpenVINO_C_LIBRARY_DIR}")
+            # endif()
 
             # Ensure the test knows where to find the openvino_classifier.so plugin
             set_tests_properties(test_openvino_classifier_hw PROPERTIES

@@ -72,7 +72,7 @@ Status: **DONE ✅**
 |  #  |  Task‑Code          |  Description                                                                                                                                    |  Priority  |  Status  |
 | --- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- |
 |  1  |  **BUILD‑ARC‑001**  |  **Migrate build system from legacy *Make* to modern, cross‑platform *CMake*. Improves automatic dependency detection & multi‑config builds.**  |  High      |  DONE ✅  |
-|  2  |  **BUILD‑ARC‑002**  |  **Introduce a C/C++ package‑manager (Conan or vcpkg) to pin exact versions of external libraries (libcurl, libzip, OpenVINO, …).**             |  High      |  To Do   |
+|  2  |  **BUILD‑ARC‑002**  |  **Introduce a C/C++ package‑manager (Conan or vcpkg) to pin exact versions of external libraries (libcurl, libzip, OpenVINO, …).**             |  High      |  DONE ✅  |
 
 ---
 

@@ -14,21 +14,16 @@ macro(add_classifier_plugin plugin_id source_file)
         target_compile_options(${plugin_target_name} PRIVATE ${CMAKE_C_FLAGS})
 
         if("${plugin_id}" STREQUAL "openvino")
-            if(OPENVINO_FOUND)
-                # OpenVINO_C_INCLUDE_DIR is already globally included or part of spindex_core_lib's interface includes.
-                # If openvino_classifier.c directly includes OpenVINO headers, this is fine.
-                # target_include_directories(${plugin_target_name} PRIVATE ${OpenVINO_C_INCLUDE_DIR}) # Usually not needed if core lib propagates
-
-                target_link_libraries(${plugin_target_name} PRIVATE spindex_core_lib) # For utils.o etc.
-                target_link_libraries(${plugin_target_name} PRIVATE ${OpenVINO_C_LIBRARIES}) # Link OpenVINO libs
-
-                if(OpenVINO_C_LIBRARY_DIR AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
-                    target_link_options(${plugin_target_name} PRIVATE "-Wl,-rpath,${OpenVINO_C_LIBRARY_DIR}")
-                endif()
+            if(OPENVINO_FOUND) # This variable is set by find_package(OpenVINO CONFIG) in root CMake
+                # Assumes OpenVINO::OpenVINO or similar target is provided by Conan's OpenVINO recipe
+                # This target should handle include directories.
+                target_link_libraries(${plugin_target_name} PRIVATE spindex_core_lib OpenVINO::OpenVINO)
+                # RPATH settings are typically handled by Conan toolchain or OpenVINO's recipe.
+                # If specific RPATH is still needed for the plugin, it could be added here,
+                # but it's better if Conan's setup makes it unnecessary.
             else()
-                message(WARNING "OpenVINO not found/configured. ${plugin_target_name} will not be built correctly.")
-                # Optionally, don't even add the library if OpenVINO is critical and not found.
-                # return() # from macro
+                message(WARNING "OpenVINO not found/configured by Conan. ${plugin_target_name} will not be built correctly or skipped.")
+                # Depending on how add_classifier_plugin is called, this plugin might not be added if OPENVINO_FOUND is false.
             endif()
         endif()
 

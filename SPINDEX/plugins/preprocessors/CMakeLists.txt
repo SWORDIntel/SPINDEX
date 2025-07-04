@@ -14,15 +14,9 @@ macro(add_preprocessor_plugin plugin_id source_file)
         target_compile_options(${plugin_target_name} PRIVATE ${CMAKE_C_FLAGS})
 
         if("${plugin_id}" STREQUAL "json") # json_preprocessor needs Jansson
-            if(Jansson_FOUND)
-                if(TARGET Jansson::Jansson)
-                    target_link_libraries(${plugin_target_name} PRIVATE Jansson::Jansson)
-                else()
-                    target_link_libraries(${plugin_target_name} PRIVATE ${JANSSON_LIBRARIES})
-                endif()
-            else()
-                message(WARNING "Jansson not found, ${plugin_target_name} might fail to link or run.")
-            endif()
+            # Jansson_FOUND is checked in root CMakeLists.txt when using find_package(Jansson CONFIG REQUIRED)
+            # We assume Jansson::jansson imported target is available from Conan
+            target_link_libraries(${plugin_target_name} PRIVATE Jansson::jansson)
         endif()
 
         list(APPEND SPINDEX_ALL_PLUGIN_TARGETS ${plugin_target_name})
