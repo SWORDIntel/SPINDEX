@@ -71,8 +71,8 @@ Status: **DONE ✅**
 
 |  #  |  Task‑Code          |  Description                                                                                                                                    |  Priority  |  Status  |
 | --- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- |
-|  1  |  **BUILD‑ARC‑001**  |  **Migrate build system from legacy *Make* to modern, cross‑platform *CMake*. Improves automatic dependency detection & multi‑config builds.**  |  High      |  To Do   |
-|  2  |  **BUILD‑ARC‑002**  |  **Introduce a C/C++ package‑manager (Conan or vcpkg) to pin exact versions of external libraries (libcurl, libzip, OpenVINO, …).**             |  High      |  To Do   |
+|  1  |  **BUILD‑ARC‑001**  |  **Migrate build system from legacy *Make* to modern, cross‑platform *CMake*. Improves automatic dependency detection & multi‑config builds.**  |  High      |  DONE ✅  |
+|  2  |  **BUILD‑ARC‑002**  |  **Introduce a C/C++ package‑manager (Conan or vcpkg) to pin exact versions of external libraries (libcurl, libzip, OpenVINO, …).**             |  High      |  DONE ✅  |
 
 ---
 
@@ -196,10 +196,10 @@ Status: Pending
 1.  **Task: [BE-001] Implement persistent storage for IndexMetadata** (Refined from original BE-001)
     *   Description: Replace current in-memory list for `IndexMetadata` with a persistent storage solution.
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 2.  **Task: [BE-002] Implement persistent storage for Query History**
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 3.  **Task: [BE-006] Implement robust error handling and user notification for general backend operations** (Refined from original BE-006)
     *   Description: Enhance error handling for general backend API calls, provide clearer error messages, and establish user notifications where applicable (beyond AEGIS pipeline).
     *   Priority: Medium
@@ -230,37 +230,37 @@ Status: Pending
 
 *   **User Experience (UX) Enhancements:**
     4.  **Task: [GUI-UX-001] Implement multi-step Index Creation Wizard.**
-        *   Description: Develop the full wizard flow as per `GUI_DESIGN.md` and `gui/GUI_MOCKUPS.md`.
-        *   Priority: High
-        *   Status: To Do
+        *   **Description:** Develop the full wizard flow as per `GUI_DESIGN.md` and `gui/GUI_MOCKUPS.md`.
+        *   **Priority:** High
+        *   **Status:** To Do
     5.  **Task: [GUI-UX-002] Add Data Preview & Validation display within the wizard.**
-        *   Description: Integrate preview of AEGIS-processed data and its validation summary in the Index Creation Wizard.
-        *   Priority: Medium
-        *   Status: To Do
+        *   **Description:** Integrate preview of AEGIS-processed data and its validation summary in the Index Creation Wizard.
+        *   **Priority:** Medium
+        *   **Status:** To Do
     6.  **Task: [GUI-UX-003] Implement Breadcrumb Navigation.**
-        *   Description: Add breadcrumbs for easier navigation in nested views.
-        *   Priority: Medium
-        *   Status: To Do
+        *   **Description:** Add breadcrumbs for easier navigation in nested views.
+        *   **Priority:** Medium
+        *   **Status:** To Do
     7.  **Task: [GUI-UX-004] Integrate Contextual Help & Tooltips throughout the GUI.**
-        *   Description: Add "?" icons and informative tooltips for complex UI elements.
-        *   Priority: Medium
-        *   Status: To Do
+        *   **Description:** Add "?" icons and informative tooltips for complex UI elements.
+        *   **Priority:** Medium
+        *   **Status:** To Do
     8.  **Task: [GUI-UX-005] Implement Progressive Disclosure in tables.**
-        *   Description: Use pagination/load-more for tables like Index Management.
-        *   Priority: Medium
-        *   Status: To Do
+        *   **Description:** Use pagination/load-more for tables like Index Management.
+        *   **Priority:** Medium
+        *   **Status:** To Do
     9.  **Task: [GUI-UX-006] Implement Loading States & Skeleton Screens.**
-        *   Description: Add visual feedback during data loading and asynchronous operations.
-        *   Priority: High
-        *   Status: To Do
+        *   **Description:** Add visual feedback during data loading and asynchronous operations.
+        *   **Priority:** High
+        *   **Status:** To Do
     10. **Task: [GUI-UX-007] Implement Query History & Favorites feature in Query Interface.**
-        *   Description: Allow users to view past queries and save favorites.
-        *   Priority: High
-        *   Status: To Do
+        *   **Description:** Allow users to view past queries and save favorites.
+        *   **Priority:** High
+        *   **Status:** To Do
     11. **Task: [GUI-UX-008] Refactor Query Interface for a Unified Map (draw/results modes).**
-        *   Description: Implement the single map component that switches between geometry drawing and results display.
-        *   Priority: Medium
-        *   Status: To Do
+        *   **Description:** Implement the single map component that switches between geometry drawing and results display.
+        *   **Priority:** Medium
+        *   **Status:** To Do
 
 *   **Data Management GUI Tasks:**
     12. **Task: [GUI-DMGT-001] Display Query Performance Metrics after query execution.**

@@ -1,14 +1,26 @@
-# SPINDEX/plugins/analyzers/CMakeLists.txt
-cmake_minimum_required(VERSION 3.15)
+# --- Analyzer Plugins CMakeLists.txt ---
 
-set(PLUGIN_NAME "content_analyzer")
-set(PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/${PLUGIN_NAME}.c")
+macro(add_analyzer_plugin plugin_id source_file)
+    set(plugin_target_name "${plugin_id}_analyzer_so")
 
-add_library(${PLUGIN_NAME} SHARED ${PLUGIN_SOURCES})
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${source_file}")
+        add_library(${plugin_target_name} MODULE ${source_file})
+        set_target_properties(${plugin_target_name} PROPERTIES PREFIX "")
+        set_target_properties(${plugin_target_name} PROPERTIES OUTPUT_NAME "${plugin_id}_analyzer")
 
-# Include directories are expected to be handled by the top-level CMakeLists.txt
-# or explicitly added here if needed:
-# target_include_directories(${PLUGIN_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/include)
+        target_include_directories(${plugin_target_name} PUBLIC
+            "${CMAKE_SOURCE_DIR}/include"
+        )
+        target_compile_options(${plugin_target_name} PRIVATE ${CMAKE_C_FLAGS})
 
-# No specific link libraries for content_analyzer.
-# Output directory for .so files is handled by CMAKE_LIBRARY_OUTPUT_DIRECTORY.
+        list(APPEND SPINDEX_ALL_PLUGIN_TARGETS ${plugin_target_name})
+        set(SPINDEX_ALL_PLUGIN_TARGETS ${SPINDEX_ALL_PLUGIN_TARGETS} CACHE INTERNAL "List of all plugin targets" FORCE)
+        message(STATUS "Configured analyzer plugin: ${plugin_target_name} (${plugin_id}_analyzer.so)")
+    else()
+        message(WARNING "Source file ${source_file} not found for ${plugin_id}_analyzer.")
+    endif()
+endmacro()
+
+add_analyzer_plugin(content content_analyzer.c)
+
+message(STATUS "Analyzer plugins CMakeLists.txt processing complete.")
