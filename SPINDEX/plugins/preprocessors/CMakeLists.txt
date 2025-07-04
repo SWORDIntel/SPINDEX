@@ -1,48 +1,68 @@
-# SPINDEX/plugins/preprocessors/CMakeLists.txt
-cmake_minimum_required(VERSION 3.15)
+# --- Preprocessor Plugins CMakeLists.txt ---
 
-set(PREPROCESSOR_PLUGIN_SOURCES
-    json_preprocessor.c
-    txt_preprocessor.c
-    csv_preprocessor.c
-    doc_preprocessor.c
-    xls_preprocessor.c
-    pdf_preprocessor.c
-    rtf_preprocessor.c
-    dic_preprocessor.c
-    sqlite_preprocessor.c
-)
+macro(add_preprocessor_plugin plugin_id source_file)
+    set(plugin_target_name "${plugin_id}_preprocessor_so")
 
-foreach(plugin_source_file ${PREPROCESSOR_PLUGIN_SOURCES})
-    get_filename_component(plugin_name ${plugin_source_file} NAME_WE)
-    add_library(${plugin_name} SHARED ${CMAKE_CURRENT_SOURCE_DIR}/${plugin_source_file})
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${source_file}")
+        add_library(${plugin_target_name} MODULE ${source_file})
+        set_target_properties(${plugin_target_name} PROPERTIES PREFIX "")
+        set_target_properties(${plugin_target_name} PROPERTIES OUTPUT_NAME "${plugin_id}_preprocessor")
 
-    # Include directories are expected to be handled by the top-level CMakeLists.txt
-    # (e.g., via include_directories(${CMAKE_SOURCE_DIR}/include))
-    # or explicitly added here if needed for specific plugins:
-    # target_include_directories(${plugin_name} PRIVATE ${CMAKE_SOURCE_DIR}/include)
+        target_include_directories(${plugin_target_name} PUBLIC
+            "${CMAKE_SOURCE_DIR}/include"
+        )
+        target_compile_options(${plugin_target_name} PRIVATE ${CMAKE_C_FLAGS})
 
-    # No specific link libraries for these preprocessor plugins.
-    # Output directory for .so files is handled by CMAKE_LIBRARY_OUTPUT_DIRECTORY.
-endforeach()
+        if("${plugin_id}" STREQUAL "json") # json_preprocessor needs Jansson
+            # Jansson_FOUND is checked in root CMakeLists.txt when using find_package(Jansson CONFIG REQUIRED)
+            # We assume Jansson::jansson imported target is available from Conan
+            target_link_libraries(${plugin_target_name} PRIVATE Jansson::jansson)
+        endif()
 
-# Add tests for specific preprocessors
-set(PREPROCESSOR_TEST_SOURCES
-    test_doc_preprocessor.c
-    test_xls_preprocessor.c
-    test_pdf_preprocessor.c
-    test_rtf_preprocessor.c
-    test_dic_preprocessor.c
-    test_sqlite_preprocessor.c
-)
+        list(APPEND SPINDEX_ALL_PLUGIN_TARGETS ${plugin_target_name})
+        set(SPINDEX_ALL_PLUGIN_TARGETS ${SPINDEX_ALL_PLUGIN_TARGETS} CACHE INTERNAL "List of all plugin targets" FORCE)
+        message(STATUS "Configured preprocessor plugin: ${plugin_target_name} (${plugin_id}_preprocessor.so)")
+    else()
+        message(WARNING "Source file ${source_file} not found for ${plugin_id}_preprocessor.")
+    endif()
+endmacro()
 
-foreach(test_source ${PREPROCESSOR_TEST_SOURCES})
-    get_filename_component(test_name ${test_source} NAME_WE) # e.g., test_doc_preprocessor
-    # Derive the plugin library name from the test source file name
-    string(REPLACE "test_" "" plugin_name_ref ${test_name}) # e.g., doc_preprocessor
+add_preprocessor_plugin(json json_preprocessor.c)
+add_preprocessor_plugin(txt txt_preprocessor.c)
+add_preprocessor_plugin(csv csv_preprocessor.c)
+add_preprocessor_plugin(doc doc_preprocessor.c)
+add_preprocessor_plugin(xls xls_preprocessor.c)
+add_preprocessor_plugin(pdf pdf_preprocessor.c)
+add_preprocessor_plugin(rtf rtf_preprocessor.c)
+add_preprocessor_plugin(dic dic_preprocessor.c)
+add_preprocessor_plugin(sqlite sqlite_preprocessor.c)
 
-    add_executable(${test_name} ${CMAKE_CURRENT_SOURCE_DIR}/${test_source})
-    # Link against the corresponding preprocessor plugin and spindex_core (for utils, etc.)
-    target_link_libraries(${test_name} PRIVATE ${plugin_name_ref} spindex_core)
-    add_test(NAME ${test_name} COMMAND ${test_name})
-endforeach()
+# --- Preprocessor Plugin Tests ---
+macro(add_preprocessor_test test_id plugin_id test_src_file)
+    set(test_target_name "test_${test_id}_preprocessor")
+    set(plugin_so_target_name "${plugin_id}_preprocessor_so")
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test_src_file}")
+        if(TARGET ${plugin_so_target_name})
+            add_executable(${test_target_name} ${test_src_file})
+            target_compile_options(${test_target_name} PRIVATE ${CMAKE_C_FLAGS})
+            target_include_directories(${test_target_name} PRIVATE "${CMAKE_SOURCE_DIR}/include")
+            target_link_libraries(${test_target_name} PRIVATE spindex_core_lib ${plugin_so_target_name} ${CMAKE_DL_LIBS})
+            add_test(NAME ${test_target_name} COMMAND ${test_target_name})
+            message(STATUS "Added preprocessor test: ${test_target_name} for ${plugin_so_target_name}")
+        else()
+            message(WARNING "Plugin target ${plugin_so_target_name} not found for test ${test_target_name}.")
+        endif()
+    else()
+        message(STATUS "Test source file ${test_src_file} not found for ${test_id}_preprocessor test. Skipping.")
+    endif()
+endmacro()
+
+add_preprocessor_test(doc doc test_doc_preprocessor.c)
+add_preprocessor_test(xls xls test_xls_preprocessor.c)
+add_preprocessor_test(pdf pdf test_pdf_preprocessor.c)
+add_preprocessor_test(rtf rtf test_rtf_preprocessor.c)
+add_preprocessor_test(dic dic test_dic_preprocessor.c)
+add_preprocessor_test(sqlite sqlite test_sqlite_preprocessor.c)
+
+message(STATUS "Preprocessor plugins CMakeLists.txt processing complete.")

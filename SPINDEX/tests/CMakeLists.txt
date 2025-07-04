@@ -1,37 +1,54 @@
-# SPINDEX/tests/CMakeLists.txt
-cmake_minimum_required(VERSION 3.15)
+# --- Top-Level/Integration Tests CMakeLists.txt ---
 
-# Test Harness for OpenVINO Hardware-Specific Validation
-set(TEST_NAME "test_openvino_classifier_hw")
-set(TEST_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${TEST_NAME}.c")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_openvino_classifier_hw.c")
+    option(BUILD_TEST_OPENVINO_HW "Build the OpenVINO hardware-specific test" ON)
+    if(BUILD_TEST_OPENVINO_HW)
+        if(OPENVINO_FOUND) # Only build if OpenVINO is configured
+            add_executable(test_openvino_classifier_hw test_openvino_classifier_hw.c)
+            target_compile_options(test_openvino_classifier_hw PRIVATE ${CMAKE_C_FLAGS})
+            target_include_directories(test_openvino_classifier_hw PRIVATE
+                "${CMAKE_SOURCE_DIR}/include" # For plugin_interface.h, data_types.h etc.
+            )
 
-add_executable(${TEST_NAME} ${TEST_SOURCE})
+            # This test dynamically loads the OpenVINO classifier plugin.
+            # It needs OpenVINO libraries for its own code if it calls OpenVINO APIs directly,
+            # and dl libs for loading.
+            # We assume OpenVINO::OpenVINO is the imported target from Conan.
+            target_link_libraries(test_openvino_classifier_hw PRIVATE
+                ${CMAKE_DL_LIBS} # For dlopen
+                OpenVINO::OpenVINO # Link against Conan's OpenVINO target
+            )
 
-# This test dynamically loads the openvino_classifier plugin.
-# It needs to link against libraries for dlopen (provided by Threads::Threads)
-# and OpenVINO runtime libraries.
-# Assumes OpenVINO has been found by find_package(OpenVINO) in a higher-level CMakeLists.txt.
-target_link_libraries(${TEST_NAME} PRIVATE
-    Threads::Threads # For dlopen, dlsym functionality
-    # This is a placeholder for the actual OpenVINO imported target.
-    OpenVINO::openvino
-)
+            # RPATH settings should be handled by Conan's toolchain or OpenVINO recipe.
+            # Manual RPATH might not be needed.
+            # if(OpenVINO_C_LIBRARY_DIR AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
+            #     target_link_options(test_openvino_classifier_hw PRIVATE "-Wl,-rpath,${OpenVINO_C_LIBRARY_DIR}")
+            # endif()
 
-# Add general SPINDEX include directory, in case it uses any core headers directly.
-# (e.g. for config.h, plugin_interface.h if it doesn't get them via OpenVINO includes)
-target_include_directories(${TEST_NAME} PRIVATE
-    ${CMAKE_SOURCE_DIR}/include
-)
-# OpenVINO's own include directories should come from the OpenVINO::openvino target's interface properties.
+            # Ensure the test knows where to find the openvino_classifier.so plugin
+            set_tests_properties(test_openvino_classifier_hw PROPERTIES
+                ENVIRONMENT "SPINDEX_PLUGIN_DIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
 
-add_test(
-    NAME ${TEST_NAME}
-    COMMAND ${TEST_NAME}
-    # This test might require the compiled openvino_classifier.so to be in a path
-    # where dlopen can find it. This could be handled by setting working directory
-    # or environment variables if CTest were to run it automatically.
-    # For now, it's marked as a manual test in the roadmap.
-)
+            # Make this test depend on the OpenVINO classifier plugin if it's being built
+            if(TARGET openvino_classifier_so)
+                 add_dependencies(test_openvino_classifier_hw openvino_classifier_so)
+            else()
+                # If the specific plugin target isn't easily accessible here,
+                # depend on the general plugins_built target.
+                add_dependencies(test_openvino_classifier_hw plugins_built)
+                message(STATUS "test_openvino_classifier_hw will depend on the 'plugins_built' custom target. Ensure openvino_classifier_so is part of it.")
+            endif()
 
-# Note: The Makefile mentions this test is for manual execution on target hardware.
-# The openvino_classifier.so plugin (built in SPINDEX/plugins/classifiers) must be discoverable at runtime.
+            add_test(NAME test_openvino_classifier_hw COMMAND test_openvino_classifier_hw)
+            message(STATUS "Added OpenVINO Hardware test: test_openvino_classifier_hw")
+        else()
+            message(STATUS "OpenVINO not found/configured, skipping test_openvino_classifier_hw build.")
+        endif()
+    else()
+        message(STATUS "BUILD_TEST_OPENVINO_HW is OFF, skipping test_openvino_classifier_hw.")
+    endif()
+else()
+    message(STATUS "test_openvino_classifier_hw.c not found in tests directory. Skipping this test.")
+endif()
+
+message(STATUS "SPINDEX/tests/CMakeLists.txt processing complete.")
