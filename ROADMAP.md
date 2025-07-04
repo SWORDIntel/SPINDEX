@@ -318,8 +318,8 @@ Status: Pending
 |  #  |  Task‑Code       |  Description                                                               |  Priority  |  Status       |  Depends On  |
 | --- | ---------------- | -------------------------------------------------------------------------- | ---------- | ------------- | ------------ |
 |  1  |  **CORE‑009**    |  **Enhance plugin loader with versioning & dependency‑graph resolution.**  |  Medium    |  To Do        |  —           |
-|  2  |  **DEPLOY‑001**  |  **Dockerfile for SPINDEX worker (C side).**                               |  High      |  To Do        |  —           |
-|  3  |  **DEPLOY‑002**  |  **Docker Swarm stack/compose files (services, networks, scaling).**       |  Medium    |  To Do        |  DEPLOY‑001  |
+|  2  |  **DEPLOY‑001**  |  **Dockerfile for SPINDEX worker (C side).**                               |  High      |  DONE ✅       |  —           |
+|  3  |  **DEPLOY‑002**  |  **Docker Swarm stack/compose files (services, networks, scaling).**       |  Medium    |  DONE ✅       |  DEPLOY‑001  |
 |  4  |  CORE‑008        |  Threading model (`threading.c`).                                          |  Medium    |  To Do        |  —           |
 |  5  |  OPT‑001         |  General hardware‑optimisation plugins.                                    |  Low       |  To Do        |  —           |
 |  6  |  SEC‑001         |  C‑level security‑analysis plugins.                                        |  Low       |  To Do        |  —           |
@@ -356,7 +356,7 @@ Status: Pending
 7.  **Task: [DEV-DOC-007] Setup and Deployment Guide**
     *   Description: Provide instructions for setting up a development environment and deploying SPINDEX (including backend, core, and GUI components).
     *   Priority: Medium
-    *   Status: To Do
+    *   Status: DONE ✅
 8.  **Task: [DEV-DOC-008] Review and Publish Developer Documentation**
     *   Description: Collate all developer documentation into a coherent structure (e.g., a documentation website or a set of markdown files in a `/devdocs` directory). Review for clarity, accuracy, and completeness.
     *   Priority: Medium
