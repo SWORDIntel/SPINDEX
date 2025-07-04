@@ -199,7 +199,7 @@ Status: Pending
     *   Status: DONE ✅
 2.  **Task: [BE-002] Implement persistent storage for Query History**
     *   Priority: High
-    *   Status: To Do
+    *   Status: DONE ✅
 3.  **Task: [BE-006] Implement robust error handling and user notification for general backend operations** (Refined from original BE-006)
     *   Description: Enhance error handling for general backend API calls, provide clearer error messages, and establish user notifications where applicable (beyond AEGIS pipeline).
     *   Priority: Medium
