@@ -901,6 +901,14 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
+# --- Test Endpoint for Generic Error Handler ---
+@app.get("/test_generic_error", tags=["Tests"], include_in_schema=False) # include_in_schema=False to hide from prod docs
+async def trigger_generic_error():
+    # This will cause a ZeroDivisionError
+    x = 1 / 0
+    return {"result": x} # Should not be reached
+
+
 # --- Search Endpoint with AVX Integration ---
 @app.post(
     "/search_with_avx",

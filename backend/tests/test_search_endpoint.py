@@ -261,6 +261,125 @@ def test_search_avx_disabled_via_flag(mock_es_client, mock_spindex_c_lib, mock_c
 
 # (Removing the helper function for clarity as direct construction in test is better for managing lifetime)
 
+# Helper to get admin auth headers, assuming TOKEN_ADMIN is defined as in main.py or conftest.py
+# For simplicity, using os.getenv directly here.
+def admin_auth_headers() -> dict:
+    return {"X-Auth-Token": os.getenv("AEGIS_TOKEN_ADMIN", "secure-dev-token-admin")}
+
+
+def test_search_avx_enabled_no_avx_phrases(mock_es_client, mock_spindex_c_lib, mock_c_orchestrator, mocker):
+    mocker.patch("backend.main.FEATURE_FLAG_AVX_SEARCH_ENABLED", True)
+    mock_es_hits = [{"_id": "doc1", "_score": 0.9, "_source": {"text_content": "Content for doc1"}}]
+    mock_es_client.return_value = {"hits": {"hits": mock_es_hits}}
+
+    request_payload = {"query_text": "test", "use_avx": True, "avx_phrases": ""}
+    response = client.post("/search_with_avx", json=request_payload, headers=admin_auth_headers())
+
+    assert response.status_code == 200
+    data = response.json()
+    mock_es_client.assert_called_once()
+    mock_spindex_c_lib.search_orchestrator_execute_query.assert_not_called()
+    assert data["total_results_after_avx"] == 1
+    assert data["results"][0]["avx_match_found"] is False
+    assert "AVX search not performed" in data["results"][0]["avx_match_details"]["info"]
+
+def test_search_avx_disabled_in_request(mock_es_client, mock_spindex_c_lib, mock_c_orchestrator, mocker):
+    mocker.patch("backend.main.FEATURE_FLAG_AVX_SEARCH_ENABLED", True)
+    mock_es_hits = [{"_id": "doc1", "_score": 0.9, "_source": {"text_content": "Content for doc1"}}]
+    mock_es_client.return_value = {"hits": {"hits": mock_es_hits}}
+
+    request_payload = {"query_text": "test", "use_avx": False, "avx_phrases": "some phrase"}
+    response = client.post("/search_with_avx", json=request_payload, headers=admin_auth_headers())
+
+    assert response.status_code == 200
+    data = response.json()
+    mock_es_client.assert_called_once()
+    mock_spindex_c_lib.search_orchestrator_execute_query.assert_not_called()
+    assert data["total_results_after_avx"] == 1
+    assert data["results"][0]["avx_match_found"] is False
+    assert "AVX search not performed" in data["results"][0]["avx_match_details"]["info"]
+
+def test_search_avx_varying_parameters(mock_es_client, mock_spindex_c_lib, mock_c_orchestrator, mocker):
+    mocker.patch("backend.main.FEATURE_FLAG_AVX_SEARCH_ENABLED", True)
+    mock_es_hits = [{"_id": "doc1", "_score": 0.9, "_source": {"text_content": "Content with phrase"}} ]
+    mock_es_client.return_value = {"hits": {"hits": mock_es_hits}}
+
+    # Mock C lib to return a generic match
+    c_item_data = [{"doc_id": "doc1", "content": "Preview", "score": 0.9, "avx_found": True, "avx_details_dict": {"details": "mocked"}}]
+    num_c_items = len(c_item_data)
+    c_item_array_type = CSearchResultItem * num_c_items
+    c_item_array = c_item_array_type()
+    for i, data in enumerate(c_item_data): c_item_array[i] = create_mock_c_search_result_item(**data)
+    c_results_obj = CSearchResults(); c_results_obj.items = c_item_array; c_results_obj.count = num_c_items
+    mock_spindex_c_lib.search_orchestrator_execute_query.return_value = ctypes.pointer(c_results_obj)
+
+    request_payload = {
+        "query_text": "test", "use_avx": True, "avx_phrases": "phrase",
+        "avx_case_sensitive": True,
+        "avx_find_all_occurrences": False,
+        "avx_max_hits_per_doc": 5
+    }
+    client.post("/search_with_avx", json=request_payload, headers=admin_auth_headers())
+
+    mock_spindex_c_lib.search_orchestrator_execute_query.assert_called_once()
+    c_query_arg = mock_spindex_c_lib.search_orchestrator_execute_query.call_args[0][1].contents
+    assert c_query_arg.avx_case_sensitive == True
+    assert c_query_arg.avx_find_all_occurrences == False
+    assert c_query_arg.avx_max_hits_per_doc == 5
+
+def test_search_es_returns_no_hits(mock_es_client, mock_spindex_c_lib, mock_c_orchestrator, mocker):
+    mocker.patch("backend.main.FEATURE_FLAG_AVX_SEARCH_ENABLED", True)
+    mock_es_client.return_value = {"hits": {"hits": []}} # No ES hits
+
+    request_payload = {"query_text": "test", "use_avx": True, "avx_phrases": "phrase"}
+    response = client.post("/search_with_avx", json=request_payload, headers=admin_auth_headers())
+
+    assert response.status_code == 200
+    data = response.json()
+    mock_es_client.assert_called_once()
+    mock_spindex_c_lib.search_orchestrator_execute_query.assert_not_called() # Should not be called if no ES hits to process
+    assert data["total_results_before_avx"] == 0
+    assert data["total_results_after_avx"] == 0
+    assert len(data["results"]) == 0
+
+def test_search_c_call_returns_null_pointer(mock_es_client, mock_spindex_c_lib, mock_c_orchestrator, mocker):
+    mocker.patch("backend.main.FEATURE_FLAG_AVX_SEARCH_ENABLED", True)
+    mock_es_hits = [{"_id": "doc1", "_score": 0.9, "_source": {"text_content": "Content for doc1"}}]
+    mock_es_client.return_value = {"hits": {"hits": mock_es_hits}}
+
+    mock_spindex_c_lib.search_orchestrator_execute_query.return_value = None # Simulate C func returning NULL
+
+    request_payload = {"query_text": "test", "use_avx": True, "avx_phrases": "phrase"}
+    response = client.post("/search_with_avx", json=request_payload, headers=admin_auth_headers())
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_results_after_avx"] == 1 # Falls back to ES results
+    assert data["results"][0]["avx_match_found"] is False
+    assert "AVX C-call failed" in data["results"][0]["avx_match_details"]["error"]
+
+def test_search_c_call_returns_no_avx_matches(mock_es_client, mock_spindex_c_lib, mock_c_orchestrator, mocker):
+    mocker.patch("backend.main.FEATURE_FLAG_AVX_SEARCH_ENABLED", True)
+    mock_es_hits = [{"_id": "doc1", "_score": 0.9, "_source": {"text_content": "Content for doc1"}}]
+    mock_es_client.return_value = {"hits": {"hits": mock_es_hits}}
+
+    # Mock C lib to return results, but avx_match_found is False
+    c_item_data = [{"doc_id": "doc1", "content": "Preview", "score": 0.9, "avx_found": False, "avx_details_dict": {"info": "no match"}}]
+    num_c_items = len(c_item_data); c_item_array_type = CSearchResultItem * num_c_items
+    c_item_array = c_item_array_type();
+    for i, d in enumerate(c_item_data): c_item_array[i] = create_mock_c_search_result_item(**d)
+    c_results_obj = CSearchResults(); c_results_obj.items = c_item_array; c_results_obj.count = num_c_items
+    mock_spindex_c_lib.search_orchestrator_execute_query.return_value = ctypes.pointer(c_results_obj)
+
+    request_payload = {"query_text": "test", "use_avx": True, "avx_phrases": "non_matching_phrase"}
+    response = client.post("/search_with_avx", json=request_payload, headers=admin_auth_headers())
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_results_after_avx"] == 0 # Strict filtering: if AVX used and no matches, return 0
+    assert len(data["results"]) == 0
+
+
 # Consider adding a test for when C library is None
 def test_search_avx_c_lib_not_loaded(mock_es_client, mocker):
     # 1. Setup: Mock ES response
@@ -290,5 +409,47 @@ def test_search_avx_c_lib_not_loaded(mock_es_client, mocker):
     assert response_data["total_results_after_avx"] == 1
     assert response_data["results"][0]["avx_match_found"] is False
     assert "C library/orchestrator not available" in response_data["results"][0]["avx_match_details"]["info"]
+
+def test_search_es_connection_error(mock_es_client, mocker):
+    mocker.patch("backend.main.FEATURE_FLAG_AVX_SEARCH_ENABLED", True)
+    # Import es_exceptions here or at the top of the file
+    from elasticsearch import exceptions as es_exceptions
+    mock_es_client.side_effect = es_exceptions.ConnectionError("ES connection failed")
+
+    request_payload = {"query_text": "test", "use_avx": True, "avx_phrases": "phrase"}
+    response = client.post("/search_with_avx", json=request_payload, headers=admin_auth_headers())
+
+    assert response.status_code == 503
+    data = response.json()
+    assert "Search service (Elasticsearch backend) connection error" in data["detail"]
+
+def test_search_es_generic_query_error(mock_es_client, mocker):
+    mocker.patch("backend.main.FEATURE_FLAG_AVX_SEARCH_ENABLED", True)
+    from elasticsearch import exceptions as es_exceptions
+    mock_es_client.side_effect = es_exceptions.TransportError("ES generic error") # Simulate a generic ES error
+
+    request_payload = {"query_text": "test", "use_avx": True, "avx_phrases": "phrase"}
+    response = client.post("/search_with_avx", json=request_payload, headers=admin_auth_headers())
+
+    assert response.status_code == 500
+    data = response.json()
+    assert data["detail"] == "An unexpected error occurred while searching."
+    assert data["error_code"] == "ELASTICSEARCH_QUERY_ERROR"
+
+def test_search_c_component_call_fails(mock_es_client, mock_spindex_c_lib, mock_c_orchestrator, mocker):
+    mocker.patch("backend.main.FEATURE_FLAG_AVX_SEARCH_ENABLED", True)
+    mock_es_hits = [{"_id": "doc1", "_score": 0.9, "_source": {"text_content": "Content for doc1"}}]
+    mock_es_client.return_value = {"hits": {"hits": mock_es_hits}}
+
+    from backend.exceptions import CComponentException # Import the custom exception
+    mock_spindex_c_lib.search_orchestrator_execute_query.side_effect = CComponentException("C call failed testing")
+
+    request_payload = {"query_text": "test", "use_avx": True, "avx_phrases": "phrase"}
+    response = client.post("/search_with_avx", json=request_payload, headers=admin_auth_headers())
+
+    assert response.status_code == 500
+    data = response.json()
+    assert "C call failed testing" in data["detail"] # Detail from CComponentException
+    assert data["error_code"] == "C_COMPONENT_ERROR"
 
 # (End of file)
