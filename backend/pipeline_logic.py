@@ -129,7 +129,7 @@ def geocode_and_update_features(features: list, address_fields: list, nominatim_
                 time.sleep(1.0)
             except Exception as e_generic:
                 summary["geocoding_unexpected_errors"] += 1
-                logger_instance.error(f"Unexpected error during geocoding for address '{address_to_geocode}': {e_generic}")
+                logger_instance.error(f"Unexpected error during geocoding for address '{address_to_geocode}': {e_generic}", exc_info=True)
         else:
             logger_instance.info(f"No address found in specified fields for feature {feature.get('id', '(no ID)')} to attempt geocoding.")
     return features, summary
@@ -332,7 +332,7 @@ def execute_aegis_pipeline(job_id: str, db: Session, logger_instance: logging.Lo
         job.pipeline_stages_executed_log = current_log
         db.commit()
     except Exception as e_gdal:
-        logger_instance.error(f"Exception during GDAL/OGR format detection for job {job_id}: {e_gdal}")
+        logger_instance.error(f"Exception during GDAL/OGR format detection for job {job_id}: {e_gdal}", exc_info=True)
         job.processing_status = "failed_format_detection"; job.validation_summary = {"format_detection_error": f"GDAL/OGR Exception: {str(e_gdal)}"}
         current_log = list(job.pipeline_stages_executed_log or []); current_log.append({"timestamp": datetime.utcnow().isoformat(), "stage": "Format Detection", "status": "failed", "message": f"Exception: {str(e_gdal)}"})
         job.pipeline_stages_executed_log = current_log; db.commit()
@@ -354,7 +354,7 @@ def execute_aegis_pipeline(job_id: str, db: Session, logger_instance: logging.Lo
             current_log = list(job.pipeline_stages_executed_log or []); current_log.append({"timestamp": datetime.utcnow().isoformat(), "stage": "Format Conversion (GeoJSON)", "status": "success", "message": log_message, "output_path": geojson_output_path})
             job.pipeline_stages_executed_log = current_log; db.commit()
         except Exception as e_convert:
-            logger_instance.error(f"Exception during GeoJSON conversion for job {job_id}: {e_convert}")
+            logger_instance.error(f"Exception during GeoJSON conversion for job {job_id}: {e_convert}", exc_info=True)
             job.processing_status = "failed_format_conversion"; job.validation_summary = {**(job.validation_summary or {}), "format_conversion_error": str(e_convert)}
             current_log = list(job.pipeline_stages_executed_log or []); current_log.append({"timestamp": datetime.utcnow().isoformat(), "stage": "Format Conversion (GeoJSON)", "status": "failed", "message": f"Exception: {str(e_convert)}"})
             job.pipeline_stages_executed_log = current_log; db.commit()
@@ -377,7 +377,7 @@ def execute_aegis_pipeline(job_id: str, db: Session, logger_instance: logging.Lo
             job.pipeline_stages_executed_log = current_log; db.commit()
             if job.processing_status == "failed_crs_detection": return False # Stop if failed
         except Exception as e_crs_detect:
-            logger_instance.error(f"Exception during CRS detection for job {job_id}: {e_crs_detect}")
+            logger_instance.error(f"Exception during CRS detection for job {job_id}: {e_crs_detect}", exc_info=True)
             job.processing_status = "failed_crs_detection"; job.validation_summary = {**(job.validation_summary or {}), "crs_detection_error": str(e_crs_detect)}
             current_log = list(job.pipeline_stages_executed_log or []); current_log.append({"timestamp": datetime.utcnow().isoformat(), "stage": "CRS Detection", "status": "failed", "message": f"Exception: {str(e_crs_detect)}"})
             job.pipeline_stages_executed_log = current_log; db.commit()
@@ -405,7 +405,7 @@ def execute_aegis_pipeline(job_id: str, db: Session, logger_instance: logging.Lo
                 current_log = list(job.pipeline_stages_executed_log or []); current_log.append({"timestamp": datetime.utcnow().isoformat(), "stage": "CRS Transformation", "status": "success", "message": log_message, "output_path": reprojected_geojson_path})
                 job.pipeline_stages_executed_log = current_log; db.commit()
             except Exception as e_crs_transform:
-                logger_instance.error(f"Exception during CRS transformation for job {job_id}: {e_crs_transform}")
+                logger_instance.error(f"Exception during CRS transformation for job {job_id}: {e_crs_transform}", exc_info=True)
                 job.processing_status = "failed_crs_transformation"; job.validation_summary = {**(job.validation_summary or {}), "crs_transformation_error": str(e_crs_transform)}
                 current_log = list(job.pipeline_stages_executed_log or []); current_log.append({"timestamp": datetime.utcnow().isoformat(), "stage": "CRS Transformation", "status": "failed", "message": f"Exception: {str(e_crs_transform)}"})
                 job.pipeline_stages_executed_log = current_log; db.commit()
@@ -427,7 +427,7 @@ def execute_aegis_pipeline(job_id: str, db: Session, logger_instance: logging.Lo
             current_log = list(job.pipeline_stages_executed_log or []); current_log.append({"timestamp": datetime.utcnow().isoformat(), "stage": "Geocoding", "status": "success", "message": log_message, "summary": geocoding_summary_dict})
             job.pipeline_stages_executed_log = current_log; db.commit()
         except Exception as e_geocode_step:
-            logger_instance.error(f"Exception during geocoding step for job {job_id}: {e_geocode_step}")
+            logger_instance.error(f"Exception during geocoding step for job {job_id}: {e_geocode_step}", exc_info=True)
             job.processing_status = "failed_geocoding_step"; job.validation_summary = {**(job.validation_summary or {}), "geocoding_pipeline_error": str(e_geocode_step)}
             current_log = list(job.pipeline_stages_executed_log or []); current_log.append({"timestamp": datetime.utcnow().isoformat(), "stage": "Geocoding", "status": "failed", "message": f"Exception: {str(e_geocode_step)}"})
             job.pipeline_stages_executed_log = current_log; db.commit()
@@ -465,7 +465,7 @@ def execute_aegis_pipeline(job_id: str, db: Session, logger_instance: logging.Lo
             current_log = list(job.pipeline_stages_executed_log or []); current_log.append({"timestamp": datetime.utcnow().isoformat(), "stage": f"Complex Geometry Handling ({COMPLEX_GEOMETRY_STRATEGY})", "status": "success", "message": log_message, "summary": complex_geom_summary_dict})
             job.pipeline_stages_executed_log = current_log; db.commit()
         except Exception as e_complex_geom_step:
-            logger_instance.error(f"Exception during complex geometry handling for job {job_id}: {e_complex_geom_step}")
+            logger_instance.error(f"Exception during complex geometry handling for job {job_id}: {e_complex_geom_step}", exc_info=True)
             job.processing_status = "failed_complex_geometry_step"; job.validation_summary = {**(job.validation_summary or {}), "complex_geometry_error": str(e_complex_geom_step)}
             current_log = list(job.pipeline_stages_executed_log or []); current_log.append({"timestamp": datetime.utcnow().isoformat(), "stage": f"Complex Geometry Handling ({COMPLEX_GEOMETRY_STRATEGY})", "status": "failed", "message": f"Exception: {str(e_complex_geom_step)}"})
             job.pipeline_stages_executed_log = current_log; db.commit()
@@ -635,7 +635,7 @@ def execute_aegis_pipeline(job_id: str, db: Session, logger_instance: logging.Lo
 
             except Exception as e_promote:
                 general_error_message = f"Exception during data promotion for job {job_id}: {e_promote}"
-                logger_instance.error(general_error_message)
+                logger_instance.error(general_error_message, exc_info=True)
                 job.processing_status = "FAILED_PROMOTION"
 
                 promo_module_status.module_status = "FAILED"
