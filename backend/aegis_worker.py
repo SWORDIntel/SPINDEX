@@ -236,7 +236,7 @@ async def run_worker():
                                     logger.warning(f"WORKER: Job {job_id} processing failed and resulting status '{final_status_for_ack_check}' is not considered terminal for ACK. Message will NOT be ACKed for NATS redelivery.")
 
                         except json.JSONDecodeError:
-                            logger.error(f"WORKER: Failed to decode JSON from message: {msg.data.decode() if msg else 'N/A'}")
+                            logger.error(f"WORKER: Failed to decode JSON from message: {msg.data.decode() if msg else 'N/A'}", exc_info=True)
                             if msg: await msg.term()
                         except Exception as e_proc: # Catch errors within individual message processing
                             logger.error(f"WORKER: Unhandled error processing message for job {job_id}: {e_proc}", exc_info=True)

@@ -1,0 +1,579 @@
+# Git specific
+.git
+.gitignore
+.gitattributes
+
+# Docker specific (if Dockerfile is in a subdir and we build from parent)
+# Dockerfile* # Not needed if Dockerfile is at root and context is .
+
+# Build artifacts
+build/
+build_*/
+build_cmake/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so # Local .so files not part of the intended source/plugins
+*.o # Object files
+*.a # Static libraries not part of source
+*.dylib
+*.dll
+*.exe # If cross-compiling or Windows dev artifacts
+
+# Python virtual environments
+.venv/
+venv/
+ENV/
+env/
+*/activate
+*.Python
+activate_this.py
+
+# IDE and editor specific files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.suo
+*.user
+*.sln
+*.DS_Store
+
+# Test reports and coverage data
+htmlcov/
+.coverage
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.lcov
+
+# Logs
+*.log
+logs/
+
+# Local instance data (e.g. SQLite DBs for testing)
+backend/spindex_aegis.db
+# Add other local DB files if any
+
+# Conan specific build/package folders if generated locally outside the main build dir
+# (though typically these are within the build directory specified to conan install)
+# conan_build/
+# .conan/ # Local conan cache - should not be copied. CONAN_USER_HOME in Dockerfile handles container's cache.
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Downloaded files or large data not part of source
+downloads/
+data/ # If it contains large datasets not for the image
+
+# Archives
+*.tar.gz
+*.zip
+*.rar
+
+# Specific files
+Makefile.legacy # If we are fully on CMake
+
+# If SPINDEX directory itself contains other sub-projects not relevant to this C worker Docker image
+# Example: if there was a frontend/ directory not needed for this C worker image
+# frontend/
+# gui/ # Assuming the gui/ HTML/JS is not directly served by or needed by the C worker
+# backend/ # If the backend (Python FastAPI) is built as a separate image.
+# However, conanfile.py and CMakeLists.txt are at root, so backend might be needed for Pydantic models if shared.
+# For now, assuming backend source might be needed if `main.py` or `models.py` are imported by C via some mechanism
+# or if the C worker is actually part of the same overall build context defined by the root CMakeLists.txt.
+# The Dockerfile copies specific parts (core, include, plugins) for the C build.
+# Let's keep backend/ for now if conanfile.py or other build steps might reference it, but be mindful.
+# The COPY . . in Dockerfile is broad. A more specific copy is better.
+# Given the Dockerfile copies specific source dirs (core, include, plugins), we can be more aggressive here.
+# SPINDEX/ # This would ignore the SPINDEX dir itself if .dockerignore is inside it and context is ., which is fine.
+
+# Specific to this project structure, if the Docker context is SPINDEX/
+# and we want to avoid copying the entire build directory from a previous local build:
+# build_cmake/ # Handled by build_*/ above
+# SPINDEX/build/ # Handled by build/ above
+
+# Any other large files or directories not needed for building the C worker
+# For example, if there are large test data files not used in Docker build:
+# SPINDEX/test_data/some_large_test_files/
+
+# Documentation files not needed in the image
+# docs/ # Keep if any tool in Docker build needs them, otherwise ignore.
+# *.md # If not needed in image. README_BUILD.md is not needed. ROADMAP.md is not.
+README.md
+ROADMAP.md
+GUI_DESIGN.md
+FP16.MD
+Enhancements.md
+# AGENTS.md files might be useful if any tooling in Docker build consults them.
+# Keep AGENTS.md for now.
+
+# If backend is truly separate, uncomment:
+# backend/
+# gui/
+# docs/
+# *.md
+# But this needs careful consideration of what the root conanfile.py and CMakeLists.txt access.
+# The Dockerfile copies specific source folders for the C build, so these can likely be ignored from the context.
+backend/
+gui/
+docs/
+# Keep *.md that are not top-level project files (e.g. in SPINDEX/test_data/openvino_sample_input/README.md)
+# So, be specific for top-level .md files.
+AGENTS.md # Assuming it might be used by some tool during build.
+*.html
+*.css
+*.js
+# Exclude specific top-level files if not needed by the build
+# This is a bit tricky if subdirectories have these extensions.
+# For now, let top-level .md be excluded.
+# If the Dockerfile does `COPY . .` then this .dockerignore is critical.
+# If Dockerfile does `COPY core ./core` etc. then this is less critical for those specific copies
+# but still good for the overall context transfer.
+# The current Dockerfile does `COPY . .` after `COPY conanfile.py .`, so this .dockerignore is important.
+# Re-evaluating based on `COPY . .` in Dockerfile:
+# We need CMakeLists.txt at root. We need conanfile.py.
+# We need core/, include/, plugins/.
+# We need test_spindex_es.conf to be copied.
+# So, `backend/`, `gui/`, `docs/` can be ignored.
+# Top-level .md files like README.md, ROADMAP.md can be ignored.
+# Test files are disabled by -DBUILD_TESTS=OFF, but test source code itself might be copied by `COPY . .`
+# If `SPINDEX/tests` is not needed, it can be ignored.
+tests/
+# .github folder
+.github/
+# Other config files if not used by C worker
+# test_spindex_docker.conf
+# alembic.ini and alembic/ folder (Python backend specific)
+alembic.ini
+alembic/
+
+# Python specific files from backend if not needed by C build context
+# (assuming C build doesn't parse Python for some reason)
+backend/*.py # This is too broad if any py file is needed by build.
+# Keep backend/__init__.py if backend is a package used by other build steps? Unlikely for C.
+# The Dockerfile copies specific C source folders after initial conanfile.py.
+# So, ignoring `backend/` should be safe.
+
+# Final refined list for context being SPINDEX/
+.git
+.gitignore
+.gitattributes
+build*
+**/__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+ENV
+env
+.idea
+.vscode
+htmlcov
+.coverage
+.pytest_cache
+*.log
+logs
+backend/spindex_aegis.db
+# SPINDEX/test_data/ # If large and not needed for build resources
+docs/
+README.md
+ROADMAP.md
+GUI_DESIGN.md
+FP16.MD
+Enhancements.md
+# gui/ # already listed
+# backend/ # already listed
+tests/ # Test sources, as tests are disabled in Docker build
+.github/
+alembic.ini
+alembic/
+# Python files from root, if any, not related to build
+*.py
+# (Except conanfile.py, which is copied explicitly first in Dockerfile)
+# Dockerfile itself should not be ignored from context, but also not copied into image usually
+# Dockerfile # This would prevent Docker from finding it if it's in a subdirectory of context.
+# If Dockerfile is at root of context, it's fine.
+# Add specific large files if any
+# example_large_data.bin
+pending_tasks_analysis.txt
+# *.rtf, *.txt from root if they are just notes
+spindex.rtf
+spindex.txt
+# Shell scripts if not used in Docker build
+*.sh
+# Config files not used by the C worker being built
+# test_spindex_docker.conf # This might be an alternative config
+
+# Keep:
+# CMakeLists.txt (root)
+# conanfile.py
+# core/
+# include/
+# plugins/
+# test_spindex_es.conf (as it's copied into the image)
+# AGENTS.md (if any tooling might use it)
+# Any other files directly needed by the C build process itself.
+# Files within SPINDEX/test_data/ that might be actual resources for C code (unlikely but possible).
+
+# More precise:
+# Ignore everything by default, then un-ignore essentials
+# This is safer if COPY . . is used.
+# However, Docker's .dockerignore doesn't support un-ignore patterns directly like .gitignore.
+# So, list specific ignores.
+
+# Let's refine based on what builder stage copies:
+# COPY conanfile.py ./
+# COPY CMakeLists.txt ./
+# COPY core ./core
+# COPY include ./include
+# COPY plugins ./plugins
+# COPY test_spindex_es.conf ${SPINDEX_CONFIG_FILE} # This copy is in runtime stage, from context.
+# So, .dockerignore should ensure the context for `COPY test_spindex_es.conf` is clean.
+
+# Final refined list:
+.git
+.gitignore
+.gitattributes
+
+# Build outputs
+build/
+build_*/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Python Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE / Editor specific
+.idea/
+.vscode/
+*.sublime-*
+*.DS_Store
+Thumbs.db
+
+# Test related
+htmlcov/
+.coverage
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.lcov
+tests/ # Since BUILD_TESTS=OFF in Docker
+
+# Logs
+*.log
+logs/
+spindex_app.log # Specific log file example
+
+# Local data / DBs
+backend/spindex_aegis.db
+
+# Documentation not needed in image
+docs/
+README.md
+ROADMAP.md
+GUI_DESIGN.md
+FP16.MD
+Enhancements.md
+
+# Other project parts not for C worker image
+backend/ # Python backend
+gui/ # GUI frontend
+alembic/
+alembic.ini
+
+# Root level scripts/notes unless used by build
+Makefile.legacy
+setup_env.sh
+pending_tasks_analysis.txt
+spindex.rtf
+spindex.txt
+# Keep conanfile.py (copied explicitly)
+# Keep CMakeLists.txt (copied explicitly)
+# Keep test_spindex_es.conf (copied explicitly into runtime image)
+# Keep core/, include/, plugins/ (copied explicitly)
+
+# Any other files/dirs at root not needed
+# For example if there are other .py files at root
+# that are not conanfile.py
+main.py # If this is the Python backend main, ignore.
+load.py # Python script
+log_processor.c # If this is a standalone tool not part of spindex_app
+
+# *.so, *.o, *.a are generally build artifacts and should be covered by build/
+# but to be safe for any stray ones not in build/:
+# *.so
+# *.o
+# *.a
+# This might be too aggressive if some .so are precompiled deps NOT handled by conan.
+# But current setup assumes all C deps are via conan or source.
+
+# If the context is always SPINDEX/, and Dockerfile is in SPINDEX/,
+# then paths are relative to SPINDEX/.
+# The Dockerfile copies:
+# conanfile.py
+# CMakeLists.txt
+# core/
+# include/
+# plugins/
+# test_spindex_es.conf
+# Everything else can theoretically be ignored.
+# So, let's try to be more explicit about what to keep by ignoring broad categories
+# and specific large/irrelevant items.
+
+# Final refined list for .dockerignore in SPINDEX/
+# Default ignore common unnecessary files
+**/.git
+**/.gitignore
+**/.gitattributes
+**/build # Any directory named build
+**/build_* # Any directory starting with build_
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.DS_Store
+**/Thumbs.db
+
+# Virtual environments
+**/.venv
+**/venv
+**/ENV
+**/env
+
+# IDE files
+**/.idea
+**/.vscode
+
+# Test outputs
+**/htmlcov
+**/.coverage
+**/.pytest_cache
+**/nosetests.xml
+**/coverage.xml
+**/*.lcov
+
+# Logs
+**/*.log
+**/logs/
+
+# Specific large directories/files not needed for build context for C worker
+# (assuming Dockerfile copies only 'core', 'include', 'plugins', 'CMakeLists.txt', 'conanfile.py'
+# and 'test_spindex_es.conf' from the context)
+backend/
+gui/
+docs/
+tests/
+.github/
+alembic/
+alembic.ini
+
+# Root-level files not needed (except those explicitly copied by Dockerfile)
+README.md
+ROADMAP.md
+GUI_DESIGN.md
+FP16.MD
+Enhancements.md
+Makefile.legacy
+main.py # Python backend main
+load.py
+log_processor.c
+setup_env.sh
+pending_tasks_analysis.txt
+spindex.rtf
+spindex.txt
+# Keep: CMakeLists.txt, conanfile.py, test_spindex_es.conf (as they are directly used by Dockerfile COPY)
+# Keep: core/, include/, plugins/ (as they are directly used by Dockerfile COPY)
+# Keep: AGENTS.md (potentially useful for tools)
+# Keep: SPINDEX/ (the directory itself if context is parent, but usually context is .)
+
+# If context is '.', then these top-level ignores are fine.
+# If context is '..' and Dockerfile is 'SPINDEX/Dockerfile', then paths might need adjustment.
+# Assuming context is '.' (i.e., SPINDEX/ directory).
+# The Dockerfile structure `COPY core ./core` means that these top-level ignores are most effective.
+# The `COPY . .` after `conanfile.py` in the builder stage is the one that needs this .dockerignore the most.
+# The explicit copies later (CMakeLists.txt, core, include, plugins) are fine.
+
+# Let's simplify for `COPY . .` context after initial conanfile.py copy.
+# We want to copy only: CMakeLists.txt, core/, include/, plugins/, and test_spindex_es.conf (for runtime stage)
+# plus any files needed by conanfile.py if it `exports_sources` more things.
+# `conanfile.py` exports: "CMakeLists.txt", "core/*", "include/*", "plugins/*", "tests/*"
+# So, tests/ should NOT be ignored if conanfile.py needs it for `exports_sources`.
+# However, tests are disabled in Docker: -DBUILD_TESTS=OFF. So, tests source not strictly needed for build.
+# For now, let's keep tests/ out of .dockerignore if conanfile exports it.
+
+# Revised based on Dockerfile COPY strategy:
+# Builder Stage:
+# 1. COPY conanfile.py .  (Needs conanfile.py)
+# 2. RUN conan install ... (May use exports_sources from conanfile.py, which includes tests/)
+# 3. COPY . . (This copies everything not ignored. Needs CMakeLists.txt, core, include, plugins. tests/ might be copied here if not ignored)
+# Runtime Stage:
+# COPY test_spindex_es.conf (Needs this file from context)
+
+# Therefore, .dockerignore should allow:
+# conanfile.py
+# CMakeLists.txt (root)
+# core/
+# include/
+# plugins/
+# tests/ (because conanfile.py exports it, even if not built by CMake in Docker)
+# test_spindex_es.conf
+
+# Everything else can be ignored.
+.git
+.gitignore
+.gitattributes
+build # Any top-level build dir
+build_*
+**/__pycache__
+*.pyc
+*.pyo
+.DS_Store
+Thumbs.db
+.venv
+venv
+ENV
+env
+.idea
+.vscode
+htmlcov
+.coverage
+.pytest_cache
+*.log
+logs/
+backend/ # Fully ignore Python backend for C worker image
+gui/
+docs/
+.github/
+alembic/
+alembic.ini
+Makefile.legacy
+main.py # Python backend main
+load.py
+log_processor.c
+setup_env.sh
+pending_tasks_analysis.txt
+spindex.rtf
+spindex.txt
+# Top-level project files
+README.md
+ROADMAP.md
+GUI_DESIGN.md
+FP16.MD
+Enhancements.md
+# Explicitly allow AGENTS.md if present and needed
+# !AGENTS.md # (syntax for unignore not std in .dockerignore, so just don't list if to be kept)
+# If AGENTS.md is not listed, it won't be ignored by wildcard and will be part of `COPY . .`
+# Let's assume AGENTS.md (if it exists at root) is fine to include.
+# The key is `backend/` and `gui/` and `docs/` are large and irrelevant.
+# Build artifacts from local builds (`build/`, `build_cmake/` etc.) are also key.
+# Python venvs.
+# .git directory.
+# Test outputs.
+# Large data files if any (not apparent yet).
+# The `tests/` directory is exported by conanfile.py. If conan uses this during `conan install` (e.g., for SCM source if a recipe points to local path), then it should NOT be in .dockerignore.
+# If `conan install` only uses `conanfile.py` and fetches sources from remotes/cache, then `tests/` could be ignored for the `COPY . .` step.
+# Given `exports_sources = "CMakeLists.txt", "core/*", "include/*", "plugins/*", "tests/*"`,
+# these are copied to Conan's source folder when `spindex` itself is packaged or during `conan source .`.
+# For `conan install .`, it primarily uses `conanfile.py` to resolve dependencies.
+# The `COPY . .` in Docker is for CMake to find the sources. CMake builds `tests` conditionally.
+# So, for building the C worker image where tests are OFF, `tests/` source is not strictly needed by CMake.
+# It's safer to include `tests/` in `.dockerignore` for the `COPY . .` if it's not needed by the C build.
+# Let's ignore tests/ for the `COPY . .` step to keep the context smaller.
+# If conan SCM source mechanism in conanfile.py *relied* on tests/ being present from the COPY . . then it would be an issue.
+# But typical `conan install .` operates on the conanfile.py itself.
+
+# Final final list. This is always tricky.
+.git
+.gitignore
+.gitattributes
+
+# Docker specific
+Dockerfile # To avoid including it if context is parent and Dockerfile is in subdir
+
+# Build artifacts
+build/
+build_* # Catches build_cmake, build_debug, etc.
+**/__pycache__/
+*.py[cod] # .pyc, .pyo, .pyd
+
+# Python virtual environments
+.venv
+venv
+ENV
+env
+activate_this.py
+*.Python
+
+# IDE and editor specific files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.suo
+*.user
+*.sln
+*.DS_Store
+Thumbs.db
+
+# Test reports and coverage data
+htmlcov/
+.coverage
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.lcov
+tests/ # Test sources are not needed for the C worker image build (BUILD_TESTS=OFF)
+
+# Logs
+*.log
+logs/
+spindex_app.log
+
+# Local instance data
+backend/spindex_aegis.db
+
+# Documentation (not needed for runtime image, and builder only needs source)
+docs/
+README.md
+ROADMAP.md
+GUI_DESIGN.md
+FP16.MD
+Enhancements.md
+AGENTS.md # Assuming not parsed by C build tools
+
+# Other project parts if not directly used by C worker build from source
+backend/ # Python backend code
+gui/ # GUI code
+alembic/
+alembic.ini
+
+# Root level scripts/notes unless used by build process itself
+Makefile.legacy
+main.py # Python backend main
+load.py
+log_processor.c
+setup_env.sh
+pending_tasks_analysis.txt
+spindex.rtf
+spindex.txt
+
+# Conan local cache/build folders if they were ever generated outside main build dir
+.conan/
+conan_build/
+
+# GitHub specific
+.github/
+
+# Ensure specific files needed by Dockerfile COPY commands are NOT ignored
+# (conanfile.py, CMakeLists.txt, test_spindex_es.conf are fine as they don't match above patterns)
+# Ensure source dirs (core, include, plugins) are NOT ignored.
+# (They don't match above patterns either)

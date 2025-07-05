@@ -1,0 +1,2 @@
+# For different page layout components (e.g., DefaultLayout.vue, AuthLayout.vue).
+# These layouts typically include slots for <router-view> and common components like headers/footers.

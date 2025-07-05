@@ -1,0 +1,3 @@
+# This file is intentionally blank.
+# It's used to ensure the 'public' directory is tracked by Git even if it's empty.
+# Static assets like favicon.ico, robots.txt, etc., can be placed here.

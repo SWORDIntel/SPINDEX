@@ -91,6 +91,26 @@ def test_get_index_metadata_by_id_not_found(client: TestClient):
     non_existent_id = "non_existent_uuid_123"
     response = client.get(f"/indexes/{non_existent_id}", headers=admin_auth_headers())
     assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == f"IndexMetadata with ID '{non_existent_id}' not found."
+    assert data["error_code"] == "RESOURCE_NOT_FOUND"
+
+def test_create_index_metadata_duplicate_name(client: TestClient, db_session_override: SQLAlchemySession):
+    # Create the first item successfully
+    client.post("/indexes", json=sample_index_payload_1, headers=admin_auth_headers())
+
+    # Attempt to create another with the same name
+    duplicate_payload = {
+        "index_name": sample_index_payload_1["index_name"], # Same name
+        "index_type": "elasticsearch", # Can be same or different type
+        "promoted_data_path": "/path/to/other_promoted_data.geojson" # Different data path
+    }
+    response = client.post("/indexes", json=duplicate_payload, headers=admin_auth_headers())
+    assert response.status_code == 409 # Conflict
+    data = response.json()
+    assert data["detail"] == f"IndexMetadata with index_name '{sample_index_payload_1['index_name']}' already exists."
+    assert data["error_code"] == "DUPLICATE_RESOURCE"
+
 
 def test_update_index_metadata_success(client: TestClient):
     # Create an item
@@ -113,6 +133,10 @@ def test_update_index_metadata_not_found(client: TestClient):
     update_payload = {"status": "active"}
     response = client.put(f"/indexes/{non_existent_id}", json=update_payload, headers=admin_auth_headers())
     assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == f"IndexMetadata with ID '{non_existent_id}' not found." # Or specific "not found for update"
+    assert data["error_code"] == "RESOURCE_NOT_FOUND"
+
 
 def test_delete_index_metadata_success(client: TestClient, db_session_override: SQLAlchemySession):
     # Create an item
@@ -131,11 +155,18 @@ def test_delete_index_metadata_success(client: TestClient, db_session_override: 
     # Try to get it again (should be 404)
     response_get = client.get(f"/indexes/{item_id}", headers=admin_auth_headers())
     assert response_get.status_code == 404
+    data = response_get.json()
+    assert data["detail"] == f"IndexMetadata with ID '{item_id}' not found."
+    assert data["error_code"] == "RESOURCE_NOT_FOUND"
+
 
 def test_delete_index_metadata_not_found(client: TestClient):
     non_existent_id = "non_existent_uuid_for_delete"
     response = client.delete(f"/indexes/{non_existent_id}", headers=admin_auth_headers())
     assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == f"IndexMetadata with ID '{non_existent_id}' not found."
+    assert data["error_code"] == "RESOURCE_NOT_FOUND"
 
 # TODO: Add tests for pagination in GET /indexes if implemented in endpoint
 # TODO: Add tests for other auth scenarios (e.g., no token, invalid token, insufficient permissions if RBAC is granular)

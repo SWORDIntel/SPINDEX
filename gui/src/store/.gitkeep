@@ -1,0 +1,1 @@
+# For Pinia state management stores. Each store typically in its own file (e.g., auth.ts, user.ts).

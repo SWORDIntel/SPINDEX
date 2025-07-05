@@ -1,0 +1,2 @@
+# For API interaction logic, typically organizing API calls into service modules.
+# (e.g., apiClient.ts for Axios setup, authService.ts, indexService.ts).

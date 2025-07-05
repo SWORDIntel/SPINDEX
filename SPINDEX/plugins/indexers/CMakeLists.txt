@@ -1,17 +1,33 @@
-# SPINDEX/plugins/indexers/CMakeLists.txt
-cmake_minimum_required(VERSION 3.15)
+# --- Indexer Plugins CMakeLists.txt ---
 
-set(PLUGIN_NAME "elasticsearch_indexer")
-set(PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/${PLUGIN_NAME}.c")
+macro(add_indexer_plugin plugin_id source_file)
+    set(plugin_target_name "${plugin_id}_indexer_so")
 
-add_library(${PLUGIN_NAME} SHARED ${PLUGIN_SOURCES})
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${source_file}")
+        add_library(${plugin_target_name} MODULE ${source_file})
+        set_target_properties(${plugin_target_name} PROPERTIES PREFIX "")
+        set_target_properties(${plugin_target_name} PROPERTIES OUTPUT_NAME "${plugin_id}_indexer")
 
-# elasticsearch_indexer plugin depends on functions from elasticsearch_client and utils,
-# which are part of spindex_core.
-target_link_libraries(${PLUGIN_NAME} PRIVATE spindex_core)
+        target_include_directories(${plugin_target_name} PUBLIC
+            "${CMAKE_SOURCE_DIR}/include"
+        )
+        target_compile_options(${plugin_target_name} PRIVATE ${CMAKE_C_FLAGS})
 
-# Include directories are expected to be handled by the top-level CMakeLists.txt
-# or explicitly added here if needed:
-# target_include_directories(${PLUGIN_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/include)
+        if("${plugin_id}" STREQUAL "elasticsearch")
+            # elasticsearch_indexer links against elasticsearch_client.o and utils.o from spindex_core_lib
+            target_link_libraries(${plugin_target_name} PRIVATE spindex_core_lib)
+            # CURL is already linked to spindex_core_lib, so it should be available.
+            # If spindex_core_lib was an INTERFACE library, explicit linking here would be needed.
+        endif()
 
-# Output directory for .so files is handled by CMAKE_LIBRARY_OUTPUT_DIRECTORY.
+        list(APPEND SPINDEX_ALL_PLUGIN_TARGETS ${plugin_target_name})
+        set(SPINDEX_ALL_PLUGIN_TARGETS ${SPINDEX_ALL_PLUGIN_TARGETS} CACHE INTERNAL "List of all plugin targets" FORCE)
+        message(STATUS "Configured indexer plugin: ${plugin_target_name} (${plugin_id}_indexer.so)")
+    else()
+        message(WARNING "Source file ${source_file} not found for ${plugin_id}_indexer.")
+    endif()
+endmacro()
+
+add_indexer_plugin(elasticsearch elasticsearch_indexer.c)
+
+message(STATUS "Indexer plugins CMakeLists.txt processing complete.")
