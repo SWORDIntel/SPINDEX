@@ -1,490 +1,92 @@
-**Assumptions:**
-*   You're using `make` for the build system.
-*   Tasks are for C development primarily.
-*   "Implement" means create the `.c` and corresponding `.h` file, compile it as a shared object (`.so`) if it's a plugin, or link it into the core if it's core functionality.
+# gui/main_window.py - Add backend integration (append to existing file)
 
----
+# Add these imports at the top
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-## SPINDEX - Jules Task List (Starting from `json_preprocessor.c`)
+from signal_exporter.config import Config, ExportConfig
+from signal_exporter.exporter import SignalExporter
+from signal_exporter.formatters import get_formatter
+from signal_exporter.cloud import CloudBackup
 
-**Phase 1: Core System & Plugin Infrastructure**
-Status: **DONE ✅**
-*(No changes in this phase)*
-
-1.  **Task: [CORE-001] Implement `main.c` Entry Point**
-    *   Priority: High
-2.  **Task: [CORE-002] Define Core Data Structures & Types**
-    *   Priority: High
-3.  **Task: [CORE-003] Define Plugin Interface (`plugin_interface.h`)**
-    *   Priority: High
-4.  **Task: [CORE-004] Implement Plugin Loader (`plugin_loader.c`)**
-    *   Priority: High
-5.  **Task: [CORE-005] Implement Configuration Manager (`config_manager.c`)**
-    *   Priority: High
-6.  **Task: [BUILD-001] Create Initial Makefile**
-    *   Priority: High
-7.  **Task: [CORE-006] Implement Basic Logging Utility**
-    *   Priority: Medium
-8.  **Task: [CORE-007] Implement Hardware Detection (`hardware_detection.c`)**
-    *   Priority: Medium
-
-**Phase 2: Basic Ingestion Pipeline & First Parser/Preprocessor Pair**
-Status: **DONE ✅**
-*(No changes in this phase)*
-
-1.  **Task: [INGEST-001] Implement Ingestion Pipeline Manager (`ingestion_pipeline.c`)**
-    *   Priority: High
-2.  **Task: [JSON-001] Adapt `json_preprocessor.c` to Plugin Interface**
-    *   Priority: High
-3.  **Task: [JSON-002] Implement `json_parser.c`**
-    *   Priority: High
-4.  **Task: [BUILD-002] Extend Makefile for JSON Plugins**
-    *   Priority: High
-5.  **Task: [TEST-001] Test Core JSON Ingestion Path**
-    *   Priority: High
-
-**Phase 3: Elasticsearch Integration & Indexing**
-Status: **DONE ✅**
-*(No changes in this phase)*
-
-1.  **Task: [ES-001] Implement Elasticsearch Client (`elasticsearch_client.c`)**
-    *   Priority: High
-2.  **Task: [ES-002] Implement Elasticsearch Indexer Plugin (`elasticsearch_indexer.so`)**
-    *   Priority: High
-3.  **Task: [BUILD-003] Extend Makefile for Elasticsearch Indexer**
-    *   Priority: High
-4.  **Task: [TEST-002] End-to-End JSON Indexing Test**
-    *   Priority: High
-
-**Phase 4: Expanding Parsers & Preprocessors (Iterative)**
-Status: **DONE ✅**
-*(No changes in this phase)*
-
-*   Tasks [TXT-001] to [SQLITE-001], [BUILD-004], [ENC-001] to [ENC-003] remain as is with their existing priorities.
-
-**Phase 5: Decompressors**
-Status: **DONE ✅**
-
-## **Phase 5.A — Foundational Build & Dependency Refactoring (NEW)**
-
-**Status:** Pending
-*Purpose:* Modernise the build tool‑chain and external‑library handling before heavy new‑feature work begins.
-
-|  #  |  Task‑Code          |  Description                                                                                                                                    |  Priority  |  Status  |
-| --- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- |
-|  1  |  **BUILD‑ARC‑001**  |  **Migrate build system from legacy *Make* to modern, cross‑platform *CMake*. Improves automatic dependency detection & multi‑config builds.**  |  High      |  DONE ✅  |
-|  2  |  **BUILD‑ARC‑002**  |  **Introduce a C/C++ package‑manager (Conan or vcpkg) to pin exact versions of external libraries (libcurl, libzip, OpenVINO, …).**             |  High      |  DONE ✅  |
-
----
-
-1.  Tasks [DECOMP-001] to [BUILD-005] remain as is with their existing priorities.
-
-**Phase 6: AEGIS-ECHO Data Ingestion Pipeline**
-Status: DONE ✅
-*Note: Each AEGIS module listed below (AEGIS-001 through AEGIS-016) now has a dedicated root-level subfolder (e.g., `aegis_001_secure_upload_endpoint/`, `aegis_013_data_promotion/`) containing its specific README.md, BEST_PRACTICES.md, and is the designated location for other module-specific documentation and artifacts.*
-(Based on docs/AEGIS_PIPELINE_DESIGN.md)
-
-1.  - [x] **Task: [AEGIS-001] Design and Implement Secure Upload/Reception Endpoint**
-    *   Description: Establish the API endpoint for secure file uploads, including initial validation (size, MIME type) and robust authentication/authorization.
-    *   Priority: High
-    *(Original status: DONE ✅)*
-2.  - [x] **Task: [AEGIS-002] Implement Staging Area for raw data**
-    *   Description: Set up a secure, isolated temporary storage location for uploaded raw data before processing.
-    *   Priority: High
-    *(Original status: DONE ✅)*
-3.  - [x] **Task: [AEGIS-003] Implement Ingestion Task Trigger mechanism**
-    *   Description: Integrate a message queue (e.g., RabbitMQ, Redis) to publish tasks for asynchronous processing upon successful data staging.
-    *   Priority: High
-    *(Original status: DONE ✅)*
-4.  - [x] **Task: [AEGIS-004] Develop Pipeline Worker Execution framework**
-    *   Description: Create the Celery worker (or similar) infrastructure capable of subscribing to the task queue and executing a sequence of processing modules.
-    *   Priority: High
-    *(Original status: DONE ✅)*
-5.  - [x] **Task: [AEGIS-005] Implement Format Conversion & Abstraction module (GDAL/OGR)**
-    *   Description: Develop the pipeline module to detect input vector formats and convert them to a standard interchange format like GeoJSON using GDAL/OGR.
-    *   Priority: Medium
-    *(Original status: DONE ✅)*
-6.  - [x] **Task: [AEGIS-006] Implement CRS Transformation module**
-    *   Description: Develop the pipeline module to auto-detect source CRS and re-project geometries to a standard internal CRS (e.g., EPSG:4326).
-    *   Priority: Medium
-    *(Original status: DONE ✅)*
-7.  - [x] **Task: [AEGIS-007] Implement Geocoding Service Integration module**
-    *   Description: Develop the module to identify address fields and integrate with a geocoding service to generate point geometries.
-    *   Priority: Medium
-    *(Original status: DONE ✅)*
-8.  - [x] **Task: [AEGIS-008] Implement Complex Geometry Handling module**
-    *   Description: Develop the module to manage datasets with mixed geometry types based on configurable strategies (split, filter, reject).
-    *   Priority: Medium
-    *(Original status: DONE ✅)*
-9.  - [x] **Task: [AEGIS-009] Implement Unstructured Text Parsing (NLP/NER) module**
-    *   Description: Develop the module to use NER for extracting location names from text, integrating with the geocoding module.
-    *   Priority: Medium
-    *(Original status: DONE ✅)*
-10. - [x] **Task: [AEGIS-010] Implement Geometric Validation module**
-    *   Description: Develop the pipeline module to check for and optionally repair invalid geometries (e.g., using Shapely).
-    *   Priority: Medium
-    *(Original status: DONE ✅)*
-11. **Task: [AEGIS-011] Implement Content-Level Security Scanning module**
-    *   Description: Develop the module for security scanning (e.g., XXE prevention, zip bomb detection).
-    *   Priority: Medium
-    *   Status: DONE ✅
-12. **Task: [AEGIS-012] Implement Value-Domain & Schema Validation module**
-    *   Description: Develop the module to validate data against expected structures, attribute types, and value constraints.
-    *   Priority: Medium
-    *   Status: DONE ✅
-13. **Task: [AEGIS-013] Implement Data Promotion logic**
-    *   Description: Develop the logic to move validated, processed data to a trusted location and update metadata status accordingly.
-    *   Priority: High
-    *   Status: IN PROGRESS 🚧
-14. **Task: [AEGIS-014] Implement Data Quarantine (DLQ) logic**
-    *   Description: Develop the logic to isolate data that fails processing/validation, update metadata, and log errors.
-    *   Priority: High
-    *   Status: DONE ✅
-15. **Task: [AEGIS-015] Implement Persistent Metadata Cataloguing**
-    *   Description: Integrate a persistent database (e.g., PostgreSQL) for storing all ingestion job metadata, replacing any in-memory solutions.
-    *   Priority: High
-    *   Status: DONE ✅
-16. **Task: [AEGIS-016] Test AEGIS-ECHO pipeline end-to-end**
-    *   Description: Conduct comprehensive testing of the full AEGIS-ECHO pipeline with various data types, sizes, and potential error conditions.
-    *   Priority: High
-    *   Status: DONE ✅
+class BackendIntegration:
+    """Bridge between GUI and backend"""
     
-## **Phase 6 — AEGIS‑ECHO Data Ingestion Pipeline**
-
-**Status:** DONE ✅
-*Major change:* Pipeline is now **message‑queue‑driven** (Kafka / NATS) with metadata persisted in PostgreSQL.
-
-### Completed (from v1.9)
-
-### New & Modified Work
-|  16  |  **AEGIS‑ARC‑001**  |  **Architect message‑queue‑based ingestion (decoupled producer/worker, PostgreSQL metadata). See `docs/AEGIS_MQ_PIPELINE_ARCHITECTURE.md`.**  |  High      |  Design Complete   |  —              |
-|  17  |  **AEGIS‑003‑R1**   |  **Refactor ingestion trigger to *publish* job messages to MQ.**                                |  High      |  DONE ✅   |  AEGIS‑ARC‑001  |
-|  18  |  **AEGIS‑004‑R1**   |  **Refactor pipeline worker to *consume* jobs from MQ, run stateless chain.**                   |  High      |  DONE ✅   |  AEGIS‑ARC‑001  |
-
----
-
-**Phase 7: Advanced C Plugin Features - AVX-512 & Machine Learning** (Previously Phase 6)
-Status: In Progress
-
-1.  **Task: [AVX-001] Implement full AVX-512 phrase search algorithm**
-    *   Priority: High
-    *   Status: DONE ✅
-2.  **Task: [ES-003] Integrate AVX-512 Search with Elasticsearch Queries**
-    *   Priority: Medium
-    *   Status: Design Complete
-3.  - [x] **Task: [ML-001] Define Machine Learning Interface (`ml_interface.h`)**
-    *   Priority: Medium
-    *(Original status: DONE ✅)*
-4.  - [x] **Task: [ML-002] Implement ML Classifier Plugin (`ml_classifier.so`)**
-    *   Priority: Medium
-    *(Original status: DONE ✅)*
-5.  - [x] **Task: [ML-003] Implement Content Analyzer Plugin (`content_analyzer.so`)**
-    *   Priority: Medium
-    *(Original status: DONE ✅)*
-6.  - [x] **Task: [INGEST-003] Integrate ML Classification into Ingestion Pipeline**
-    *   Priority: Medium
-    *(Original status: DONE ✅)*
-7.  - [x] **Task: [BUILD-006] Extend Makefile for AVX & ML Plugins**
-    *   Priority: Medium
-    *(Original status: DONE ✅)*
-*   **Sub-Phase: ML Inference Acceleration with OpenVINO**
-    * - [x] Tasks [ML-OV-001] to [ML-OV-004] (DONE ✅, Medium-High priorities)
-    5.  **Task: [ML-OV-005] Execute hardware-specific testing and validation for OpenVINO FP16 Inference on Meteor Lake 165h**
-        *   Priority: High
-        *   Status: To Do
-
-**Phase 8: Backend Finalization** (Previously Phase 7 - "Backend Finalization and AEGIS Pipeline Completion", AEGIS part moved to new Phase 6)
-Status: Pending
-
-1.  **Task: [BE-001] Implement persistent storage for IndexMetadata** (Refined from original BE-001)
-    *   Description: Replace current in-memory list for `IndexMetadata` with a persistent storage solution.
-    *   Priority: High
-    *   Status: DONE ✅
-2.  **Task: [BE-002] Implement persistent storage for Query History**
-    *   Priority: High
-    *   Status: DONE ✅
-3.  **Task: [BE-006] Implement robust error handling and user notification for general backend operations** (Refined from original BE-006)
-    *   Description: Enhance error handling for general backend API calls, provide clearer error messages, and establish user notifications where applicable (beyond AEGIS pipeline).
-    *   Priority: Medium
-    *   Status: DONE ✅
-4.  **Task: [BE-007] Testing and Refinement of Backend APIs and Services** (Refined from original BE-007)
-    *   Description: Conduct thorough testing of all backend endpoints and services (excluding AEGIS pipeline which is tested in [AEGIS-016]).
-    *   Priority: High
-    *   Status: DONE ✅
-    *   (Original BE-003, BE-004, BE-005 are now covered by AEGIS tasks [AEGIS-011], [AEGIS-012], [AEGIS-009] respectively)
-
-**Phase 9: Comprehensive GUI Implementation** (Previously Phase 8 - "GUI Development")
-Status: Pending
-(Based on GUI_DESIGN.md and gui/GUI_MOCKUPS.md)
-
-*   **Foundational & Architectural GUI Tasks:**
-    1.  **Task: [GUI-FND-001] Implement RBAC checks in UI based on user roles.**
-        *   Description: Ensure UI elements and actions are enabled/disabled based on authenticated user's role and permissions.
-        *   Priority: High
-        *   Status: To Do
-    2.  **Task: [GUI-FND-002] Ensure UI interactions with backend respect E2E encryption and authentication model.**
-        *   Description: Verify client-side handling of tokens, mTLS requirements, and secure API communication.
-        *   Priority: High
-        *   Status: To Do
-    3.  **Task: [GUI-FND-003] Design UI for Index Versioning & Integrity display.**
-        *   Description: Implement UI elements to show index versions, associated hashes, and verification status.
-        *   Priority: High
-        *   Status: To Do
-
-*   **User Experience (UX) Enhancements:**
-
-    **High Priority UX Tasks:**
+    def __init__(self):
+        self.config = Config()
+        
+    def test_connection(self) -> tuple[bool, str]:
+        """Test Signal database connection"""
+        try:
+            config = self.config._config
+            exporter = SignalExporter(config)
+            with exporter.db:
+                convs = exporter.db.get_conversations()
+            return True, f"Connected! Found {len(convs)} conversations"
+        except Exception as e:
+            return False, str(e)
     
-    4.  **Task: [GUI-UX-001] Implement multi-step Index Creation Wizard**
-        *   Description: Develop the full wizard flow as per `GUI_DESIGN.md` and `gui/GUI_MOCKUPS.md`
-        *   Priority: High | Status: To Do
-        
-    9.  **Task: [GUI-UX-006] Implement Loading States & Skeleton Screens**
-        *   Description: Add visual feedback during data loading and asynchronous operations
-        *   Priority: High | Status: To Do
-        
-    10. **Task: [GUI-UX-007] Implement Query History & Favorites feature**
-        *   Description: Allow users to view past queries and save favorites
-        *   Priority: High | Status: To Do
-
-    **Medium Priority UX Tasks:**
+    def export_conversations(self, format_type: str = 'json', 
+                           selected_convs: list = None) -> tuple[bool, str]:
+        """Export conversations"""
+        try:
+            config = self.config._config
+            config.export_format = format_type
+            
+            exporter = SignalExporter(config)
+            data = exporter.export_all_conversations()
+            
+            # Format data
+            formatter = get_formatter(format_type)
+            formatted = formatter.format(data)
+            
+            # Save to file
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"signal_export_{timestamp}.{format_type}"
+            output_path = config.output_dir / filename
+            
+            config.output_dir.mkdir(parents=True, exist_ok=True)
+            with open(output_path, 'w') as f:
+                f.write(formatted)
+                
+            return True, str(output_path)
+            
+        except Exception as e:
+            return False, str(e)
     
-    5.  **Task: [GUI-UX-002] Add Data Preview & Validation display**
-        *   Description: Integrate preview of AEGIS-processed data in the wizard
-        *   Priority: Medium | Status: To Do
+    def upload_to_cloud(self, file_path: str, provider: str = 'sftp') -> tuple[bool, str]:
+        """Upload file to cloud"""
+        try:
+            backup = CloudBackup(provider)
+            success = backup.upload(Path(file_path))
+            
+            if success:
+                return True, "Upload successful"
+            else:
+                return False, "Upload failed"
+                
+        except Exception as e:
+            return False, str(e)
+
+# Modify MainWindow.__init__ to add backend
+def enhanced_init(self):
+    # ... existing init code ...
+    
+    # Add backend integration
+    self.backend = BackendIntegration()
+    
+    # Connect test button
+    if hasattr(self, 'test_button'):
+        self.test_button.clicked.connect(self.test_backend_connection)
         
-    6.  **Task: [GUI-UX-003] Implement Breadcrumb Navigation**
-        *   Description: Add breadcrumbs for easier navigation in nested views
-        *   Priority: Medium | Status: To Do
-        
-    7.  **Task: [GUI-UX-004] Integrate Contextual Help & Tooltips**
-        *   Description: Add "?" icons and informative tooltips for complex UI elements
-        *   Priority: Medium | Status: To Do
-        
-    8.  **Task: [GUI-UX-005] Implement Progressive Disclosure in tables**
-        *   Description: Use pagination/load-more for tables like Index Management
-        *   Priority: Medium | Status: To Do
-        
-    11. **Task: [GUI-UX-008] Refactor Query Interface for Unified Map**
-        *   Description: Single map component for geometry drawing and results display
-        *   Priority: Medium | Status: To Do
+def test_backend_connection(self):
+    """Test backend connection"""
+    success, message = self.backend.test_connection()
+    
+    if success:
+        QMessageBox.information(self, "Success", message)
+    else:
+        QMessageBox.warning(self, "Connection Failed", message)
 
-*   **Data Management GUI Tasks:**
-    12. **Task: [GUI-DMGT-001] Display Query Performance Metrics after query execution.**
-        *   Description: Show query time and result count.
-        *   Priority: High
-        *   Status: To Do
-    13. **Task: [GUI-DMGT-002] Implement Bulk Actions in Index Management.**
-        *   Description: Add support for batch delete/rebuild of indexes.
-        *   Priority: Medium
-        *   Status: To Do
-    14. **Task: [GUI-DMGT-003] Implement Saved & Sharable Queries.**
-        *   Description: Allow users to save query definitions and share them.
-        *   Priority: Medium
-        *   Status: To Do
-    15. **Task: [GUI-DMGT-004] Add Drag-and-Drop File Upload capability.**
-        *   Description: Implement drag-and-drop for relevant file inputs (e.g., query geometry files).
-        *   Priority: Medium
-        *   Status: To Do
-
-*   **Core View Implementations (incorporating above enhancements):**
-    16. **Task: [GUI-001] Implement Dashboard View.** (Priority: Medium, Status: To Do)
-    17. **Task: [GUI-002] Implement Index Management View.** (Priority: Medium, Status: To Do, Depends on [GUI-UX-001], [GUI-UX-005], [GUI-DMGT-002])
-    18. **Task: [GUI-003] Implement Query Interface View.** (Priority: Medium, Status: To Do, Depends on [GUI-UX-007], [GUI-UX-008], [GUI-DMGT-001], [GUI-DMGT-003])
-    19. **Task: [GUI-004] Implement Data Visualization View.** (Priority: Medium, Status: To Do)
-    20. **Task: [GUI-005] Implement Settings View.** (Priority: Medium, Status: To Do)
-    21. **Task: [GUI-006] Implement Ingestion Dashboard View.** (Priority: Medium, Status: To Do, Relies on AEGIS Pipeline)
-    22. **Task: [GUI-007] Refine Enhanced Index Creation Wizard (GUI Part).** (Effectively covered by [GUI-UX-001], [GUI-UX-002], this task can be considered merged or a placeholder for final wizard integration)
-        *   Priority: Medium
-        *   Status: To Do
-    23. **Task: [GUI-008] Implement GUI Backend API Interaction.** (Remains High Priority, Status: To Do - Ongoing)
-    24. **Task: [GUI-009] Refine UI feedback mechanisms.** (Effectively covered by [GUI-UX-004], [GUI-UX-006], this task can be considered merged or a placeholder for final polish)
-        *   Priority: Medium
-        *   Status: To Do
-    25. **Task: [GUI-010] Testing and Refinement of GUI components.** (Remains High Priority, Status: To Do)
-
-**Phase 10: System Optimizations, Security, and Final Touches** (Previously Phase 9)
-Status: Pending
-
-|  #  |  Task‑Code       |  Description                                                               |  Priority  |  Status       |  Depends On  |
-| --- | ---------------- | -------------------------------------------------------------------------- | ---------- | ------------- | ------------ |
-|  1  |  **CORE‑009**    |  **Enhance plugin loader with versioning & dependency‑graph resolution.**  |  Medium    |  DONE ✅       |  —           |
-|  2  |  **DEPLOY‑001**  |  **Dockerfile for SPINDEX worker (C side).**                               |  High      |  DONE ✅       |  —           |
-|  3  |  **DEPLOY‑002**  |  **Docker Swarm stack/compose files (services, networks, scaling).**       |  Medium    |  DONE ✅       |  DEPLOY‑001  |
-|  4  |  CORE‑008        |  Threading model (`threading.c`).                                          |  Medium    |  DONE ✅       |  —           |
-|  5  |  OPT‑001         |  General hardware‑optimisation plugins.                                    |  Low       |  To Do        |  —           |
-|  6  |  SEC‑001         |  C‑level security‑analysis plugins.                                        |  Low       |  To Do        |  —           |
-|  7  |  DOCS‑001        |  README & usage docs (ongoing).                                            |  Medium    |  DONE ✅        |  —           |
-|  8  |  TEST‑003        |  Comprehensive system & perf testing.                                      |  Medium    |  To Do        |  1‑7         |
-
-**Phase 11: Developer Documentation**
-Status: Pending
-
-1.  **Task: [DEV-DOC-001] Document Core Architecture and Design Principles**
-    *   Description: Create a high-level overview of the SPINDEX architecture, including the core engine, plugin system, AEGIS-ECHO pipeline, backend API, and GUI. Document key design principles and decisions.
-    *   Priority: High
-    *   Status: DONE ✅
-2.  **Task: [DEV-DOC-002] Document AEGIS-ECHO Data Ingestion Pipeline**
-    *   Description: Detail the pipeline's stages, modules, data flow, configuration options, and how to extend it with new processing or validation modules. Reference `docs/AEGIS_PIPELINE_DESIGN.md` but provide more developer-specific details.
-    *   Priority: High
-    *   Status: DONE ✅
-3.  **Task: [DEV-DOC-003] Document Backend API**
-    *   Description: Provide detailed documentation for all backend API endpoints, including request/response schemas, authentication requirements, and usage examples. Leverage FastAPI's auto-generated OpenAPI docs and supplement as needed.
-    *   Priority: High
-    *   Status: DONE ✅
-4.  **Task: [DEV-DOC-004] Document SPINDEX Core and Plugin Development**
-    *   Description: Explain how to develop new plugins for the SPINDEX core (parsers, preprocessors, indexers, etc.). Detail the plugin interface, build process, and testing best practices.
-    *   Priority: Medium
-    *   Status: To Do
-5.  **Task: [DEV-DOC-005] Document GUI Components and Frontend Development**
-    *   Description: Describe the GUI architecture, key components, state management, and how to interact with the backend API from the frontend. Document the build process for the frontend.
-    *   Priority: Medium
-    *   Status: To Do
-6.  **Task: [DEV-DOC-006] Create Contribution Guidelines**
-    *   Description: Outline the process for contributing to the project, including coding standards, branch management, pull request process, and testing requirements.
-    *   Priority: Medium
-    *   Status: To Do
-7.  **Task: [DEV-DOC-007] Setup and Deployment Guide**
-    *   Description: Provide instructions for setting up a development environment and deploying SPINDEX (including backend, core, and GUI components).
-    *   Priority: Medium
-    *   Status: DONE ✅
-8.  **Task: [DEV-DOC-008] Review and Publish Developer Documentation**
-    *   Description: Collate all developer documentation into a coherent structure (e.g., a documentation website or a set of markdown files in a `/devdocs` directory). Review for clarity, accuracy, and completeness.
-    *   Priority: Medium
-    *   Status: To Do
-
----
-
-**Chunk Reorganization (Reflecting New Phases and Task Updates)**
-
-This section provides a high-level view, grouping phases into larger chunks.
-
-**Chunk 1: Core System & Plugin Foundation** (Phase 1) - Status: **DONE ✅**
-**Chunk 2: Basic Ingestion & ES Integration** (Phases 2, 3) - Status: **DONE ✅**
-**Chunk 3: Core Parsers & Decompressors** (Phases 4, 5) - Status: **DONE ✅**
-
-**Chunk 4: AEGIS-ECHO Data Ingestion Pipeline** (Phase 6)
-Status: **Pending**
-*   Key Tasks: [AEGIS-001] Endpoint (High), [AEGIS-004] Worker Framework (High), [AEGIS-015] Metadata DB (High), [AEGIS-016] Pipeline Testing (High). Core modules ([AEGIS-005] to [AEGIS-012]) are Medium.
-
-**Chunk 5: Advanced C Plugin Features** (Phase 7)
-Status: **In Progress**
-*   Key Pending Tasks: [AVX-001] Full AVX Implementation (High), [ML-OV-005] Meteor Lake Testing (High).
-
-**Chunk 6: Backend Finalization** (Phase 8)
-Status: **Pending**
-*   Key Tasks: [BE-001] IndexMetadata DB (High), [BE-002] Query History DB (High), [BE-007] Backend Testing (High).
-
-**Chunk 7: Comprehensive GUI Implementation** (Phase 9)
-Status: **Pending**
-*   Key Tasks: Foundational GUI Security/Arch ([GUI-FND-001]-[GUI-FND-003]) (High). Core UX ([GUI-UX-001] Wizard, [GUI-UX-006] Loading States, [GUI-UX-007] Query History, [GUI-DMGT-001] Perf. Metrics) (High). Other UX/DMGT/View tasks (Medium). GUI Testing ([GUI-010]) (High).
-
-**Chunk 8: System Optimizations & Final Touches** (Phase 10)
-Status: **Pending**
-*   Key Tasks: [CORE-008] Threading (Medium), [TEST-003] System Testing (Medium). Optimizations ([OPT-001], [SEC-001]) (Low). Documentation ([DOCS-001]) (Medium).
-
-**Chunk 9: Developer Documentation** (Phase 11 - New)
-Status: **Pending**
-*   Key Tasks: [DEV-DOC-001] Core Arch (High), [DEV-DOC-002] AEGIS Pipeline Doc (High), [DEV-DOC-003] Backend API Doc (High). Others (Medium).
-
-## **Phase 11 — Developer Documentation**
-
-*(Task codes unchanged, but deliverables **must now cover CMake, Conan/vcpkg, Kafka/NATS & Docker**.)*
-
-All **\[DEV‑DOC‑\*]** tasks remain as before.
-
----
-
-## **Assumptions & Notes**
-
-* The build system is **migrating from `make` to `CMake`** in Phase 5.A. Until that phase is complete, both build systems coexist.
-* "Implement" tasks mean creating the `.c` & `.h`, compiling to `.so` if it's a plugin, or linking into the core otherwise.
-* Primary languages remain **C and Python**.
-
----
-
-This breakdown should provide smaller, more manageable sets of tasks for Jules. Each chunk aims for a tangible step forward.
-(Note: Phase and Chunk numbering has been significantly updated.)
-
----
-
-## Open TODOs and PLACEHOLDERs from TODO_LIST.md
-
-### TODOs
-
-**Easy Wins (Low Effort, Quick Implementation):**
-- `SPINDEX/plugins/parsers/csv_parser.c:126`: trim whitespace from header token
-- `SPINDEX/plugins/parsers/csv_parser.c:198`: trim whitespace from headers[field_idx]
-- `SPINDEX/plugins/parsers/csv_parser.c:199`: trim whitespace from current_field_value
-- `SPINDEX/plugins/classifiers/openvino_classifier.c:335`: General TODO (just a marker)
-
-**Simple Realloc Operations (Easy, But Need Care):**
-- `SPINDEX/plugins/parsers/csv_parser.c:177`: realloc json_buffer
-- `SPINDEX/plugins/parsers/csv_parser.c:182`: realloc json_buffer
-- `SPINDEX/plugins/parsers/csv_parser.c:192`: realloc json_buffer
-- `SPINDEX/plugins/parsers/csv_parser.c:236`: realloc json_buffer
-- `SPINDEX/plugins/parsers/csv_parser.c:241`: realloc json_buffer
-
-**High Priority (Core Functionality):**
-- `SPINDEX/core/ingestion_pipeline.c:421`: Call Geocoding Module [AEGIS-007] with extracted_locs[i] or the full list
-- `gui/script.js:493`: Populate wizardAttributesSelect based on actual attributes from data (requires backend to provide this)
-- `backend/pipeline_logic.py:249`: Pass content_type if available on job model
-- `SPINDEX/plugins/search_algorithms/avx512_phrase_search.c:195`: The plugin_interface.h currently only supports one input chunk for process_data
-
-**Medium Priority (Important Enhancements):**
-- `SPINDEX/core/main.c:18`: Consider making log path and level configurable via SpindexConfig
-- `SPINDEX/core/threading.h:13`: Consider implementing a maximum queue size for TaskQueue to prevent excessive memory usage under high load
-- `SPINDEX/include/search_orchestrator.h:19`: Add other query parameters as needed, e.g., date ranges, filters
-- `SPINDEX/include/search_orchestrator.h:29`: Add other result fields as needed
-- `SPINDEX/plugins/aegis_modules/complex_geometry_handler.c:42`: Implement logic based on design
-- `gui/script.js:403`: Add logic for dynamic index-specific params based on indexTypeSelect.value
-- `gui/script.js:574`: Collect other params based on index type
-- `gui/script.js:933`: Populate specific param inputs from item.request_data.parameters
-
-**Lower Priority (Model/Processing Enhancements):**
-- `SPINDEX/plugins/classifiers/openvino_classifier.c:212`: Handle models with multiple inputs if necessary
-- `SPINDEX/plugins/classifiers/openvino_classifier.c:239`: Implement proper preprocessing (resize, pad, convert type, etc.)
-- `SPINDEX/plugins/classifiers/openvino_classifier.c:267`: Handle models with multiple outputs if necessary
-- `SPINDEX/plugins/classifiers/openvino_classifier.c:324`: Populate (*output_data_ptr)->metadata if needed (e.g., classification scores, types)
-
-**Testing & Documentation TODOs:**
-- `SPINDEX/core/test_complex_geometry_handler.c:282`: Add more tests (edge cases, malformed JSON, etc.)
-- `SPINDEX/core/test_geometric_validator.c:199`: Add more tests
-- `backend/tests/test_index_metadata_api.py:140`: Add tests for pagination in GET /indexes if implemented in endpoint
-- `backend/tests/test_index_metadata_api.py:141`: Add tests for other auth scenarios (e.g., no token, invalid token, insufficient permissions if RBAC is granular)
-
-### PLACEHOLDERs
-
-NOTICE: PLACEHOLDERS IN TESTS CAN BE IGNORED, THEY ARE TESTS AND DO NOT NEED REAL VALUES PUTTING IN UNLESS THE TEST NEEDS A REAL VALUE TO FUNCTION
-
-- `SPINDEX/core/test_ingestion_pipeline.c:85`: `CHUNK_TYPE_PARSED_JSON_PLACEHOLDER`
-- `SPINDEX/include/data_types.h:18`: `CHUNK_TYPE_PARSED_JSON_PLACEHOLDER`
-- `SPINDEX/plugins/parsers/json_parser.c:96`: `CHUNK_TYPE_PARSED_JSON_PLACEHOLDER`
-- `backend/main.py:163`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/main.py:164`: `SECURE_PLACEHOLDER_TOKEN_ANALYST`
-- `backend/main.py:165`: `SECURE_PLACEHOLDER_TOKEN_VIEWER`
-- `backend/main.py:167`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/main.py:168`: `SECURE_PLACEHOLDER_TOKEN_ANALYST`
-- `backend/main.py:169`: `SECURE_PLACEHOLDER_TOKEN_VIEWER`
-- `backend/tests/test_index_metadata_api.py:10`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_index_metadata_api.py:14`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:10`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`, `SECURE_PLACEHOLDER_TOKEN_ANALYST`
-- `backend/tests/test_query_history_api.py:33`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:40`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:56`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:61`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:67`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:68`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:70`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:82`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:83`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:86`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:89`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:97`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:105`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:108`: `SECURE_PLACEHOLDER_TOKEN_ANALYST`
-- `backend/tests/test_query_history_api.py:111`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`
-- `backend/tests/test_query_history_api.py:119`: `SECURE_PLACEHOLDER_TOKEN_ANALYST`
-- `docs/AEGIS_PIPELINE_TESTING_PLAN.md:34`: `SECURE_PLACEHOLDER_TOKEN_ADMIN`, `SECURE_PLACEHOLDER_TOKEN_ANALYST`
-- `docs/AEGIS_PIPELINE_TESTING_PLAN.md:157`: `SECURE_PLACEHOLDER_TOKEN_VIEWER`
-- `docs/AEGIS_PIPELINE_TESTING_PLAN.md:162`: `SECURE_PLACEHOLDER_TOKEN_VIEWER`
+# Add methods to MainWindow class
+MainWindow.test_backend_connection = test_backend_connection

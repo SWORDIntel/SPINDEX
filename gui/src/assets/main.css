@@ -1,0 +1,85 @@
+/* Global styles and resets */
+
+:root {
+  /* SPINDEX Branding Colors */
+  --spindex-primary: #1a73e8; /* Example: A nice blue */
+  --spindex-secondary: #6c757d; /* Example: Grey */
+  --spindex-success: #28a745;
+  --spindex-danger: #dc3545;
+  --spindex-warning: #ffc107;
+  --spindex-info: #17a2b8;
+
+  /* Base Theme Colors (can be overridden or expanded) */
+  --primary-color: var(--spindex-primary);
+  --secondary-color: #2c3e50;
+  --background-color: #f0f2f5;
+  --text-color: #333;
+  --border-color: #e0e0e0;
+}
+*/
+
+body {
+  margin: 0;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+               Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f0f2f5; /* A light background for the app */
+  color: #333;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+#app {
+  /* You might want to remove padding/margin from #app if body handles it,
+     or if layouts control their own padding. */
+  /* Example:
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  */
+}
+
+a {
+  color: #007bff; /* Example link color */
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Basic responsive typography could go here */
+/*
+html {
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  html {
+    font-size: 14px;
+  }
+}
+*/
+
+/* Utility classes (optional) */
+/*
+.container {
+  width: 100%;
+  padding-right: 15px;
+  padding-left: 15px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+@media (min-width: 576px) { .container { max-width: 540px; } }
+@media (min-width: 768px) { .container { max-width: 720px; } }
+@media (min-width: 992px) { .container { max-width: 960px; } }
+@media (min-width: 1200px) { .container { max-width: 1140px; } }
+*/
