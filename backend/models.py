@@ -41,6 +41,7 @@ class IngestionJobDB(Base):
 
     data_hash_original = Column(String, nullable=True)
     data_hash_processed = Column(String, nullable=True)
+    promoted_data_hash = Column(String, nullable=True)
 
     celery_task_id = Column(String, nullable=True, index=True, unique=True)
 
