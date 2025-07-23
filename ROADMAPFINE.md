@@ -40,27 +40,87 @@ Based on analysis of the SPINDEX roadmap, here's a breakdown of remaining tasks 
 
 ### ES-003: AVX-512 Elasticsearch Integration (Est: 5-7 days)
 ```
-├── ES-003.1: Research phase
-│   ├── Study Elasticsearch 8.9+ vector search API
-│   ├── Analyze AVX-512 integration points
-│   └── Design hybrid search architecture
-├── ES-003.2: Plugin interface design
-│   ├── Define C API for ES vector operations
-│   ├── Create ES-AVX bridge module
-│   └── Memory alignment specifications
-├── ES-003.3: Implementation
-│   ├── Modify avx512_phrase_search.c for ES compatibility
-│   ├── Create elasticsearch_avx_client.c
-│   ├── Implement vector serialization/deserialization
-│   └── Add configuration for AVX features
-├── ES-003.4: Performance optimization
-│   ├── Benchmark baseline ES search
-│   ├── Measure AVX-512 acceleration
-│   └── Tune batch sizes and parallelism
-└── ES-003.5: Integration testing
-    ├── End-to-end search tests
-    ├── Stress testing with 100GB+ datasets
-    └── Compatibility testing across CPU architectures
+├── ES-003-H.1: Architecture Design & Preparation (Est: 0.5 days)
+│   ├── Create hybrid search architecture diagram
+│   ├── Define index synchronization strategy
+│   ├── Design unified query interface
+│   └── Plan migration path from Elasticsearch
+│
+├── ES-003-H.2: Tantivy Integration (Est: 1.5 days)
+│   ├── ES-003-H.2.1: Build Tantivy C bindings
+│   │   ├── Create tantivy_wrapper.c using Rust FFI
+│   │   ├── Define C API: tantivy_index_t, tantivy_query_t
+│   │   ├── Implement CRUD operations
+│   │   └── Add error handling & memory management
+│   │
+│   ├── ES-003-H.2.2: Create Tantivy plugin
+│   │   ├── Implement plugins/indexers/tantivy_indexer.c
+│   │   ├── Follow plugin_interface.h specifications
+│   │   ├── Add schema mapping for SPINDEX documents
+│   │   └── Implement batch indexing support
+│   │
+│   └── ES-003-H.2.3: Text processing pipeline
+│       ├── Tokenization with Unicode support
+│       ├── Stemming and normalization
+│       ├── Custom analyzers for code/logs
+│       └── Integration with existing preprocessors
+│
+├── ES-003-H.3: FAISS Integration (Est: 1.5 days)
+│   ├── ES-003-H.3.1: Build FAISS C wrapper
+│   │   ├── Create faiss_wrapper.c for C++ interop
+│   │   ├── Vector index types (IVF, HNSW, Flat)
+│   │   ├── AVX-512 verification & fallbacks
+│   │   └── Memory-mapped index support
+│   │
+│   ├── ES-003-H.3.2: ML model integration
+│   │   ├── Connect to openvino_classifier.c output
+│   │   ├── Vector dimension configuration (384/768)
+│   │   ├── Batch vector encoding pipeline
+│   │   └── FP16 to FP32 conversion if needed
+│   │
+│   └── ES-003-H.3.3: Create FAISS plugin
+│       ├── Implement plugins/indexers/faiss_indexer.c  
+│       ├── Index persistence and loading
+│       ├── Incremental index updates
+│       └── Multi-threaded indexing support
+│
+├── ES-003-H.4: Hybrid Search Orchestrator (Est: 1 day)
+│   ├── ES-003-H.4.1: Create unified search interface
+│   │   ├── Implement plugins/search/hybrid_search.c
+│   │   ├── Query parser for text + vector queries
+│   │   ├── Result fusion algorithms (RRF, linear)
+│   │   └── Relevance score normalization
+│   │
+│   ├── ES-003-H.4.2: Index synchronization
+│   │   ├── Document ID mapping system
+│   │   ├── Atomic dual-index updates
+│   │   ├── Consistency checking
+│   │   └── Rollback mechanisms
+│   │
+│   └── ES-003-H.4.3: AVX-512 optimizations
+│       ├── Custom similarity metrics
+│       ├── Batch distance calculations
+│       ├── Result set operations (union/intersect)
+│       └── Cache-friendly data layouts
+│
+└── ES-003-H.5: Testing & Migration (Est: 0.5 days)
+    ├── ES-003-H.5.1: Performance benchmarks
+    │   ├── Compare with ES baseline
+    │   ├── Measure memory usage
+    │   ├── Profile AVX-512 utilization
+    │   └── Stress test with 100GB dataset
+    │
+    ├── ES-003-H.5.2: Migration tools
+    │   ├── ES to Tantivy data converter
+    │   ├── Index validation scripts
+    │   ├── A/B testing framework
+    │   └── Rollback procedures
+    │
+    └── ES-003-H.5.3: Integration tests
+        ├── End-to-end search tests
+        ├── ML pipeline integration
+        ├── Plugin compatibility
+        └── API compatibility layer
 ```
 
 ### ML-OV-005: Meteor Lake Hardware Testing (Est: 2-3 days)
