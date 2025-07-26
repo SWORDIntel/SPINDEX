@@ -34,6 +34,8 @@ void init_cpu_features(CpuFeatures *features) {
     features->has_avx512dq = false;
     features->has_avx512bw = false;
     features->has_avx512vl = false;
+    features->is_meteor_lake = false;
+    features->has_npu = false;
     features->flags_line[0] = '\0';
 }
 
@@ -121,6 +123,18 @@ int detect_cpu_features(CpuFeatures *features) {
         // For now, features will remain false.
     }
 
+    // Check for Meteor Lake
+    if (strstr(features->flags_line, "intel_npu")) {
+        features->is_meteor_lake = true;
+    }
+
+    // Check for NPU
+    FILE* npu_fp = fopen("/dev/ion", "r");
+    if (npu_fp) {
+        features->has_npu = true;
+        fclose(npu_fp);
+    }
+
     return 0;
 }
 
@@ -140,6 +154,8 @@ void print_cpu_features(const CpuFeatures *features) {
     printf("AVX-512DQ Support: %s\n", features->has_avx512dq ? "Yes" : "No");
     printf("AVX-512BW Support: %s\n", features->has_avx512bw ? "Yes" : "No");
     printf("AVX-512VL Support: %s\n", features->has_avx512vl ? "Yes" : "No");
+    printf("Meteor Lake:     %s\n", features->is_meteor_lake ? "Yes" : "No");
+    printf("NPU Support:     %s\n", features->has_npu ? "Yes" : "No");
     // printf("Raw Flags Line:  %s\n", features->flags_line); // Can be very long
     printf("--------------------\n");
 }

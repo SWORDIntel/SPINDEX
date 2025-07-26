@@ -1,35 +1,36 @@
 #include "hardware_detection.h" // To test this module
 #include <stdio.h> // For printf
+#include <assert.h>
 
-int main() {
-    printf("--- Starting Hardware Detection Test ---\n");
-
+void test_detect_cpu_features() {
+    printf("Running test: test_detect_cpu_features\n");
     CpuFeatures features;
-
-    // Initialize the structure
-    init_cpu_features(&features);
-    printf("Initial (default) CPU features:\n");
+    int result = detect_cpu_features(&features);
+    assert(result == 0);
     print_cpu_features(&features);
+    printf("Test passed\n");
+}
 
-    // Detect features
-    printf("\nDetecting CPU features...\n");
-    if (detect_cpu_features(&features) == 0) {
-        printf("Successfully detected CPU features.\n");
+void test_detect_meteor_lake_and_npu() {
+    printf("Running test: test_detect_meteor_lake_and_npu\n");
+    CpuFeatures features;
+    int result = detect_cpu_features(&features);
+    assert(result == 0);
+
+    // This test will only pass on a Meteor Lake machine with an NPU.
+    // On other machines, it will check that the fields are false.
+    if (features.is_meteor_lake) {
+        assert(features.has_npu == true);
     } else {
-        fprintf(stderr, "Failed to detect CPU features. Output may be defaults or partial.\n");
+        assert(features.has_npu == false);
     }
 
-    // Print detected features
-    printf("\nDetected CPU features:\n");
-    print_cpu_features(&features);
+    printf("Test passed\n");
+}
 
-    // Optionally print the raw flags line if it's not too long or for detailed debugging
-    // if (strlen(features.flags_line) > 0 && strlen(features.flags_line) < 200) { // Avoid printing extremely long lines
-    //    printf("Raw flags: %s\n", features.flags_line);
-    // }
-
-
-    printf("\n--- Hardware Detection Test Complete ---\n");
-
+int main() {
+    test_detect_cpu_features();
+    test_detect_meteor_lake_and_npu();
+    // Add calls to more test functions here as they are created
     return 0;
 }
