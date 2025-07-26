@@ -342,6 +342,15 @@ SPINDEX/
 - **Interfaces and APIs**:
   - Defined in `ml_interface.h`, ensuring consistent interaction with ML modules.
 
+### GUI
+
+The SPINDEX GUI is a Vue.js application that provides a user-friendly interface for interacting with the system. The GUI includes the following components:
+
+- **RBAC UI**: Allows administrators to manage roles, permissions, and user-role mappings.
+- **E2E Encryption UI**: Allows administrators to manage encryption keys and to re-key data.
+- **Index Management**: Allows users to create, view, and manage indexes.
+- **Query Interface**: Allows users to query the indexed data.
+
 ## Conclusion
 
 SPINDEX's fully modular architecture, including comprehensive processing and pre-processing modules for all supported document types, ensures that data is accurately processed and indexed. The inclusion of `json_preprocessor.c` and other format-specific preprocessors enhances the system's ability to handle various data formats efficiently.

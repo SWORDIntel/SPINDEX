@@ -129,8 +129,8 @@ Major components:
 
 #### Foundational Tasks (High Priority)
 - ✅ RBAC UI implementation (GUI-FND-001)
-- 🚧 E2E encryption UI handling (GUI-FND-002)
-- 🚧 Index versioning display (GUI-FND-003)
+- ✅ E2E encryption UI handling (GUI-FND-002)
+- ✅ Index versioning display (GUI-FND-003)
 
 #### Core Features (To Do)
 - Multi-step index creation wizard (GUI-UX-001)
