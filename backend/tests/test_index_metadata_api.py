@@ -168,5 +168,31 @@ def test_delete_index_metadata_not_found(client: TestClient):
     assert data["detail"] == f"IndexMetadata with ID '{non_existent_id}' not found."
     assert data["error_code"] == "RESOURCE_NOT_FOUND"
 
-# TODO: Add tests for pagination in GET /indexes if implemented in endpoint
-# TODO: Add tests for other auth scenarios (e.g., no token, invalid token, insufficient permissions if RBAC is granular)
+def test_get_all_indexes_pagination(client: TestClient, db_session: Session, admin_auth_headers: dict):
+    # Create more than the default limit of 100 to test pagination
+    for i in range(105):
+        db_obj = models.IndexMetadataDB(
+            index_name=f"test_index_{i}",
+            index_type="elasticsearch",
+            promoted_data_path=f"/path/to/data_{i}"
+        )
+        db_session.add(db_obj)
+    db_session.commit()
+
+    # Test limit
+    response = client.get("/indexes?limit=5", headers=admin_auth_headers)
+    assert response.status_code == 200
+    assert len(response.json()) == 5
+
+    # Test skip
+    response = client.get("/indexes?skip=100", headers=admin_auth_headers)
+    assert response.status_code == 200
+    assert len(response.json()) == 5
+
+def test_get_all_indexes_no_auth(client: TestClient):
+    response = client.get("/indexes")
+    assert response.status_code == 401
+
+def test_get_all_indexes_invalid_auth(client: TestClient):
+    response = client.get("/indexes", headers={"X-Auth-Token": "invalid_token"})
+    assert response.status_code == 401

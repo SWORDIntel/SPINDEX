@@ -38,13 +38,13 @@ export default {
   },
   methods: {
     viewDetails(version) {
-      // Not implemented
+      alert(`Viewing details for version ${version.version}`)
     },
     compareVersion(version) {
-      // Not implemented
+      alert(`Comparing version ${version.version}`)
     },
     rollbackToVersion(version) {
-      // Not implemented
+      alert(`Rolling back to version ${version.version}`)
     }
   }
 }

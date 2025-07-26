@@ -205,14 +205,36 @@ def test_search_avx_disabled_via_flag(mock_es_client, mock_spindex_c_lib, mock_c
         assert item["avx_match_found"] is False
         assert "AVX search not performed" in item["avx_match_details"]["info"]
 
-# TODO: Add more test cases:
-# - AVX enabled, but no AVX phrases provided
-# - AVX enabled, C library not loaded (mock spindex_c_lib to None)
-# - AVX enabled, C orchestrator not initialized (mock c_search_orchestrator to None)
-# - AVX enabled, C call returns NULL (mock search_orchestrator_execute_query to return None)
-# - AVX enabled, C call returns results but no AVX matches found in those results
-# - ES client connection error
-# - ES client returns no hits
+def test_search_with_invalid_index(client: TestClient, admin_auth_headers: dict):
+    request_data = {
+        "index_name": "non_existent_index",
+        "query_text": "some query",
+        "use_avx": False
+    }
+    response = client.post("/search_with_avx", json=request_data, headers=admin_auth_headers)
+    assert response.status_code == 404 # Or other appropriate error
+    assert "not found" in response.json()["detail"].lower()
+
+def test_search_without_avx(client: TestClient, admin_auth_headers: dict):
+    request_data = {
+        "index_name": "spindex_default_index",
+        "query_text": "some query",
+        "use_avx": False
+    }
+    response = client.post("/search_with_avx", json=request_data, headers=admin_auth_headers)
+    assert response.status_code == 200
+    assert response.json()["avx_processing_time_ms"] == 0
+
+def test_search_with_empty_avx_phrases(client: TestClient, admin_auth_headers: dict):
+    request_data = {
+        "index_name": "spindex_default_index",
+        "query_text": "some query",
+        "avx_phrases": "",
+        "use_avx": True
+    }
+    response = client.post("/search_with_avx", json=request_data, headers=admin_auth_headers)
+    assert response.status_code == 200
+    assert response.json()["avx_processing_time_ms"] == 0
 
 # Note on C object lifetimes for mocks:
 # When mocking a C function that returns a pointer to a structure that Python then reads,

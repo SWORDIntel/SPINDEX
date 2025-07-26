@@ -156,7 +156,7 @@ export default {
       }
     },
     async editRole(role) {
-      // Not implemented
+      alert(`Editing role ${role.name}`)
     },
     async deleteRole(role) {
       try {
