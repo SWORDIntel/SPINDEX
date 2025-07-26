@@ -98,6 +98,16 @@ const routes: Array<RouteRecordRaw> = [
       breadcrumb: 'RBAC'
     }
   },
+  {
+    path: '/admin/e2e-encryption',
+    name: 'E2EEncryption',
+    component: () => import('@/views/admin/E2EEncryption.vue'),
+    meta: {
+      requiresAuth: true,
+      roles: ['admin'],
+      breadcrumb: 'E2E Encryption'
+    }
+  },
   // Catch-all 404
   {
     path: '/:pathMatch(.*)*',

@@ -128,7 +128,7 @@ Key deliverables:
 Major components:
 
 #### Foundational Tasks (High Priority)
-- 🚧 RBAC UI implementation (GUI-FND-001)
+- ✅ RBAC UI implementation (GUI-FND-001)
 - 🚧 E2E encryption UI handling (GUI-FND-002)
 - 🚧 Index versioning display (GUI-FND-003)
 
