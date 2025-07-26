@@ -158,6 +158,8 @@ void openvino_set_target_device(const char* device) {
     }
 }
 
+void openvino_set_target_device(const char* device);
+
 void openvino_unload_model(ModelHandle model_handle) {
     if (!model_handle) {
         fprintf(stderr, "Warning: openvino_unload_model received null model_handle\n");
@@ -478,6 +480,13 @@ void dummy_register_ml_model(const char* name, SpindexMLModelInterface* interfac
 }
 // End dummy registration
 
+
+void openvino_set_target_device(const char* device) {
+    if (device) {
+        strncpy(current_target_device, device, sizeof(current_target_device) - 1);
+        current_target_device[sizeof(current_target_device) - 1] = '\0';
+    }
+}
 
 // This is a common function name that a plugin loader might look for using dlsym.
 // The actual name and signature depend on the plugin system's design.
