@@ -56,6 +56,8 @@ const navItems = ref<NavItem[]>([
     children: [
       { path: '/admin/users', label: 'User Management', icon: 'icon-users', requiredRole: ['admin'] },
       { path: '/admin/system', label: 'System Status', icon: 'icon-system', requiredRole: ['admin'] },
+      { path: '/admin/rbac', label: 'RBAC', icon: 'icon-rbac', requiredRole: ['admin'] },
+      { path: '/admin/e2e-encryption', label: 'E2E Encryption', icon: 'icon-lock', requiredRole: ['admin'] },
     ]
   },
   { path: '/settings', label: 'Settings', icon: 'icon-settings' },

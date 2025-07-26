@@ -85,12 +85,12 @@ A sophisticated geospatial data processing pipeline with:
 - Geometric validation (AEGIS-010)
 - Security scanning (AEGIS-011)
 - Schema validation (AEGIS-012)
+- Data Promotion Logic (AEGIS-013)
 - Data quarantine/DLQ (AEGIS-014)
 - PostgreSQL metadata persistence (AEGIS-015)
 - End-to-end testing (AEGIS-016)
 
 #### In Progress 🚧
-- **Data Promotion Logic** (AEGIS-013) - Moving validated data to trusted storage
 
 ### 🚧 Phase 7: Advanced C Plugin Features
 **Status**: IN PROGRESS
@@ -128,7 +128,7 @@ Key deliverables:
 Major components:
 
 #### Foundational Tasks (High Priority)
-- 🚧 RBAC UI implementation (GUI-FND-001)
+- ✅ RBAC UI implementation (GUI-FND-001)
 - 🚧 E2E encryption UI handling (GUI-FND-002)
 - 🚧 Index versioning display (GUI-FND-003)
 
