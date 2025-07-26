@@ -1,32 +1,29 @@
-#define _GNU_SOURCE // For strdup
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "elasticsearch_indexer.h" // Own header (minimal)
+#include "elasticsearch_indexer.h"
 #include "../../include/plugin_interface.h"
-#include "../../include/data_types.h"    // For SpindexPluginType, PluginInfo, ProcessedDataChunk etc.
-#include "../../include/utils.h"         // For LOG_INFO, LOG_ERROR etc.
-#include "../../include/elasticsearch_client.h" // To use the ES client
+#include "../../include/data_types.h"
+#include "../../include/utils.h"
+#include "../../include/elasticsearch_client.h"
+#include "../../include/plugin_loader.h"
+#include "../../include/avx_search_params.h"
 
-// --- Plugin Static Information ---
 static const char* G_PLUGIN_NAME = "ElasticsearchIndexer";
-static const char* G_PLUGIN_VERSION = "0.1.0";
-static const char* G_PLUGIN_DESCRIPTION = "Indexes data into Elasticsearch.";
+static const char* G_PLUGIN_VERSION = "0.2.0";
+static const char* G_PLUGIN_DESCRIPTION = "Indexes data into Elasticsearch, with AVX-512 phrase extraction.";
 
-// --- Plugin Data Struct ---
 typedef struct {
     ElasticsearchClient* es_client;
-    char* index_name; // Store a copy of the index name
-    unsigned long doc_counter; // For generating unique doc IDs if needed
+    char* index_name;
+    unsigned long doc_counter;
+    SpindexPlugin* avx_search_plugin;
+    char* phrases_to_extract;
 } ElasticsearchIndexerData;
 
-// --- File-Scope Static Global for Plugin Data (Workaround) ---
-// This is NOT thread-safe and assumes a single instance of this plugin.
-// This is a temporary solution due to current plugin_loader limitations.
-// static ElasticsearchIndexerData* S_GLOBAL_INDEXER_DATA = NULL; // Temporarily disable for testing
-
-// --- Plugin API Functions ---
+static ElasticsearchIndexerData* S_GLOBAL_INDEXER_DATA = NULL;
 
 void spindex_plugin_get_info(PluginInfo *info) {
     if (info) {
@@ -44,53 +41,111 @@ void spindex_plugin_get_info(PluginInfo *info) {
 }
 
 int spindex_plugin_init() {
-    LOG_INFO("[%s v%s] Initializing... (Simplified for debugging)", G_PLUGIN_NAME, G_PLUGIN_VERSION);
-    // Temporarily do not allocate or initialize S_GLOBAL_INDEXER_DATA
-    LOG_INFO("[%s v%s] Initialization complete. (Simplified for debugging)", G_PLUGIN_NAME, G_PLUGIN_VERSION);
-    return 0; // Success
+    S_GLOBAL_INDEXER_DATA = calloc(1, sizeof(ElasticsearchIndexerData));
+    if (!S_GLOBAL_INDEXER_DATA) {
+        LOG_ERROR("Failed to allocate memory for indexer data");
+        return -1;
+    }
+
+    S_GLOBAL_INDEXER_DATA->es_client = es_create_client("http://localhost:9200");
+    if (!S_GLOBAL_INDEXER_DATA->es_client) {
+        LOG_ERROR("Failed to create Elasticsearch client");
+        free(S_GLOBAL_INDEXER_DATA);
+        S_GLOBAL_INDEXER_DATA = NULL;
+        return -1;
+    }
+
+    S_GLOBAL_INDEXER_DATA->index_name = strdup("spindex_default");
+    S_GLOBAL_INDEXER_DATA->avx_search_plugin = spindex_load_plugin("plugins/search_algorithms/avx512_phrase_search.so");
+    if (!S_GLOBAL_INDEXER_DATA->avx_search_plugin) {
+        LOG_ERROR("Failed to load AVX search plugin");
+        es_destroy_client(S_GLOBAL_INDEXER_DATA->es_client);
+        free(S_GLOBAL_INDEXER_DATA->index_name);
+        free(S_GLOBAL_INDEXER_DATA);
+        S_GLOBAL_INDEXER_DATA = NULL;
+        return -1;
+    }
+
+    // In a real application, this would be loaded from a config file
+    S_GLOBAL_INDEXER_DATA->phrases_to_extract = strdup("hello world\nanother phrase");
+
+    LOG_INFO("[%s v%s] Initialized.", G_PLUGIN_NAME, G_PLUGIN_VERSION);
+    return 0;
 }
 
 void spindex_plugin_shutdown() {
-    LOG_INFO("[%s v%s] Shutting down... (Simplified for debugging)", G_PLUGIN_NAME, G_PLUGIN_VERSION);
-    // Temporarily do not deallocate S_GLOBAL_INDEXER_DATA
-    LOG_INFO("[%s v%s] Shutdown complete. (Simplified for debugging)", G_PLUGIN_NAME, G_PLUGIN_VERSION);
+    if (S_GLOBAL_INDEXER_DATA) {
+        es_destroy_client(S_GLOBAL_INDEXER_DATA->es_client);
+        free(S_GLOBAL_INDEXER_DATA->index_name);
+        spindex_unload_plugin(S_GLOBAL_INDEXER_DATA->avx_search_plugin);
+        free(S_GLOBAL_INDEXER_DATA->phrases_to_extract);
+        free(S_GLOBAL_INDEXER_DATA);
+        S_GLOBAL_INDEXER_DATA = NULL;
+    }
+    LOG_INFO("[%s v%s] Shutdown.", G_PLUGIN_NAME, G_PLUGIN_VERSION);
 }
 
 ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk *input_chunk) {
-    LOG_INFO("[%s v%s] Processing data for indexing... (Simplified for debugging)", G_PLUGIN_NAME, G_PLUGIN_VERSION);
-
-    // if (!S_GLOBAL_INDEXER_DATA || !S_GLOBAL_INDEXER_DATA->es_client) {
-    //     LOG_ERROR("[%s] Indexer not properly initialized or ES client is missing.", G_PLUGIN_NAME);
-    //     return NULL;
-    // }
-    // ElasticsearchIndexerData* indexer_data = S_GLOBAL_INDEXER_DATA; // This line was the source of previous error
-
-    LOG_WARN("[%s] Indexing process is currently stubbed out for debugging.", G_PLUGIN_NAME);
+    if (!S_GLOBAL_INDEXER_DATA || !S_GLOBAL_INDEXER_DATA->es_client) {
+        LOG_ERROR("[%s] Indexer not properly initialized or ES client is missing.", G_PLUGIN_NAME);
+        return NULL;
+    }
 
     if (!input_chunk || !input_chunk->data || input_chunk->length == 0) {
         LOG_ERROR("[%s] Input chunk or data is NULL or empty.", G_PLUGIN_NAME);
         return NULL;
     }
 
-    // Assuming input_chunk->data is a JSON string.
-    // All logic using 'indexer_data' is commented out because S_GLOBAL_INDEXER_DATA is disabled.
-    // char doc_id_buf[64];
-    // snprintf(doc_id_buf, sizeof(doc_id_buf), "doc_%lu", indexer_data->doc_counter++);
+    char* extracted_phrases = NULL;
+    if (S_GLOBAL_INDEXER_DATA->avx_search_plugin && S_GLOBAL_INDEXER_DATA->phrases_to_extract) {
+        AvxSearchParams params = {
+            .text_to_search = input_chunk,
+            .phrases_to_find = &(ProcessedDataChunk){
+                .data = (unsigned char*)S_GLOBAL_INDEXER_DATA->phrases_to_extract,
+                .length = strlen(S_GLOBAL_INDEXER_DATA->phrases_to_extract),
+                .data_type = CHUNK_TYPE_TEXT
+            },
+            .case_sensitive = false,
+            .find_all_occurrences = true,
+            .max_hits_per_doc = 0
+        };
 
-    // LOG_INFO("[%s] Attempting to index document ID: %s to index: %s",
-    //          G_PLUGIN_NAME, doc_id_buf, indexer_data->index_name);
-    LOG_DEBUG("[%s] Document JSON (first 100 bytes): %.*s", G_PLUGIN_NAME, 100, (char*)input_chunk->data);
+        ProcessedDataChunk search_chunk = {
+            .data = (unsigned char*)&params,
+            .length = sizeof(params),
+            .data_type = CHUNK_TYPE_CUSTOM
+        };
 
-    // int result = es_index_document(indexer_data->es_client,
-    //                                indexer_data->index_name,
-    //                                doc_id_buf,
-    //                                (const char*)input_chunk->data);
+        ProcessedDataChunk* result_chunk = S_GLOBAL_INDEXER_DATA->avx_search_plugin->process(&search_chunk);
+        if (result_chunk && result_chunk->data) {
+            extracted_phrases = (char*)result_chunk->data;
+        }
+    }
 
-    // if (result == 0) {
-    //     LOG_INFO("[%s] Successfully indexed document ID: %s", G_PLUGIN_NAME, doc_id_buf);
-    // } else {
-    //     LOG_ERROR("[%s] Failed to index document ID: %s", G_PLUGIN_NAME, doc_id_buf);
-    // }
+    char doc_id_buf[64];
+    snprintf(doc_id_buf, sizeof(doc_id_buf), "doc_%lu", S_GLOBAL_INDEXER_DATA->doc_counter++);
+
+    char* final_doc;
+    if (extracted_phrases) {
+        // This is a simplified way to add a field to a JSON object.
+        // A robust implementation would use a JSON library like Jansson.
+        size_t final_doc_size = input_chunk->length + strlen(extracted_phrases) + 128;
+        final_doc = malloc(final_doc_size);
+        snprintf(final_doc, final_doc_size, "%.*s, \"extracted_phrases\": \"%s\"}",
+                 (int)input_chunk->length - 1, (char*)input_chunk->data, extracted_phrases);
+        free(extracted_phrases);
+    } else {
+        final_doc = (char*)input_chunk->data;
+    }
+
+    es_index_document(S_GLOBAL_INDEXER_DATA->es_client,
+                                   S_GLOBAL_INDEXER_DATA->index_name,
+                                   doc_id_buf,
+                                   final_doc);
+
+    if (extracted_phrases) {
+        free(final_doc);
+    }
 
     return NULL;
 }

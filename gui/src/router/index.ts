@@ -88,6 +88,26 @@ const routes: Array<RouteRecordRaw> = [
       breadcrumb: 'System Status'
     }
   },
+  {
+    path: '/admin/rbac',
+    name: 'RBAC',
+    component: () => import('@/views/admin/RBAC.vue'),
+    meta: {
+      requiresAuth: true,
+      roles: ['admin'],
+      breadcrumb: 'RBAC'
+    }
+  },
+  {
+    path: '/admin/e2e-encryption',
+    name: 'E2EEncryption',
+    component: () => import('@/views/admin/E2EEncryption.vue'),
+    meta: {
+      requiresAuth: true,
+      roles: ['admin'],
+      breadcrumb: 'E2E Encryption'
+    }
+  },
   // Catch-all 404
   {
     path: '/:pathMatch(.*)*',
@@ -114,28 +134,10 @@ const router = createRouter({
 // Placeholder for auth store - replace with actual Pinia store import
 // import { useAuthStore } from '@/store/auth';
 
-// Mock auth store for now, as Pinia store setup is a separate step
-const useAuthStore = () => {
-  // In a real scenario, this would come from Pinia state
-  // For testing the guard logic, we can simulate it.
-  // To test different scenarios, you might need to mock this function differently in tests
-  // or set a global testing flag.
-  // For now, let's assume the user is initially not authenticated for guard testing.
-  return {
-    isAuthenticated: false,
-    // user: { roles: ['viewer'] } // Example user with roles
-    user: null
-  };
-};
-
+import { useAuthStore } from '@/store/auth';
 
 router.beforeEach((to, from, next) => {
-  // It's important that the auth store is initialized before the router guard runs.
-  // This usually happens in main.ts when Pinia is `app.use()`d.
-  // If useAuthStore() is called here, Pinia must be active.
-  // Ensure Pinia is installed and router is used AFTER Pinia in main.ts
-  // const authStore = useAuthStore(); // This will be the actual store once created
-  const authStore = useAuthStore(); // Using the mock for now
+  const authStore = useAuthStore();
   const isAuthenticated = authStore.isAuthenticated;
 
   // Update breadcrumbs
