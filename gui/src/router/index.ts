@@ -88,6 +88,16 @@ const routes: Array<RouteRecordRaw> = [
       breadcrumb: 'System Status'
     }
   },
+  {
+    path: '/admin/rbac',
+    name: 'RBAC',
+    component: () => import('@/views/admin/RBAC.vue'),
+    meta: {
+      requiresAuth: true,
+      roles: ['admin'],
+      breadcrumb: 'RBAC'
+    }
+  },
   // Catch-all 404
   {
     path: '/:pathMatch(.*)*',
