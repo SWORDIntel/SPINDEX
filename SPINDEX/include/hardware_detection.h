@@ -18,6 +18,8 @@ typedef struct {
     bool has_avx512dq;   // AVX-512 Doubleword and Quadword Instructions
     bool has_avx512bw;   // AVX-512 Byte and Word Instructions
     bool has_avx512vl;   // AVX-512 Vector Length Extensions
+    bool is_meteor_lake;
+    bool has_npu;
     // Add more features as needed, e.g.:
     // bool has_neon; // For ARM
     // bool has_aes_ni;
