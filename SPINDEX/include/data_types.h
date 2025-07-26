@@ -27,7 +27,12 @@ typedef struct {
     size_t length;      // Length of the data in bytes
     char *source_id;    // Optional: Identifier for the source of this data
     ChunkDataType data_type; // Type of data in the chunk
-} ProcessedDataChunk;
+} DataChunk;
+
+typedef struct {
+    DataChunk* chunks;
+    size_t count;
+} ProcessedData;
 
 // Enum defining different types of plugins
 typedef enum {

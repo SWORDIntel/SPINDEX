@@ -62,7 +62,7 @@ export default {
       this.selectedIndex = index
     },
     deleteIndex(index) {
-      // Not implemented
+      alert(`Deleting index ${index.name}`)
     }
   }
 }
