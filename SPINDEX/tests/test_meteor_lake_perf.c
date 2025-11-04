@@ -38,7 +38,7 @@ void test_meteor_lake_performance() {
     memset(input_data.chunks[0].data, 0, input_data.chunks[0].length);
 
     // 4. Run inference on different devices
-    const char* devices[] = {"AUTO", "CPU", "NPU"};
+    const char* devices[] = {"AUTO", "CPU", "NPU", "GNA", "MYRIAD"};
     int num_devices = sizeof(devices) / sizeof(devices[0]);
 
     printf("| Device | Avg. Inference Time (ms) |\n");
