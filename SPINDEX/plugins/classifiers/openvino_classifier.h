@@ -1,7 +1,7 @@
 #ifndef OPENVINO_CLASSIFIER_H
 #define OPENVINO_CLASSIFIER_H
 
-#include "include/ml_interface.h" // For SpindexMLModelInterface
+#include "../../include/ml_interface.h" // For SpindexMLModelInterface
 #include <openvino/c/openvino.h>   // OpenVINO C API
 
 // Function to create and initialize an OpenVINO-backed ML model interface
@@ -15,8 +15,8 @@ void openvino_unload_model(ModelHandle model_handle);
 
 // OpenVINO specific implementation of ml_model_predict_func
 int openvino_predict(ModelHandle model_handle,
-                     const ProcessedDataChunk* input_data,
-                     ProcessedDataChunk** output_data_ptr);
+                     const ProcessedData* input_data,
+                     ProcessedData** output_data_ptr);
 
 // Sets the target device for OpenVINO model compilation (e.g., "CPU", "GPU", "NPU", "AUTO").
 // Should be called before openvino_load_model via the interface.
