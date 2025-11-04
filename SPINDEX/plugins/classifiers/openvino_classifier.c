@@ -158,8 +158,6 @@ void openvino_set_target_device(const char* device) {
     }
 }
 
-void openvino_set_target_device(const char* device);
-
 void openvino_unload_model(ModelHandle model_handle) {
     if (!model_handle) {
         fprintf(stderr, "Warning: openvino_unload_model received null model_handle\n");
@@ -276,76 +274,17 @@ int openvino_predict(ModelHandle model_handle,
     return 0;
 }
 
-// TODO: Future Enhancements & Considerations:
-// - Further improve error handling and consider integrating with a core logging utility if available.
-// - Detailed FP16 handling: Ensure data type consistency and explore FP16-specific optimizations during inference if applicable beyond model conversion.
-// - Advanced hardware optimizations: Explore setting more OpenVINO performance hints or device-specific properties for optimal performance on target hardware (e.g., NPUs).
-// - Thread Safety: If a single ModelHandle is to be used concurrently by multiple threads, ensure openvino_predict is thread-safe. This typically means each thread needs its own ov_infer_request_t. The current implementation is not inherently thread-safe for concurrent predict calls on the same handle.
+// --- Plugin Registration ---
 
-// Assuming plugin_interface.h or a similar header would define
-// how plugins register themselves. For now, this is a conceptual include.
-// #include "plugin_interface.h" // For SpindexPluginCollection, register_ml_model_interface etc.
-
-// Define a simplified placeholder for plugin registration.
-// In a real system, this would interact with plugin_loader.c.
-typedef void (*register_model_func_t)(const char* name, SpindexMLModelInterface* interface);
-
-// Dummy registration function - in a real scenario, this would be provided by the core.
-void dummy_register_ml_model(const char* name, SpindexMLModelInterface* interface) {
-    if (name && interface) {
-        fprintf(stdout, "Successfully registered ML Model Interface: %s using %s\n", name, interface->interface_name);
-        // Here, the plugin loader would store this interface.
-    } else {
-        fprintf(stderr, "Failed to register ML Model Interface: null name or interface\n");
-    }
-}
-// End dummy registration
-
-
-void openvino_set_target_device(const char* device) {
-    if (device) {
-        strncpy(current_target_device, device, sizeof(current_target_device) - 1);
-        current_target_device[sizeof(current_target_device) - 1] = '\0';
-    }
-}
-
-// This is a common function name that a plugin loader might look for using dlsym.
-// The actual name and signature depend on the plugin system's design.
-// We'll make it simple for now.
 #define SPINDEX_PLUGIN_API __attribute__((visibility("default")))
 
-SPINDEX_PLUGIN_API void spindex_plugin_initialize(register_model_func_t register_func) {
-    fprintf(stdout, "Attempting to initialize and register OpenVINO Classifier Plugin...\n");
+SPINDEX_PLUGIN_API void spindex_plugin_initialize(void (*register_plugin)(SpindexPlugin)) {
+    SpindexPlugin plugin;
+    plugin.info.type = SPINDEX_PLUGIN_TYPE_ML_CLASSIFIER;
+    strncpy(plugin.info.name, "OpenVINO Classifier", sizeof(plugin.info.name) - 1);
+    plugin.info.name[sizeof(plugin.info.name) - 1] = '\0';
+    // ... set other info fields ...
+    plugin.ml_model_interface.create = create_openvino_model_interface;
 
-    if (!register_func) {
-        fprintf(stderr, "OpenVINO Plugin Error: Registration function not provided.\n");
-        return;
-    }
-
-    SpindexMLModelInterface ov_interface;
-
-    // Initialize the OpenVINO model interface structure.
-    // The actual model path would typically come from SPINDEX configuration
-    // and be passed to the plugin, or the plugin would fetch it.
-    // For this example, we pass NULL, assuming the 'load' function will receive the actual path.
-    // Or, a specific model configuration could be hardcoded here if the plugin is for one model.
-    const char* default_model_config_path = "path/to/your/openvino_model.xml"; // Example path
-
-    int result = create_openvino_model_interface(&ov_interface, default_model_config_path);
-
-    if (result == 0) {
-        // Register this interface with the SPINDEX core/plugin manager.
-        // The name "openvino_default_classifier" is an example.
-        register_func("openvino_default_classifier", &ov_interface);
-        fprintf(stdout, "OpenVINO Classifier Plugin initialized and registration requested.\n");
-    } else {
-        fprintf(stderr, "Failed to create OpenVINO model interface during plugin initialization.\n");
-    }
-}
-
-// Optional: A function to deinitialize/cleanup the plugin if the system supports it.
-SPINDEX_PLUGIN_API void spindex_plugin_finalize() {
-    fprintf(stdout, "OpenVINO Classifier Plugin finalizing (if any global cleanup needed).\n");
-    // If there were any global resources allocated by the plugin itself (not specific model instances),
-    // they could be cleaned up here. For this OpenVINO plugin, cleanup is per model instance via 'unload'.
+    register_plugin(plugin);
 }
