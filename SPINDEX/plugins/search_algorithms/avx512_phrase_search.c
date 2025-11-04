@@ -1,50 +1,41 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h> // For uint64_t
-#include <immintrin.h> // For AVX-512 intrinsics (though not used in process_data yet)
+#include <strings.h>
+#include <stdbool.h>
+#include <ctype.h>
+#include <immintrin.h>
 
-// Adjust paths as necessary
 #include "../../include/plugin_interface.h"
 #include "../../include/data_types.h"
-#include "../../include/hardware_detection.h" // For checking AVX-512 support
-#include "../../include/avx_search_params.h"  // For AvxSearchParams
-#include "../../include/utils.h" // For LOG_INFO, LOG_ERROR, LOG_DEBUG (if not already implicitly included)
-#include <stdbool.h>   // For bool type
-#include <ctype.h>     // For tolower (optional, can use custom)
+#include "../../include/hardware_detection.h"
+#include "../../include/avx_search_params.h"
+#include "../../include/utils.h"
 
-#define AVX_BLOCK_SIZE 64
+// --- Helper an Structs ---
+typedef struct {
+    char *buffer;
+    size_t length;
+    size_t capacity;
+} DynamicBuffer;
 
-// Helper function for lowercasing a character
-static inline char tolower_char(char c) {
-    if (c >= 'A' && c <= 'Z') {
-        return c + ('a' - 'A');
-    }
-    return c;
-}
-
-// --- Forward declarations for plugin functions ---
+// --- Forward declarations ---
 void avx512_get_info(PluginInfo *info);
 int avx512_init();
 void avx512_shutdown();
 ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk);
+static bool db_init(DynamicBuffer *db, size_t initial_capacity);
+static void db_free(DynamicBuffer *db);
+static void db_append_str(DynamicBuffer *db, const char *str);
+static void db_append_char(DynamicBuffer *db, char c);
+static void escape_json_string(const char *input, DynamicBuffer *db);
 
 // --- Exposed plugin entry points ---
-void spindex_plugin_get_info(PluginInfo *info) {
-    avx512_get_info(info);
-}
-
-int spindex_plugin_init() {
-    return avx512_init();
-}
-
-void spindex_plugin_shutdown() {
-    avx512_shutdown();
-}
-
-ProcessedDataChunk* spindex_plugin_process(const ProcessedDataChunk *input_chunk) {
-    return avx512_process_data(input_chunk);
-}
+void spindex_plugin_get_info(PluginInfo *info) { avx512_get_info(info); }
+int spindex_plugin_init() { return avx512_init(); }
+void spindex_plugin_shutdown() { avx512_shutdown(); }
+ProcessedDataChunk* spindex_plugin_process(const ProcessedDataChunk *input_chunk) { return avx512_process_data(input_chunk); }
 
 // --- Plugin Implementation ---
 
@@ -52,37 +43,62 @@ void avx512_get_info(PluginInfo *info) {
     if (!info) return;
     strncpy(info->name, "AVX-512 Phrase Searcher", sizeof(info->name) - 1);
     info->name[sizeof(info->name) - 1] = '\0';
-
-    strncpy(info->version, "0.1", sizeof(info->version) - 1);
+    strncpy(info->version, "0.2", sizeof(info->version) - 1);
     info->version[sizeof(info->version) - 1] = '\0';
-    
     info->type = SPINDEX_PLUGIN_TYPE_OTHER; 
-
-    strncpy(info->description, "Performs phrase searching using AVX-512 instructions.", sizeof(info->description) - 1);
+    strncpy(info->description, "Performs multi-token phrase search using AVX-512 with case-sensitivity, occurrence, and result limit options.", sizeof(info->description) - 1);
     info->description[sizeof(info->description) - 1] = '\0';
 }
 
 int avx512_init() {
     CpuFeatures features;
     if (detect_cpu_features(&features) != 0) {
-        fprintf(stderr, "AVX-512 Plugin: Failed to detect CPU features.\n");
+        LOG_ERROR("AVX-512 Plugin: Failed to detect CPU features.");
         return -1;
     }
-
     if (!features.has_avx512f || !features.has_avx512bw) {
-        fprintf(stderr, "AVX-512 Plugin: CPU does not support required AVX-512F and AVX-512BW features.\n");
-        fprintf(stderr, "AVX-512F: %s, AVX-512BW: %s\n",
-                features.has_avx512f ? "Supported" : "Not Supported",
-                features.has_avx512bw ? "Supported" : "Not Supported");
-        return -1;
+        LOG_WARN("AVX-512 Plugin: CPU does not support required AVX-512F and AVX-512BW features. Plugin will operate in fallback mode.");
+    } else {
+        LOG_INFO("AVX-512 Phrase Searcher plugin initialized successfully (AVX-512F & AVX-512BW detected).");
     }
-
-    fprintf(stdout, "AVX-512 Phrase Searcher plugin initialized successfully (AVX-512F & AVX-512BW detected).\n");
     return 0;
 }
 
 void avx512_shutdown() {
-    fprintf(stdout, "AVX-512 Phrase Searcher plugin shutting down.\n");
+    LOG_INFO("AVX-512 Phrase Searcher plugin shutting down.");
+}
+
+const char* avx512_find_substring(const char* text, size_t text_len, const char* phrase, size_t phrase_len) {
+    if (phrase_len == 0) return NULL;
+
+    const __m512i first_char = _mm512_set1_epi8(phrase[0]);
+    const __m512i last_char = _mm512_set1_epi8(phrase[phrase_len - 1]);
+
+    for (size_t i = 0; i <= text_len - phrase_len; i += 64) {
+        size_t chunk_size = (i + 64 <= text_len) ? 64 : text_len - i;
+        if (chunk_size < phrase_len) break;
+
+        __m512i text_chunk_first = _mm512_loadu_si512(text + i);
+        __m512i text_chunk_last = _mm512_loadu_si512(text + i + phrase_len - 1);
+
+        __mmask64 first_char_mask = _mm512_cmpeq_epi8_mask(first_char, text_chunk_first);
+        __mmask64 last_char_mask = _mm512_cmpeq_epi8_mask(last_char, text_chunk_last);
+
+        __mmask64 combined_mask = first_char_mask & last_char_mask;
+
+        int offset = __builtin_ffsll(combined_mask);
+        while (offset > 0) {
+            int pos = i + offset - 1;
+            if (pos <= text_len - phrase_len) {
+                if (memcmp(text + pos, phrase, phrase_len) == 0) {
+                    return text + pos;
+                }
+            }
+            combined_mask &= (combined_mask - 1);
+            offset = __builtin_ffsll(combined_mask);
+        }
+    }
+    return NULL;
 }
 
 ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
@@ -97,108 +113,159 @@ ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
         return NULL;
     }
 
-    const ProcessedDataChunk* text_chunk = params->text_to_search;
-    const ProcessedDataChunk* phrases_chunk = params->phrases_to_find;
+    const char* text_to_search = (const char*)params->text_to_search->data;
 
-    bool case_sensitive = params->case_sensitive;
-    bool find_all_occurrences = params->find_all_occurrences;
-    int max_hits_per_doc = params->max_hits_per_doc;
-
-    char* phrases_str_copy = (char*)malloc(phrases_chunk->length + 1);
+    char* phrases_str_copy = sp_strdup((const char*)params->phrases_to_find->data);
     if (!phrases_str_copy) {
         LOG_ERROR("AVX Search: Failed to allocate memory for phrases copy.");
         return NULL;
     }
-    memcpy(phrases_str_copy, phrases_chunk->data, phrases_chunk->length);
-    phrases_str_copy[phrases_chunk->length] = '\0';
 
-    size_t found_phrases_buffer_size = 1024;
-    char* found_phrases_buffer = malloc(found_phrases_buffer_size);
-    if (!found_phrases_buffer) {
-        LOG_ERROR("AVX Search: Failed to allocate memory for found phrases buffer.");
+    DynamicBuffer json_buffer;
+    if (!db_init(&json_buffer, 4096)) {
+        LOG_ERROR("AVX Search: Failed to initialize JSON dynamic buffer.");
         free(phrases_str_copy);
         return NULL;
     }
-    found_phrases_buffer[0] = '\0';
-    size_t found_phrases_len = 0;
+    db_append_str(&json_buffer, "{\"search_results\": [");
 
+    bool first_phrase_in_json = true;
     char* saveptr;
     char* current_phrase_str = strtok_r(phrases_str_copy, "\n", &saveptr);
 
     while (current_phrase_str != NULL) {
-        size_t phrase_len = strlen(current_phrase_str);
-        if (phrase_len == 0) {
+        size_t len = strlen(current_phrase_str);
+        while (len > 0 && (current_phrase_str[len - 1] == '\n' || current_phrase_str[len - 1] == '\r')) {
+            current_phrase_str[--len] = '\0';
+        }
+        if (len == 0) {
             current_phrase_str = strtok_r(NULL, "\n", &saveptr);
             continue;
         }
 
-        for (size_t i = 0; i <= text_chunk->length - phrase_len; ++i) {
-            bool match = true;
-            for (size_t j = 0; j < phrase_len; j += AVX_BLOCK_SIZE) {
-                size_t chunk_len = (phrase_len - j < AVX_BLOCK_SIZE) ? (phrase_len - j) : AVX_BLOCK_SIZE;
-                __mmask64 mask = (1ULL << chunk_len) - 1;
+        if (!first_phrase_in_json) db_append_char(&json_buffer, ',');
+        db_append_str(&json_buffer, "{\"phrase\": \"");
+        escape_json_string(current_phrase_str, &json_buffer);
+        db_append_str(&json_buffer, "\", \"offsets\": [");
 
-                __m512i phrase_vec = _mm512_maskz_loadu_epi8(mask, current_phrase_str + j);
-                __m512i text_vec = _mm512_maskz_loadu_epi8(mask, (char*)text_chunk->data + i + j);
-
-                if (!case_sensitive) {
-                    // This is a simplified lowercase, for ASCII only.
-                    __m512i a_vec = _mm512_set1_epi8('a');
-                    __m512i z_vec = _mm512_set1_epi8('z');
-                    __m512i A_vec = _mm512_set1_epi8('A');
-                    __m512i Z_vec = _mm512_set1_epi8('Z');
-                    __m512i thirty_two = _mm512_set1_epi8(32);
-
-                    __mmask64 phrase_upper_mask = _mm512_cmplt_epi8_mask(phrase_vec, Z_vec) & _mm512_cmpge_epi8_mask(phrase_vec, A_vec);
-                    phrase_vec = _mm512_mask_add_epi8(phrase_vec, phrase_upper_mask, phrase_vec, thirty_two);
-
-                    __mmask64 text_upper_mask = _mm512_cmplt_epi8_mask(text_vec, Z_vec) & _mm512_cmpge_epi8_mask(text_vec, A_vec);
-                    text_vec = _mm512_mask_add_epi8(text_vec, text_upper_mask, text_vec, thirty_two);
-                }
-
-                if (_mm512_mask_cmpeq_epi8_mask(mask, phrase_vec, text_vec) != mask) {
-                    match = false;
-                    break;
-                }
+        DynamicBuffer offsets_buffer;
+        db_init(&offsets_buffer, 256);
+        bool first_offset = true;
+        int hits = 0;
+        const char* search_start = text_to_search;
+        while (true) {
+            const char* match;
+            CpuFeatures features;
+            detect_cpu_features(&features);
+            if (params->case_sensitive && features.has_avx512f && features.has_avx512bw) {
+                match = avx512_find_substring(search_start, strlen(search_start), current_phrase_str, strlen(current_phrase_str));
+            } else if (params->case_sensitive) {
+                match = strstr(search_start, current_phrase_str);
+            } else {
+                match = strcasestr(search_start, current_phrase_str);
             }
 
-            if (match) {
-                if (found_phrases_len + phrase_len + 1 > found_phrases_buffer_size) {
-                    found_phrases_buffer_size *= 2;
-                    char* new_buffer = realloc(found_phrases_buffer, found_phrases_buffer_size);
-                    if (!new_buffer) {
-                        LOG_ERROR("AVX Search: Failed to reallocate memory for found phrases buffer.");
-                        free(found_phrases_buffer);
-                        free(phrases_str_copy);
-                        return NULL;
-                    }
-                    found_phrases_buffer = new_buffer;
-                }
-                strcat(found_phrases_buffer, current_phrase_str);
-                strcat(found_phrases_buffer, "\n");
-                found_phrases_len += phrase_len + 1;
+            if (!match) break;
 
-                if (!find_all_occurrences) {
-                    goto next_phrase;
-                }
+            if (!first_offset) db_append_char(&offsets_buffer, ',');
+            char offset_buf[21];
+            snprintf(offset_buf, sizeof(offset_buf), "%ld", match - text_to_search);
+            db_append_str(&offsets_buffer, offset_buf);
+
+            first_offset = false;
+            hits++;
+
+            if (!params->find_all_occurrences || (params->max_hits_per_doc > 0 && hits >= params->max_hits_per_doc)) {
+                break;
             }
+            search_start = match + 1;
         }
-    next_phrase:
+
+        db_append_str(&json_buffer, offsets_buffer.buffer);
+        db_free(&offsets_buffer);
+        db_append_str(&json_buffer, "]}");
+        first_phrase_in_json = false;
+
         current_phrase_str = strtok_r(NULL, "\n", &saveptr);
     }
 
     free(phrases_str_copy);
+    db_append_str(&json_buffer, "]}");
 
     ProcessedDataChunk* output_chunk = (ProcessedDataChunk*)malloc(sizeof(ProcessedDataChunk));
     if (!output_chunk) {
         LOG_ERROR("AVX Search: Failed to allocate output chunk.");
-        free(found_phrases_buffer);
+        db_free(&json_buffer);
         return NULL;
     }
-    output_chunk->data = (unsigned char*)found_phrases_buffer;
-    output_chunk->length = found_phrases_len;
-    output_chunk->source_id = text_chunk->source_id ? strdup(text_chunk->source_id) : NULL;
-    output_chunk->data_type = CHUNK_TYPE_UTF8_TEXT;
+    output_chunk->data = (unsigned char*)json_buffer.buffer;
+    output_chunk->length = json_buffer.length;
+    output_chunk->source_id = params->text_to_search->source_id ? sp_strdup(params->text_to_search->source_id) : NULL;
+    output_chunk->data_type = CHUNK_TYPE_PARSED_JSON;
 
     return output_chunk;
+}
+
+
+// --- Helper Implementations ---
+static bool db_init(DynamicBuffer *db, size_t initial_capacity) {
+    db->buffer = malloc(initial_capacity);
+    if (!db->buffer) return false;
+    db->buffer[0] = '\0';
+    db->length = 0;
+    db->capacity = initial_capacity;
+    return true;
+}
+
+static bool db_ensure_space(DynamicBuffer *db, size_t needed) {
+    if (db->length + needed < db->capacity) return true;
+    size_t new_capacity = db->capacity * 2;
+    while (new_capacity < db->length + needed) new_capacity *= 2;
+    char *new_buffer = realloc(db->buffer, new_capacity);
+    if (!new_buffer) return false;
+    db->buffer = new_buffer;
+    db->capacity = new_capacity;
+    return true;
+}
+
+static void db_append_str(DynamicBuffer *db, const char *str) {
+    size_t len = strlen(str);
+    if (!db_ensure_space(db, len + 1)) return;
+    strcat(db->buffer, str);
+    db->length += len;
+}
+
+static void db_append_char(DynamicBuffer *db, char c) {
+    if (!db_ensure_space(db, 2)) return;
+    db->buffer[db->length++] = c;
+    db->buffer[db->length] = '\0';
+}
+
+static void db_free(DynamicBuffer *db) {
+    if (db->buffer) free(db->buffer);
+    db->buffer = NULL;
+    db->length = db->capacity = 0;
+}
+
+static void escape_json_string(const char *input, DynamicBuffer *db) {
+    for (const char *p = input; *p; p++) {
+        switch (*p) {
+            case '"':  db_append_str(db, "\\\""); break;
+            case '\\': db_append_str(db, "\\\\"); break;
+            case '\b': db_append_str(db, "\\b"); break;
+            case '\f': db_append_str(db, "\\f"); break;
+            case '\n': db_append_str(db, "\\n"); break;
+            case '\r': db_append_str(db, "\\r"); break;
+            case '\t': db_append_str(db, "\\t"); break;
+            default:
+                if ((unsigned char)*p < 32) {
+                    char buf[7];
+                    snprintf(buf, sizeof(buf), "\\u%04x", (unsigned char)*p);
+                    db_append_str(db, buf);
+                } else {
+                    db_append_char(db, *p);
+                }
+                break;
+        }
+    }
 }
