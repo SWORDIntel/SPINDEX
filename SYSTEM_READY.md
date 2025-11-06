@@ -9,8 +9,8 @@
 ## 🎯 What's Working Now
 
 ### ✅ Core System Components
-- **Backend API**: Running on http://localhost:8000
-- **API Documentation**: Available at http://localhost:8000/docs
+- **Backend API**: Running on http://localhost:8765
+- **API Documentation**: Available at http://localhost:8765/docs
 - **Database**: SQLite initialized with all tables
 - **Redis**: Running on port 6379
 - **Authentication**: Token-based auth working
@@ -72,14 +72,14 @@ Logs: `/home/user/SPINDEX/backend.log`
 
 ### 2. Upload Test Data
 ```bash
-curl -X POST http://localhost:8000/aegis/upload \
+curl -X POST http://localhost:8765/aegis/upload \
   -H "X-Auth-Token: secure-dev-token-admin" \
   -F "file=@test_data.geojson" \
   -F "user_id=admin"
 ```
 
 ### 3. View API Documentation
-Open in browser: http://localhost:8000/docs
+Open in browser: http://localhost:8765/docs
 
 ### 4. Start Celery Worker (Optional)
 For background processing:
@@ -94,7 +94,7 @@ celery -A backend.aegis_worker worker --loglevel=info
 
 | Component | Status | Location |
 |-----------|--------|----------|
-| Backend API | ✅ RUNNING | Port 8000 |
+| Backend API | ✅ RUNNING | Port 8765 |
 | Redis | ✅ RUNNING | Port 6379 |
 | SQLite DB | ✅ READY | backend/spindex_aegis.db |
 | Elasticsearch | ⚠️ NOT RUNNING | Optional |
@@ -131,7 +131,7 @@ celery -A backend.aegis_worker worker --loglevel=info
 - **Quick Start**: `QUICKSTART.md` - How to use the system
 - **Setup Details**: `SETUP_STATUS.md` - What was installed/configured
 - **Architecture**: `README.md` - System design and features
-- **API Docs**: http://localhost:8000/docs - Interactive API documentation
+- **API Docs**: http://localhost:8765/docs - Interactive API documentation
 
 ---
 

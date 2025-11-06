@@ -188,7 +188,7 @@ SPINDEX_C_LIB_PATH=/path/to/libspindex_core_cffi.so
 
 ### 1. Check Backend Health
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:8765/health
 ```
 
 ### 2. Check Elasticsearch

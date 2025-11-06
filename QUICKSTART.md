@@ -6,8 +6,8 @@ The SPINDEX backend is now configured and running. This guide will show you how 
 
 ## ✅ What's Currently Running
 
-- **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
+- **Backend API**: http://localhost:8765
+- **API Documentation**: http://localhost:8765/docs
 - **Redis**: localhost:6379
 - **Database**: SQLite at `backend/spindex_aegis.db`
 
@@ -16,7 +16,7 @@ The SPINDEX backend is now configured and running. This guide will show you how 
 ### 1. View API Documentation
 Open your browser to:
 ```
-http://localhost:8000/docs
+http://localhost:8765/docs
 ```
 
 You'll see the interactive Swagger UI with all available endpoints.
@@ -26,7 +26,7 @@ You'll see the interactive Swagger UI with all available endpoints.
 Upload the included test GeoJSON file:
 
 ```bash
-curl -X POST http://localhost:8000/aegis/upload \
+curl -X POST http://localhost:8765/aegis/upload \
   -H "X-Auth-Token: dev-token-admin" \
   -F "file=@test_data.geojson" \
   -F "user_id=test_user"
@@ -51,7 +51,7 @@ Response example:
 ### 3. Check Job Status
 
 ```bash
-curl -X GET http://localhost:8000/aegis/jobs/{job_id} \
+curl -X GET http://localhost:8765/aegis/jobs/{job_id} \
   -H "X-Auth-Token: dev-token-admin"
 ```
 
@@ -60,7 +60,7 @@ Replace `{job_id}` with the ID from the upload response.
 ### 4. List All Jobs
 
 ```bash
-curl -X GET "http://localhost:8000/aegis/jobs?skip=0&limit=10" \
+curl -X GET "http://localhost:8765/aegis/jobs?skip=0&limit=10" \
   -H "X-Auth-Token: dev-token-admin"
 ```
 
@@ -135,7 +135,7 @@ When you upload a file, it goes through these stages:
 
 | Component | Status | Notes |
 |-----------|---------|-------|
-| Backend API | ✅ Running | Port 8000 |
+| Backend API | ✅ Running | Port 8765 |
 | Redis | ✅ Running | Port 6379 |
 | SQLite DB | ✅ Ready | Tables created |
 | Elasticsearch | ⚠️ Optional | Not running (search disabled) |
@@ -180,7 +180,7 @@ pip3 install GDAL shapely geopy
 ### Backend won't start
 ```bash
 # Check if port 8000 is already in use
-lsof -i :8000
+lsof -i :8765
 
 # View backend logs
 tail -f backend.log
@@ -203,7 +203,7 @@ celery -A backend.aegis_worker worker --loglevel=debug
 
 ## 📖 Full Documentation
 
-- **API Docs**: http://localhost:8000/docs
+- **API Docs**: http://localhost:8765/docs
 - **Setup Status**: See `SETUP_STATUS.md`
 - **Architecture**: See `README.md`
 
@@ -212,23 +212,23 @@ celery -A backend.aegis_worker worker --loglevel=debug
 ### Basic File Upload Test
 ```bash
 # 1. Upload
-curl -X POST http://localhost:8000/aegis/upload \
+curl -X POST http://localhost:8765/aegis/upload \
   -H "X-Auth-Token: dev-token-admin" \
   -F "file=@test_data.geojson" \
   -F "user_id=admin"
 
 # 2. Check status (use job_id from response)
-curl http://localhost:8000/aegis/jobs/YOUR_JOB_ID \
+curl http://localhost:8765/aegis/jobs/YOUR_JOB_ID \
   -H "X-Auth-Token: dev-token-admin"
 
 # 3. List all jobs
-curl http://localhost:8000/aegis/jobs \
+curl http://localhost:8765/aegis/jobs \
   -H "X-Auth-Token: dev-token-admin"
 ```
 
 ### Creating a Search Index
 ```bash
-curl -X POST http://localhost:8000/indexes/create \
+curl -X POST http://localhost:8765/indexes/create \
   -H "X-Auth-Token: dev-token-admin" \
   -H "Content-Type: application/json" \
   -d '{
