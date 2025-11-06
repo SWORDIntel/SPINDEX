@@ -28,7 +28,10 @@ class SecurityConfig:
     MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
     ALLOWED_EXTENSIONS = {'.json', '.csv', '.geojson', '.txt', '.pdf',
                           '.doc', '.docx', '.xls', '.xlsx', '.rtf',
-                          '.sqlite', '.db'}
+                          '.sqlite', '.db',
+                          # Compressed formats
+                          '.zip', '.gz', '.tar', '.tgz', '.bz2', '.xz',
+                          '.7z', '.tar.gz', '.tar.bz2', '.tar.xz'}
 
     # Input validation
     MAX_QUERY_LENGTH = 10000

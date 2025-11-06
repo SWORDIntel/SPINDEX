@@ -20,6 +20,9 @@ from backend.security import (
     request_logger,
     DatabaseSecurityManager
 )
+
+# --- Compression Support ---
+from backend.compression import CompressionHandler, is_compressed_file
 # from collections import defaultdict # Moved to pipeline_logic
 
 # --- Database & CRUD Imports ---
@@ -86,7 +89,12 @@ MAX_FILE_SIZE = 100 * 1024 * 1024
 ALLOWED_MIME_TYPES = [
     "application/geo+json", "application/json", "application/zip",
     "application/vnd.google-earth.kml+xml", "application/gml+xml",
-    "text/xml", "application/octet-stream", "text/plain"
+    "text/xml", "application/octet-stream", "text/plain",
+    # Compressed file formats
+    "application/gzip", "application/x-gzip",  # .gz
+    "application/x-tar", "application/x-compressed-tar",  # .tar, .tar.gz
+    "application/x-bzip2", "application/x-xz",  # .bz2, .xz
+    "application/x-7z-compressed"  # .7z
 ]
 # NOMINATIM_USER_AGENT, GEOCODING_ADDRESS_FIELDS, etc. moved to pipeline_logic
 
@@ -825,6 +833,42 @@ async def aegis_secure_upload_file(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not save uploaded file.")
     finally:
         file.file.close() # Ensure the temporary file is closed
+
+    # COMPRESSION SUPPORT: Auto-decompress if file is compressed
+    extracted_files = []
+    decompression_log = None
+
+    if is_compressed_file(original_filename):
+        logger.info(f"Compressed file detected: {original_filename}. Attempting decompression...")
+
+        # Create decompression directory
+        decompress_dir = os.path.join(STAGING_AREA_PATH, f"decompressed_{uuid.uuid4()}")
+        os.makedirs(decompress_dir, exist_ok=True)
+
+        # Attempt decompression
+        success, extracted_files, error_msg = CompressionHandler.decompress(staged_file_path, decompress_dir)
+
+        if success:
+            logger.info(f"Successfully decompressed {original_filename}: {len(extracted_files)} files extracted")
+            decompression_log = {
+                "status": "success",
+                "extracted_count": len(extracted_files),
+                "extracted_files": [os.path.basename(f) for f in extracted_files[:10]],  # First 10 files
+                "decompression_dir": decompress_dir
+            }
+
+            # Update staged file path to point to decompression directory
+            # The processing pipeline will handle the extracted files
+            staged_file_path = decompress_dir
+        else:
+            logger.warning(f"Decompression failed for {original_filename}: {error_msg}")
+            decompression_log = {
+                "status": "failed",
+                "error": error_msg
+            }
+            # Continue with compressed file (pipeline may handle it differently)
+    else:
+        logger.info(f"File {original_filename} is not compressed, proceeding with direct processing")
 
     job_data_dict = {
         "original_filename": original_filename,
