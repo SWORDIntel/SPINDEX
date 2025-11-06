@@ -39,6 +39,11 @@ from celery.result import AsyncResult # Keep if task status check endpoint uses 
 # from geopy.geocoders import Nominatim # Moved
 # from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError # Moved
 
+# --- Logging Configuration (must be early for ES client init) ---
+# This global logger is fine for main.py specific logs (e.g., API requests)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 # --- Elasticsearch Client ---
 from elasticsearch import Elasticsearch, exceptions as es_exceptions # For Pass 1
 # Initialize Elasticsearch client
@@ -75,12 +80,6 @@ ALLOWED_MIME_TYPES = [
     "text/xml", "application/octet-stream", "text/plain"
 ]
 # NOMINATIM_USER_AGENT, GEOCODING_ADDRESS_FIELDS, etc. moved to pipeline_logic
-
-
-# --- Logging Configuration ---
-# This global logger is fine for main.py specific logs (e.g., API requests)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 # --- Directory and Celery Setup ---
 os.makedirs(STAGING_AREA_PATH, exist_ok=True)
@@ -396,21 +395,6 @@ def shutdown_spindex_c_components():
     logger.info("SPINDEX C components shutdown complete.")
 
 
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Application startup: Initializing SPINDEX C components...")
-    try:
-        initialize_spindex_c_components()
-    except Exception as e:
-        logger.error(f"Fatal error during C component initialization on startup: {e}. Application might not function correctly.", exc_info=True)
-        # Depending on severity, might want to sys.exit() or prevent app start.
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("Application shutdown: Cleaning up SPINDEX C components...")
-    shutdown_spindex_c_components()
-
-
 # --- Mock Authentication and User Data ---
 dummy_admin_role = Role(name="Admin", permissions=["create_index", "delete_index", "query_data", "manage_users", "upload_data"])
 dummy_analyst_role = Role(name="Analyst", permissions=["create_index", "query_data", "upload_data"])
@@ -449,6 +433,20 @@ app = FastAPI(
     version="0.1.0",
     openapi_tags=tags_metadata  # Add tags metadata to FastAPI app
 )
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Application startup: Initializing SPINDEX C components...")
+    try:
+        initialize_spindex_c_components()
+    except Exception as e:
+        logger.error(f"Fatal error during C component initialization on startup: {e}. Application might not function correctly.", exc_info=True)
+        # Depending on severity, might want to sys.exit() or prevent app start.
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("Application shutdown: Cleaning up SPINDEX C components...")
+    shutdown_spindex_c_components()
 
 # --- Custom Exception Handlers ---
 @app.exception_handler(SpindexBaseException)

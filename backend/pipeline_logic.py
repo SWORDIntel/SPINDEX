@@ -13,14 +13,34 @@ from sqlalchemy.orm import Session
 from backend.models import IngestionJobDB, JobModuleStatus # Added JobModuleStatus
 from backend.security_scanner import scan_file # For security scanning
 
-# --- Data Processing & Scientific Computing Imports ---
-from osgeo import gdal, ogr, osr # type: ignore
-from shapely.geometry import shape, Point as ShapelyPoint, mapping as shapely_mapping # type: ignore
-# from shapely.validation import is_valid, make_valid # Not used in the moved functions
+# --- Data Processing & Scientific Computing Imports (Optional) ---
+# These are optional dependencies for the full geospatial pipeline
+# Backend API can start without them, but geospatial processing will be disabled
+try:
+    from osgeo import gdal, ogr, osr # type: ignore
+    GDAL_AVAILABLE = True
+except ImportError:
+    GDAL_AVAILABLE = False
+    gdal = ogr = osr = None
+    logging.warning("GDAL not available. Geospatial processing will be disabled.")
 
-# --- External Service Imports ---
-from geopy.geocoders import Nominatim # type: ignore
-from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError # type: ignore
+try:
+    from shapely.geometry import shape, Point as ShapelyPoint, mapping as shapely_mapping # type: ignore
+    SHAPELY_AVAILABLE = True
+except ImportError:
+    SHAPELY_AVAILABLE = False
+    shape = ShapelyPoint = shapely_mapping = None
+    logging.warning("Shapely not available. Geometry operations will be disabled.")
+
+# --- External Service Imports (Optional) ---
+try:
+    from geopy.geocoders import Nominatim # type: ignore
+    from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError # type: ignore
+    GEOPY_AVAILABLE = True
+except ImportError:
+    GEOPY_AVAILABLE = False
+    Nominatim = GeocoderTimedOut = GeocoderUnavailable = GeocoderServiceError = None
+    logging.warning("Geopy not available. Geocoding will be disabled.")
 
 # --- Constants (moved or redefined from main.py) ---
 PROCESSED_AREA_PATH = os.getenv("PROCESSED_AREA_PATH", "processed_area") # Make configurable like others
