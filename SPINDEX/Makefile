@@ -109,6 +109,17 @@ app:
 core:
 	@cmake --build build_cmake --target spindex_core_lib -j$$(nproc)
 
+# Memory-mapped I/O example
+mmap-example:
+	@echo "Building mmap example..."
+	@gcc -o mmap_example core/mmap_example.c build_cmake/lib/libspindex_core_lib.a \
+		-Iinclude -Icore -pthread -lcurl \
+		$$(pkg-config --libs jansson geos_c) -lm -lz
+	@echo "✓ Built mmap_example"
+	@echo ""
+	@echo "Usage: ./mmap_example <filepath>"
+	@echo "Example: ./mmap_example sample_data/readme.txt"
+
 # Backend targets
 backend-install:
 	@cd ../backend && pip install -r requirements.txt
