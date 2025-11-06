@@ -1,0 +1,6 @@
+id,name,latitude,longitude,category,population,area_km2
+LOC_001,Processing Center Alpha,37.7749,-122.4194,datacenter,0,1.5
+LOC_002,Research Facility Beta,40.7128,-74.0060,research,150,2.8
+LOC_003,Archive Delta,51.5074,-0.1278,storage,50,5.2
+LOC_004,Analysis Hub Gamma,35.6762,139.6503,analytics,200,3.1
+LOC_005,Integration Site Epsilon,48.8566,2.3522,testing,75,1.9

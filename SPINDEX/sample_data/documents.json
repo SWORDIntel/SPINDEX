@@ -1,0 +1,37 @@
+{
+  "documents": [
+    {
+      "id": "doc_001",
+      "title": "SPINDEX Performance Analysis",
+      "content": "SPINDEX is a high-performance spatial indexing system capable of processing 500TB+ datasets with AVX-512 acceleration.",
+      "tags": ["performance", "spatial", "indexing"],
+      "metadata": {
+        "author": "SPINDEX Team",
+        "date": "2025-11-06",
+        "version": "1.0.0"
+      }
+    },
+    {
+      "id": "doc_002",
+      "title": "Post-Quantum Cryptography Implementation",
+      "content": "The system implements ML-KEM-1024 and ML-DSA-87 for quantum-resistant encryption and digital signatures.",
+      "tags": ["security", "cryptography", "quantum"],
+      "metadata": {
+        "author": "Security Team",
+        "date": "2025-11-06",
+        "classification": "public"
+      }
+    },
+    {
+      "id": "doc_003",
+      "title": "Plugin Architecture Overview",
+      "content": "SPINDEX uses a dynamic plugin system with 21 modules for preprocessing, parsing, and indexing various file formats.",
+      "tags": ["architecture", "plugins", "modules"],
+      "metadata": {
+        "author": "Development Team",
+        "date": "2025-11-06",
+        "components": ["preprocessors", "parsers", "indexers"]
+      }
+    }
+  ]
+}
