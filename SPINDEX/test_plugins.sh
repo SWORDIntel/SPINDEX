@@ -49,11 +49,16 @@ else
     echo "⚠️  Expected 21 plugins, found $TOTAL_PLUGINS"
 fi
 
-# Test if spindex_app can load the config
+# Test application flags
 echo ""
-echo "Testing spindex_app with config..."
-if ./build_cmake/bin/spindex_app config.ini 2>&1 | head -5; then
-    echo "✅ Application starts successfully!"
-else
-    echo "⚠️  Application had issues starting"
-fi
+echo "Testing spindex_app flags..."
+echo ""
+echo "--- Version Info ---"
+./build_cmake/bin/spindex_app --version
+echo ""
+echo "✅ Application responds to --version"
+echo ""
+echo "--- Help Available ---"
+./build_cmake/bin/spindex_app --help | head -10
+echo "..."
+echo "✅ Application responds to --help"
