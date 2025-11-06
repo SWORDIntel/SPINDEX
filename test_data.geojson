@@ -1,0 +1,47 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-122.4194, 37.7749]
+      },
+      "properties": {
+        "name": "San Francisco",
+        "population": 873965,
+        "state": "California",
+        "country": "USA",
+        "category": "Major City"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-74.0060, 40.7128]
+      },
+      "properties": {
+        "name": "New York",
+        "population": 8336817,
+        "state": "New York",
+        "country": "USA",
+        "category": "Major City"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-87.6298, 41.8781]
+      },
+      "properties": {
+        "name": "Chicago",
+        "population": 2693976,
+        "state": "Illinois",
+        "country": "USA",
+        "category": "Major City"
+      }
+    }
+  ]
+}
