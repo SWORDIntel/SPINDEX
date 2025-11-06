@@ -42,12 +42,38 @@ include_directories(
 # Threads (Still use CMake's built-in FindThreads as it's fundamental)
 find_package(Threads REQUIRED)
 
-# CURL (Handled by Conan)
-find_package(CURL CONFIG REQUIRED)
-# Jansson (Handled by Conan)
-find_package(Jansson CONFIG REQUIRED)
-# GEOS (Handled by Conan)
-find_package(GEOS CONFIG REQUIRED)
+# Try Conan first, fall back to pkg-config for system packages
+find_package(CURL CONFIG QUIET)
+if(NOT CURL_FOUND)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(CURL REQUIRED libcurl)
+    # Create imported target for compatibility
+    add_library(CURL::libcurl INTERFACE IMPORTED)
+    set_target_properties(CURL::libcurl PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${CURL_INCLUDE_DIRS}"
+        INTERFACE_LINK_LIBRARIES "${CURL_LIBRARIES}"
+    )
+endif()
+
+find_package(Jansson CONFIG QUIET)
+if(NOT Jansson_FOUND)
+    pkg_check_modules(JANSSON REQUIRED jansson)
+    add_library(jansson::jansson INTERFACE IMPORTED)
+    set_target_properties(jansson::jansson PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${JANSSON_INCLUDE_DIRS}"
+        INTERFACE_LINK_LIBRARIES "${JANSSON_LIBRARIES}"
+    )
+endif()
+
+find_package(GEOS CONFIG QUIET)
+if(NOT GEOS_FOUND)
+    pkg_check_modules(GEOS REQUIRED geos)
+    add_library(GEOS::geos_c INTERFACE IMPORTED)
+    set_target_properties(GEOS::geos_c PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${GEOS_INCLUDE_DIRS}"
+        INTERFACE_LINK_LIBRARIES "${GEOS_LIBRARIES}"
+    )
+endif()
 
 # OpenVINO (Handled by Conan)
 option(USE_OPENVINO "Enable OpenVINO support" ON)

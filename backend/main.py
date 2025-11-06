@@ -39,6 +39,11 @@ from celery.result import AsyncResult # Keep if task status check endpoint uses 
 # from geopy.geocoders import Nominatim # Moved
 # from geopy.exc import GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError # Moved
 
+# --- Logging Configuration (must be early for ES client init) ---
+# This global logger is fine for main.py specific logs (e.g., API requests)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 # --- Elasticsearch Client ---
 from elasticsearch import Elasticsearch, exceptions as es_exceptions # For Pass 1
 # Initialize Elasticsearch client
@@ -75,12 +80,6 @@ ALLOWED_MIME_TYPES = [
     "text/xml", "application/octet-stream", "text/plain"
 ]
 # NOMINATIM_USER_AGENT, GEOCODING_ADDRESS_FIELDS, etc. moved to pipeline_logic
-
-
-# --- Logging Configuration ---
-# This global logger is fine for main.py specific logs (e.g., API requests)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 # --- Directory and Celery Setup ---
 os.makedirs(STAGING_AREA_PATH, exist_ok=True)
@@ -396,21 +395,6 @@ def shutdown_spindex_c_components():
     logger.info("SPINDEX C components shutdown complete.")
 
 
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Application startup: Initializing SPINDEX C components...")
-    try:
-        initialize_spindex_c_components()
-    except Exception as e:
-        logger.error(f"Fatal error during C component initialization on startup: {e}. Application might not function correctly.", exc_info=True)
-        # Depending on severity, might want to sys.exit() or prevent app start.
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("Application shutdown: Cleaning up SPINDEX C components...")
-    shutdown_spindex_c_components()
-
-
 # --- Mock Authentication and User Data ---
 dummy_admin_role = Role(name="Admin", permissions=["create_index", "delete_index", "query_data", "manage_users", "upload_data"])
 dummy_analyst_role = Role(name="Analyst", permissions=["create_index", "query_data", "upload_data"])
@@ -449,6 +433,20 @@ app = FastAPI(
     version="0.1.0",
     openapi_tags=tags_metadata  # Add tags metadata to FastAPI app
 )
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Application startup: Initializing SPINDEX C components...")
+    try:
+        initialize_spindex_c_components()
+    except Exception as e:
+        logger.error(f"Fatal error during C component initialization on startup: {e}. Application might not function correctly.", exc_info=True)
+        # Depending on severity, might want to sys.exit() or prevent app start.
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("Application shutdown: Cleaning up SPINDEX C components...")
+    shutdown_spindex_c_components()
 
 # --- Custom Exception Handlers ---
 @app.exception_handler(SpindexBaseException)
@@ -936,20 +934,40 @@ async def search_with_avx_endpoint(
     # --- Pass 1: Elasticsearch Broad Search ---
     es_search_start_time = time.time()
     try:
-        # Example: Simple match query on a 'content' field.
-        # TODO: Replace with actual index name and more sophisticated query construction.
-        # The index name should likely come from QueryRequest or be globally configured.
-        es_response = es_client.search(
-            index=query_request.index_name or DEFAULT_ES_INDEX_NAME, # Use index from request or default
-            body={
-                "query": {
-                    "match": {
-                        # Assuming documents have a field named "text_content" or similar
-                        "text_content": query_request.query_text
-                    }
+        # Build a sophisticated multi-field query with boosting and highlighting
+        search_body = {
+            "query": {
+                "multi_match": {
+                    "query": query_request.query_text,
+                    "fields": [
+                        "text_content^3",      # Boost main content field
+                        "title^5",             # Boost title significantly
+                        "description^2",       # Boost description moderately
+                        "metadata.keywords^2", # Boost keywords
+                        "filename",            # Include filename
+                        "*"                    # Fallback to all text fields
+                    ],
+                    "type": "best_fields",     # Find best matching field
+                    "tie_breaker": 0.3,        # Consider other matching fields
+                    "minimum_should_match": "75%"  # Improve result quality
+                }
+            },
+            "highlight": {
+                "fields": {
+                    "text_content": {"fragment_size": 150, "number_of_fragments": 3},
+                    "title": {},
+                    "description": {}
                 },
-                "size": 100 # Limit candidate set for AVX processing
-            }
+                "pre_tags": ["<mark>"],
+                "post_tags": ["</mark>"]
+            },
+            "size": 100,  # Limit candidate set for AVX processing
+            "_source": ["text_content", "title", "description", "filename", "metadata"]
+        }
+
+        es_response = es_client.search(
+            index=query_request.index_name or DEFAULT_ES_INDEX_NAME,
+            body=search_body
         )
         es_hits = es_response.get("hits", {}).get("hits", [])
         total_results_before_avx = len(es_hits)

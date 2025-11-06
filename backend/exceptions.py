@@ -1,4 +1,5 @@
 # backend/exceptions.py
+from typing import Optional, Any
 
 class SpindexBaseException(Exception):
     """Base exception for SPINDEX application."""
