@@ -2,14 +2,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "config_manager.h" // For Config structure
+#include "config_manager.h" // For SpindexConfig structure
 #include "data_types.h"     // For AEGIS_PROCESSING_STATUS (though not directly used by validator)
 #include "geometric_validator.h" // The module to test
 #include "utils.h"          // For logging, if used during test debugging
 #include <jansson.h>        // For creating and inspecting json_t objects
 
-// Helper to setup a mock Config object for testing config loading
-static void setup_mock_config_value(Config* cfg, int index, const char* key, const char* value) {
+// Helper to setup a mock SpindexConfig object for testing config loading
+static void setup_mock_config_value(SpindexConfig* cfg, int index, const char* key, const char* value) {
     if (index < MAX_SETTINGS) {
         strncpy(cfg->settings[index].key, key, MAX_KEY_LEN - 1);
         cfg->settings[index].key[MAX_KEY_LEN - 1] = '\0';
@@ -39,11 +39,11 @@ static void test_module_init_shutdown() {
 
 static void test_load_validator_config() {
     printf("Running test: test_load_validator_config...\n");
-    Config global_cfg;
+    SpindexConfig global_cfg;
     GeometricValidatorConfig val_cfg;
 
     // Test 1: All values present, validation and repair enabled
-    memset(&global_cfg, 0, sizeof(Config));
+    memset(&global_cfg, 0, sizeof(SpindexConfig));
     global_cfg.num_settings = 0;
     setup_mock_config_value(&global_cfg, global_cfg.num_settings++, "GEOMETRIC_VALIDATION_ENABLED", "true");
     setup_mock_config_value(&global_cfg, global_cfg.num_settings++, "GEOMETRIC_VALIDATION_ENABLE_REPAIR", "true");
@@ -52,7 +52,7 @@ static void test_load_validator_config() {
     assert(val_cfg.enable_repair == 1);
 
     // Test 2: Validation disabled, repair (should be irrelevant but check parsing)
-    memset(&global_cfg, 0, sizeof(Config));
+    memset(&global_cfg, 0, sizeof(SpindexConfig));
     global_cfg.num_settings = 0;
     setup_mock_config_value(&global_cfg, global_cfg.num_settings++, "GEOMETRIC_VALIDATION_ENABLED", "false");
     setup_mock_config_value(&global_cfg, global_cfg.num_settings++, "GEOMETRIC_VALIDATION_ENABLE_REPAIR", "true"); // This should still parse
@@ -61,7 +61,7 @@ static void test_load_validator_config() {
     assert(val_cfg.enable_repair == 1); // Parsed correctly
 
     // Test 3: Defaults (Enabled=true, Repair=false)
-    memset(&global_cfg, 0, sizeof(Config));
+    memset(&global_cfg, 0, sizeof(SpindexConfig));
     global_cfg.num_settings = 0; // No settings
     assert(load_geometric_validator_config(&global_cfg, &val_cfg) == 0);
     assert(val_cfg.enabled == 1);    // Default

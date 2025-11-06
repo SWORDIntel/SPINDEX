@@ -2,13 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "config_manager.h" // For Config structure
+#include "config_manager.h" // For SpindexConfig structure
 #include "data_types.h"     // For AEGIS_PROCESSING_STATUS
 #include "nlp_ner_parser.h" // The module to test
 #include "utils.h"          // For logging, if used during test debugging
 
-// Helper to setup a mock Config object for testing config loading
-static void setup_mock_config_value(Config* cfg, int index, const char* key, const char* value) {
+// Helper to setup a mock SpindexConfig object for testing config loading
+static void setup_mock_config_value(SpindexConfig* cfg, int index, const char* key, const char* value) {
     if (index < MAX_SETTINGS) {
         strncpy(cfg->settings[index].key, key, MAX_KEY_LEN - 1);
         cfg->settings[index].key[MAX_KEY_LEN - 1] = '\0';
@@ -19,11 +19,11 @@ static void setup_mock_config_value(Config* cfg, int index, const char* key, con
 
 static void test_load_ner_config() {
     printf("Running test: test_load_ner_config...\n");
-    Config global_cfg;
+    SpindexConfig global_cfg;
     NlpNerParserConfig ner_cfg;
 
     // Test 1: All values present and NER enabled
-    memset(&global_cfg, 0, sizeof(Config));
+    memset(&global_cfg, 0, sizeof(SpindexConfig));
     global_cfg.num_settings = 0;
     setup_mock_config_value(&global_cfg, global_cfg.num_settings++, "NLP_NER_ENABLED", "true");
     setup_mock_config_value(&global_cfg, global_cfg.num_settings++, "NLP_NER_PYTHON_EXECUTABLE", "/usr/bin/python3_test");
@@ -35,7 +35,7 @@ static void test_load_ner_config() {
     assert(strcmp(ner_cfg.script_path, "scripts/test_ner.py") == 0);
 
     // Test 2: NER disabled
-    memset(&global_cfg, 0, sizeof(Config));
+    memset(&global_cfg, 0, sizeof(SpindexConfig));
     global_cfg.num_settings = 0;
     setup_mock_config_value(&global_cfg, global_cfg.num_settings++, "NLP_NER_ENABLED", "false");
     // Python exe and script path will use defaults if not specified
@@ -47,7 +47,7 @@ static void test_load_ner_config() {
     assert(strcmp(ner_cfg.script_path, "scripts/ner_spacy.py") == 0); // Default
 
     // Test 3: Defaults used when keys are missing (NER should be disabled by default if NLP_NER_ENABLED is missing)
-    memset(&global_cfg, 0, sizeof(Config));
+    memset(&global_cfg, 0, sizeof(SpindexConfig));
     global_cfg.num_settings = 0; // No settings
     assert(load_nlp_ner_parser_config(&global_cfg, &ner_cfg) == 0);
     assert(ner_cfg.enabled == 0); // Default for enabled is false if key missing
@@ -66,8 +66,8 @@ static void test_extract_locations_success() {
     int num_locations = 0;
 
     // Setup config to use default python3 and script path, and enable NER
-    Config global_cfg;
-    memset(&global_cfg, 0, sizeof(Config));
+    SpindexConfig global_cfg;
+    memset(&global_cfg, 0, sizeof(SpindexConfig));
     global_cfg.num_settings = 0;
     setup_mock_config_value(&global_cfg, global_cfg.num_settings++, "NLP_NER_ENABLED", "true");
     // Assuming default script path "scripts/ner_spacy.py" and "python3" are valid in test environment
@@ -134,8 +134,8 @@ static void test_ner_disabled() {
     char** locations = NULL;
     int num_locations = 0;
 
-    Config global_cfg;
-    memset(&global_cfg, 0, sizeof(Config));
+    SpindexConfig global_cfg;
+    memset(&global_cfg, 0, sizeof(SpindexConfig));
     global_cfg.num_settings = 0;
     setup_mock_config_value(&global_cfg, global_cfg.num_settings++, "NLP_NER_ENABLED", "false");
     assert(load_nlp_ner_parser_config(&global_cfg, &ner_cfg) == 0);
@@ -157,8 +157,8 @@ static void test_script_not_found() {
     char** locations = NULL;
     int num_locations = 0;
 
-    Config global_cfg;
-    memset(&global_cfg, 0, sizeof(Config));
+    SpindexConfig global_cfg;
+    memset(&global_cfg, 0, sizeof(SpindexConfig));
     global_cfg.num_settings = 0;
     setup_mock_config_value(&global_cfg, global_cfg.num_settings++, "NLP_NER_ENABLED", "true");
     setup_mock_config_value(&global_cfg, global_cfg.num_settings++, "NLP_NER_SCRIPT_PATH", "non_existent_scripts/non_existent_ner.py");

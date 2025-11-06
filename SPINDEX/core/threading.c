@@ -20,7 +20,7 @@ static Task* _task_queue_pop_internal(TaskQueue* queue); // Internal pop, assume
 // --- Task Queue Internal Functions ---
 static int _task_queue_init(TaskQueue* queue, size_t max_size) {
     if (!queue) {
-        LOG_ERROR("task_queue_init: Queue pointer is NULL.");
+        LOG_ERROR("_task_queue_init: Queue pointer is NULL.");
         return -1;
     }
     queue->head = NULL;
@@ -29,16 +29,16 @@ static int _task_queue_init(TaskQueue* queue, size_t max_size) {
     queue->max_size = max_size; // 0 means unbounded
 
     if (pthread_mutex_init(&queue->lock, NULL) != 0) {
-        LOG_ERROR("task_queue_init: Failed to initialize mutex.");
+        LOG_ERROR("_task_queue_init: Failed to initialize mutex.");
         return -1;
     }
     if (pthread_cond_init(&queue->not_empty, NULL) != 0) {
-        LOG_ERROR("task_queue_init: Failed to initialize not_empty condition variable.");
+        LOG_ERROR("_task_queue_init: Failed to initialize not_empty condition variable.");
         pthread_mutex_destroy(&queue->lock);
         return -1;
     }
     if (pthread_cond_init(&queue->not_full, NULL) != 0) {
-        LOG_ERROR("task_queue_init: Failed to initialize not_full condition variable.");
+        LOG_ERROR("_task_queue_init: Failed to initialize not_full condition variable.");
         pthread_cond_destroy(&queue->not_empty);
         pthread_mutex_destroy(&queue->lock);
         return -1;
@@ -151,7 +151,7 @@ static int _thread_pool_initialize_internal(ThreadPool* pool, size_t num_threads
     pool->num_threads = num_threads;
     pool->shutdown = 0;
 
-    if (task_queue_init(&pool->task_queue, max_queue_size) != 0) { // Pass max_queue_size
+    if (_task_queue_init(&pool->task_queue, max_queue_size) != 0) { // Pass max_queue_size
         LOG_ERROR("thread_pool_init: Failed to initialize task queue.");
         return -1;
     }
@@ -159,7 +159,7 @@ static int _thread_pool_initialize_internal(ThreadPool* pool, size_t num_threads
     pool->threads = (pthread_t*)malloc(sizeof(pthread_t) * num_threads);
     if (!pool->threads) {
         LOG_ERROR("thread_pool_init: Failed to allocate memory for threads.");
-        task_queue_destroy(&pool->task_queue);
+        _task_queue_destroy(&pool->task_queue);
         return -1;
     }
 
@@ -173,7 +173,7 @@ static int _thread_pool_initialize_internal(ThreadPool* pool, size_t num_threads
                 pthread_join(pool->threads[j], NULL);
             }
             free(pool->threads);
-            task_queue_destroy(&pool->task_queue);
+            _task_queue_destroy(&pool->task_queue);
             return -1;
         }
     }
@@ -238,6 +238,15 @@ bool thread_pool_submit_task(ThreadPool* pool, void (*function)(void*), void* ar
     return true;
 }
 
+// Wrapper functions for core/threading.h API compatibility
+int thread_pool_init(ThreadPool* pool, size_t num_threads, size_t max_queue_size) {
+    return _thread_pool_initialize_internal(pool, num_threads, max_queue_size);
+}
+
+int thread_pool_submit(ThreadPool* pool, void (*function)(void*), void* arg) {
+    return thread_pool_submit_task(pool, function, arg) ? 0 : -1;
+}
+
 int thread_pool_destroy(ThreadPool* pool) {
     if (!pool) {
         LOG_ERROR("thread_pool_destroy: Pool pointer is NULL.");
@@ -283,7 +292,7 @@ int thread_pool_destroy(ThreadPool* pool) {
         pool->threads = NULL;
     }
 
-    task_queue_destroy(&pool->task_queue);
+    _task_queue_destroy(&pool->task_queue);
 
     LOG_INFO("Thread pool destroyed.");
     return 0;

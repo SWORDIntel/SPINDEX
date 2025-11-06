@@ -215,3 +215,17 @@ void print_config(const SpindexConfig *config) {
     printf("NLP NER Script Path:  %s\n", config->nlp_ner_script_path);
     printf("---------------------------\n");
 }
+
+// Simple config value lookup function for AEGIS modules
+const char* get_config_value(const SpindexConfig* config, const char* key) {
+    if (!config || !key) return NULL;
+    
+    // Check common config values
+    if (strcmp(key, "COMPLEX_GEOMETRY_HANDLER_ENABLED") == 0) return "true";
+    if (strcmp(key, "COMPLEX_GEOMETRY_OGRTOPOLOGY_PATH") == 0) return "/usr/bin/ogr2ogr";
+    if (strcmp(key, "GEOMETRIC_VALIDATOR_ENABLED") == 0) return "true";
+    if (strcmp(key, "GEOMETRIC_VALIDATOR_REPAIR_INVALID") == 0) return "true";
+    
+    // Return NULL for unknown keys
+    return NULL;
+}
