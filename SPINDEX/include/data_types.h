@@ -3,6 +3,11 @@
 
 #include <stddef.h> // For size_t
 
+// Common constants
+#ifndef MAX_PATH_LEN
+#define MAX_PATH_LEN 4096
+#endif
+
 /**
  * @brief Represents a chunk of data that has been processed.
  *
@@ -19,7 +24,9 @@ typedef enum {
     CHUNK_TYPE_PARSED_JSON,       // Specifically for parsed JSON content
     CHUNK_TYPE_TEXT_PARSED,       // For TXTParser output
     CHUNK_TYPE_CSV_PREPROCESSED,  // For CSV preprocessor
-    CHUNK_TYPE_CSV_PARSED         // For CSV parser
+    CHUNK_TYPE_CSV_PARSED,        // For CSV parser
+    CHUNK_TYPE_JSON_TEXT,         // JSON formatted text
+    CHUNK_TYPE_AVX_SEARCH_PARAMS  // AVX search parameters
 } ChunkDataType;
 
 typedef struct {
@@ -33,6 +40,9 @@ typedef struct {
     DataChunk* chunks;
     size_t count;
 } ProcessedData;
+
+// Alias for backward compatibility - DataChunk is also called ProcessedDataChunk in many places
+typedef DataChunk ProcessedDataChunk;
 
 // Enum defining different types of plugins
 typedef enum {
@@ -83,7 +93,11 @@ typedef enum {
     AEGIS_PROCESSING_ERROR_MEMORY,          // 7
     AEGIS_PROCESSING_ERROR_EXTERNAL_TOOL,   // 8
     AEGIS_PROCESSING_ERROR_INVALID_FORMAT,  // 9
-    AEGIS_PROCESSING_ERROR_CONFIG           // 10
+    AEGIS_PROCESSING_ERROR_CONFIG,          // 10
+    AEGIS_PROCESSING_ERROR_IO,              // 11
+    AEGIS_PROCESSING_ERROR_GEOMETRY_VALIDATION, // 12
+    AEGIS_PROCESSING_ERROR_SERIALIZATION,   // 13
+    AEGIS_PROCESSING_REJECT_COMPLEX_GEOMETRY // 14
 } AEGIS_PROCESSING_STATUS;
 
 

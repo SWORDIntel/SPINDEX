@@ -35,7 +35,7 @@ target_include_directories(spindex_core_lib PUBLIC
 target_link_libraries(spindex_core_lib PUBLIC
     Threads::Threads # System library
     CURL::libcurl    # Conan imported target (typical name)
-    Jansson::jansson # Conan imported target (typical name)
+    jansson::jansson # Conan imported target (lowercase)
     GEOS::geos       # Conan imported target (typical name)
 )
 

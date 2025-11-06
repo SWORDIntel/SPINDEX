@@ -11,7 +11,6 @@ macro(add_analyzer_plugin plugin_id source_file)
         target_include_directories(${plugin_target_name} PUBLIC
             "${CMAKE_SOURCE_DIR}/include"
         )
-        target_compile_options(${plugin_target_name} PRIVATE ${CMAKE_C_FLAGS})
 
         list(APPEND SPINDEX_ALL_PLUGIN_TARGETS ${plugin_target_name})
         set(SPINDEX_ALL_PLUGIN_TARGETS ${SPINDEX_ALL_PLUGIN_TARGETS} CACHE INTERNAL "List of all plugin targets" FORCE)

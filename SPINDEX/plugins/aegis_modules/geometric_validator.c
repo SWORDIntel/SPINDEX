@@ -52,7 +52,7 @@ void geometric_validator_shutdown() {
     }
 }
 
-int load_geometric_validator_config(const Config* global_config, GeometricValidatorConfig* val_config) {
+int load_geometric_validator_config(const SpindexConfig* global_config, GeometricValidatorConfig* val_config) {
     if (!global_config || !val_config) {
         LOG_ERROR("GEO_VALIDATOR: Null config provided.");
         return -1;
@@ -109,7 +109,7 @@ static GEOSCoordSequence* json_coordinates_to_geos_coord_seq(json_t* coordinates
 // Generic function to handle single geometries (Point, LineString, Polygon)
 // and their Multi* counterparts.
 static GEOSGeometry* json_to_geos_single_or_multi(json_t* geometry_json, GEOSContextHandle_t ctx, const char* type_str) {
-    GEOSGeomTypes target_geos_type;
+    int target_geos_type;
     int is_multi = 0;
     const char* single_type_str = type_str;
 
@@ -176,7 +176,7 @@ static GEOSGeometry* json_to_geos_single_or_multi(json_t* geometry_json, GEOSCon
             return polygon;
         }
     } else { // Handle Multi* geometries
-        GEOSGeomTypes collection_type;
+        int collection_type;
         if (target_geos_type == GEOS_POINT) collection_type = GEOS_MULTIPOINT;
         else if (target_geos_type == GEOS_LINESTRING) collection_type = GEOS_MULTILINESTRING;
         else if (target_geos_type == GEOS_POLYGON) collection_type = GEOS_MULTIPOLYGON;
@@ -288,7 +288,7 @@ static json_t* geos_coord_seq_to_json_array(const GEOSCoordSequence* seq, GEOSCo
     return coords_array_json;
 }
 
-static json_t* geos_to_json_single_or_multi(const GEOSGeometry* geos_geom, GEOSContextHandle_t ctx, GEOSGeomTypes geom_type_id) {
+static json_t* geos_to_json_single_or_multi(const GEOSGeometry* geos_geom, GEOSContextHandle_t ctx, int geom_type_id) {
     const char* type_str = NULL;
     json_t* coords_json = NULL;
 
@@ -387,7 +387,7 @@ static json_t* geos_to_json_geometrycollection(const GEOSGeometry* geos_geom, GE
 
 static json_t* geos_to_json(const GEOSGeometry* geos_geom, GEOSContextHandle_t ctx) {
     if (!geos_geom) return NULL;
-    GEOSGeomTypes geom_type_id = GEOSGeomTypeId_r(ctx, geos_geom);
+    int geom_type_id = GEOSGeomTypeId_r(ctx, geos_geom);
 
     switch (geom_type_id) {
         case GEOS_POINT:
@@ -439,7 +439,7 @@ GeometryValidationResultStatus validate_and_repair_geometry(
 
     char* reason = GEOSisValidReason_r(geos_context_handle, geos_geom);
     LOG_WARN("Geometry is invalid. Reason: %s", reason ? reason : "Unknown");
-    if(reason) GEOSfree_r(geos_context_handle, reason);
+    if(reason) GEOSFree_r(geos_context_handle, reason);
 
 
     if (!val_config->enable_repair) {
@@ -471,7 +471,7 @@ GeometryValidationResultStatus validate_and_repair_geometry(
     } else {
         reason = GEOSisValidReason_r(geos_context_handle, repaired_geom);
         LOG_WARN("Repaired geometry is still invalid. Reason: %s", reason ? reason : "Unknown");
-        if(reason) GEOSfree_r(geos_context_handle, reason);
+        if(reason) GEOSFree_r(geos_context_handle, reason);
         GEOSGeom_destroy_r(geos_context_handle, repaired_geom);
         return GEOMETRY_STATUS_REPAIR_FAILED;
     }

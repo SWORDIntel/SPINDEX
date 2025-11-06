@@ -358,27 +358,5 @@ csv_parser_cleanup_final: // Unified cleanup point
 
 void spindex_plugin_shutdown() {
     LOG_INFO("[%s v%s] Shutting down...", G_PLUGIN_NAME, G_PLUGIN_VERSION);
-    free(headers);
-    free(csv_data_copy);
-
-    ProcessedDataChunk* output_chunk = (ProcessedDataChunk*)malloc(sizeof(ProcessedDataChunk));
-    if (!output_chunk) {
-        LOG_ERROR("[%s] Failed to allocate output chunk.", G_PLUGIN_NAME);
-        free(json_buffer);
-        return NULL;
-    }
-    output_chunk->source_id = input_chunk->source_id ? strdup(input_chunk->source_id) : NULL;
-    if(input_chunk->source_id && !output_chunk->source_id) { LOG_WARN("[%s] strdup source_id failed for output", G_PLUGIN_NAME); }
-
-    output_chunk->data = (void*)json_buffer;
-    output_chunk->length = current_len;
-    output_chunk->data_type = CHUNK_TYPE_CSV_PARSED;
-
-    LOG_DEBUG("[%s] Finished processing source_id: %s. Output JSON length: %zu",
-              G_PLUGIN_NAME, output_chunk->source_id ? output_chunk->source_id : "N/A", output_chunk->length);
-    return output_chunk;
-}
-
-void spindex_plugin_shutdown() {
-    LOG_INFO("[%s v%s] Shutting down...", G_PLUGIN_NAME, G_PLUGIN_VERSION);
+    // No global state to cleanup in this plugin
 }
