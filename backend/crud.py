@@ -35,6 +35,20 @@ def get_ingestion_jobs(db: Session, skip: int = 0, limit: int = 100) -> List[mod
         raise DatabaseErrorException("Error fetching ingestion jobs.", original_exception=e)
 
 
+def get_job_by_hash(db: Session, file_hash: str) -> Optional[models.IngestionJobDB]:
+    """
+    Get ingestion job by file hash (for deduplication).
+    Returns None if no job with this hash exists.
+    """
+    try:
+        return db.query(models.IngestionJobDB).filter(
+            models.IngestionJobDB.data_hash_original == file_hash
+        ).first()
+    except sqlalchemy_exc.SQLAlchemyError as e:
+        logger.error(f"Database error while fetching job by hash: {e}", exc_info=True)
+        raise DatabaseErrorException("Error fetching job by hash.", original_exception=e)
+
+
 def create_ingestion_job(db: Session, job_data: Dict[str, Any]) -> models.IngestionJobDB:
     try:
         db_job = models.IngestionJobDB(

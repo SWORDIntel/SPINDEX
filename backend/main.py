@@ -806,6 +806,21 @@ async def aegis_secure_upload_file(
     file_hash = FileSecurityChecker.calculate_hash(file_content)
     logger.info(f"File hash (SHA-256): {file_hash}")
 
+    # FILE DEDUPLICATION: Check if file with same hash already exists
+    existing_job = crud.get_job_by_hash(db, file_hash)
+    if existing_job:
+        logger.info(f"Duplicate file detected: hash {file_hash[:16]}... already exists as job {existing_job.job_id}")
+
+        # Return existing job instead of creating duplicate
+        return FileUploadResponse(
+            job_id=existing_job.job_id,
+            filename=original_filename,
+            staged_filepath=existing_job.staged_file_path,
+            upload_timestamp=existing_job.upload_timestamp.isoformat(),
+            processing_status=existing_job.processing_status,
+            message=f"Duplicate file detected. Using existing job {existing_job.job_id}. Original file: {existing_job.original_filename}"
+        )
+
     # Validate MIME type
     if file.content_type not in ALLOWED_MIME_TYPES:
         logger.warning(f"Upload attempt by '{current_user.username}' for file '{original_filename}' failed: Invalid MIME type '{file.content_type}'.")
@@ -878,7 +893,8 @@ async def aegis_secure_upload_file(
         "source_type": "aegis_secure_upload_v1",
         "pipeline_stages_executed_log": [{"timestamp": datetime.utcnow().isoformat(), "stage": "upload", "status": "success", "message": f"File staged at {staged_file_path}"}],
         "error_log_references": [],
-        "upload_timestamp": datetime.utcnow()
+        "upload_timestamp": datetime.utcnow(),
+        "data_hash_original": file_hash  # For deduplication
     }
 
     try:
