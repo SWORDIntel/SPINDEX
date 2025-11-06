@@ -28,8 +28,15 @@ Thumbs.db
 
 # Build artifacts
 build/
+build_*/
 dist/
 *.egg-info/
+*.orig
+*.rej
+SPINDEX/build/
+SPINDEX/build_*/
+SPINDEX/build_cmake/
+SPINDEX/build_simple/
 
 # Database files (except initial schema)
 *.db
