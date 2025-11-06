@@ -43,10 +43,10 @@ echo "  Plugins with symbols: $WORKING_PLUGINS"
 echo "================================"
 echo ""
 
-if [ $TOTAL_PLUGINS -eq 21 ]; then
-    echo "✅ All 21 expected plugins present!"
+if [ $TOTAL_PLUGINS -eq 22 ]; then
+    echo "✅ All 22 expected plugins present!"
 else
-    echo "⚠️  Expected 21 plugins, found $TOTAL_PLUGINS"
+    echo "⚠️  Expected 22 plugins, found $TOTAL_PLUGINS"
 fi
 
 # Test application flags

@@ -9,6 +9,7 @@
 #include "mmap_reader.h"
 #include "utils.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 void demonstrate_mmap_reading(const char* filepath) {

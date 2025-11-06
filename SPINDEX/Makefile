@@ -67,8 +67,22 @@ rebuild: clean deps configure build
 
 # Run tests
 test:
-	@echo "Running SPINDEX tests..."
+	@echo "Running SPINDEX comprehensive test suite..."
+	@./run_all_tests.sh
+
+# Run quick plugin test only
+test-plugins:
 	@./test_plugins.sh
+
+# Build and run feature tests
+test-avx512:
+	@gcc -o tests/test_avx512_simple tests/test_avx512_simple.c -ldl
+	@./tests/test_avx512_simple
+
+test-mmap:
+	@gcc -o tests/test_mmap_functionality tests/test_mmap_functionality.c \
+		core/mmap_reader.c core/utils.c -Iinclude -Icore -lcurl -ljansson -lm -lz
+	@./tests/test_mmap_functionality
 
 # Run the application
 run:
@@ -112,9 +126,9 @@ core:
 # Memory-mapped I/O example
 mmap-example:
 	@echo "Building mmap example..."
-	@gcc -o mmap_example core/mmap_example.c build_cmake/lib/libspindex_core_lib.a \
+	@gcc -o mmap_example core/mmap_example.c core/mmap_reader.c core/utils.c \
 		-Iinclude -Icore -pthread -lcurl \
-		$$(pkg-config --libs jansson geos_c) -lm -lz
+		$$(pkg-config --libs jansson 2>/dev/null || echo "-ljansson") -lm -lz
 	@echo "✓ Built mmap_example"
 	@echo ""
 	@echo "Usage: ./mmap_example <filepath>"
