@@ -1,5 +1,8 @@
 backend/staging_area/
 backend/processed_area/
+staging_area/
+processed_area/
+trusted_data_area/
 
 # Python cache files
 __pycache__/
@@ -27,3 +30,12 @@ Thumbs.db
 build/
 dist/
 *.egg-info/
+
+# Database files (except initial schema)
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+backend.log
