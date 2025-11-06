@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "config_manager.h" // For Config structure
+#include "config_manager.h" // For SpindexConfig structure
 #include "data_types.h"     // For AEGIS_PROCESSING_STATUS
 #include "complex_geometry_handler.h" // The module to test
 #include "utils.h"          // For any utility functions if needed (e.g., logging for debugging)
@@ -45,8 +45,8 @@ static char* read_file_to_string(const char* filename) {
 // Test loading configuration
 static void test_load_config() {
     printf("Running test: test_load_config...\n");
-    Config cfg;
-    memset(&cfg, 0, sizeof(Config)); // Zero out the config
+    SpindexConfig cfg;
+    memset(&cfg, 0, sizeof(SpindexConfig)); // Zero out the config
     ComplexGeometryHandlerConfig handler_cfg;
 
     // Default strategy (SPLIT)
@@ -184,7 +184,7 @@ static void test_reject_strategy() {
 // Test FILTER strategy
 static void test_filter_strategy() {
     printf("Running test: test_filter_strategy...\n");
-    Config global_cfg;
+    SpindexConfig global_cfg;
     ComplexGeometryHandlerConfig handler_cfg;
     const char* input_filename = "test_filter_input.json";
     char output_filename[256];
@@ -195,7 +195,7 @@ static void test_filter_strategy() {
     assert(create_temp_file(input_filename, geojson_content_mixed));
 
     // Test Case 1: Filter for "polygon"
-    memset(&global_cfg, 0, sizeof(Config));
+    memset(&global_cfg, 0, sizeof(SpindexConfig));
     global_cfg.num_settings = 0;
     strncpy(global_cfg.settings[global_cfg.num_settings].key, "AEGIS_COMPLEX_GEOMETRY_STRATEGY", MAX_KEY_LEN-1);
     strncpy(global_cfg.settings[global_cfg.num_settings].value, "filter_polygon", MAX_VALUE_LEN-1);
@@ -218,7 +218,7 @@ static void test_filter_strategy() {
     free(output_content);
 
     // Test Case 2: Filter for "point"
-    memset(&global_cfg, 0, sizeof(Config));
+    memset(&global_cfg, 0, sizeof(SpindexConfig));
     global_cfg.num_settings = 0;
     strncpy(global_cfg.settings[global_cfg.num_settings].key, "AEGIS_COMPLEX_GEOMETRY_STRATEGY", MAX_KEY_LEN-1);
     strncpy(global_cfg.settings[global_cfg.num_settings].value, "filter_point", MAX_VALUE_LEN-1);

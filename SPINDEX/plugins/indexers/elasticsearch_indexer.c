@@ -98,28 +98,21 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk *input_
 
     char* extracted_phrases = NULL;
     if (S_GLOBAL_INDEXER_DATA->avx_search_plugin && S_GLOBAL_INDEXER_DATA->phrases_to_extract) {
+        // AVX search integration disabled for now - needs proper plugin API
+        // TODO: Implement proper plugin function call interface
+        /*
         AvxSearchParams params = {
             .text_to_search = input_chunk,
             .phrases_to_find = &(ProcessedDataChunk){
                 .data = (unsigned char*)S_GLOBAL_INDEXER_DATA->phrases_to_extract,
                 .length = strlen(S_GLOBAL_INDEXER_DATA->phrases_to_extract),
-                .data_type = CHUNK_TYPE_TEXT
+                .data_type = CHUNK_TYPE_UTF8_TEXT
             },
             .case_sensitive = false,
             .find_all_occurrences = true,
             .max_hits_per_doc = 0
         };
-
-        ProcessedDataChunk search_chunk = {
-            .data = (unsigned char*)&params,
-            .length = sizeof(params),
-            .data_type = CHUNK_TYPE_CUSTOM
-        };
-
-        ProcessedDataChunk* result_chunk = S_GLOBAL_INDEXER_DATA->avx_search_plugin->process(&search_chunk);
-        if (result_chunk && result_chunk->data) {
-            extracted_phrases = (char*)result_chunk->data;
-        }
+        */
     }
 
     char doc_id_buf[64];
