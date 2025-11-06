@@ -1,0 +1,55 @@
+# Build artifacts
+build/
+build_cmake/
+build_cmake_agent/
+*.o
+*.a
+*.so
+*.dylib
+
+# Compiled test executables
+mmap_example
+tests/test_avx512_simple
+tests/test_mmap_functionality
+core/test_data_types
+core/test_config_manager
+core/test_plugin_interface
+core/test_plugin_loader
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+keyplug_venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+*.log.*
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+temp_*/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Configuration (keep sample configs)
+config.ini
+
+# Test output
+/tmp/test_*.txt

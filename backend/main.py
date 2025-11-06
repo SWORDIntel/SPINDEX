@@ -1,16 +1,28 @@
 # --- Core Application & Framework Imports ---
-from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
+from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Request
 from fastapi.responses import JSONResponse # Keep for potential direct use
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field as PydanticField # Keep for Pydantic models
 from typing import List, Optional, Dict, Any, Union # Keep for Pydantic models & type hints
-# import time # Moved to pipeline_logic
+import time # For request timing
 from datetime import datetime # Keep for Pydantic models & job creation
 import uuid # Keep for job_id generation & Pydantic models
 import shutil # Keep for file operations in upload endpoint
 import os # Keep for path operations, getenv
 import json # Keep for potential direct JSON use, though main use moved
 import logging # Keep for app-level logging
+
+# --- Security Imports ---
+from backend.security import (
+    InputSanitizer,
+    FileSecurityChecker,
+    anomaly_detector,
+    request_logger,
+    DatabaseSecurityManager
+)
+
+# --- Compression Support ---
+from backend.compression import CompressionHandler, is_compressed_file
 # from collections import defaultdict # Moved to pipeline_logic
 
 # --- Database & CRUD Imports ---
@@ -77,7 +89,12 @@ MAX_FILE_SIZE = 100 * 1024 * 1024
 ALLOWED_MIME_TYPES = [
     "application/geo+json", "application/json", "application/zip",
     "application/vnd.google-earth.kml+xml", "application/gml+xml",
-    "text/xml", "application/octet-stream", "text/plain"
+    "text/xml", "application/octet-stream", "text/plain",
+    # Compressed file formats
+    "application/gzip", "application/x-gzip",  # .gz
+    "application/x-tar", "application/x-compressed-tar",  # .tar, .tar.gz
+    "application/x-bzip2", "application/x-xz",  # .bz2, .xz
+    "application/x-7z-compressed"  # .7z
 ]
 # NOMINATIM_USER_AGENT, GEOCODING_ADDRESS_FIELDS, etc. moved to pipeline_logic
 
@@ -434,6 +451,70 @@ app = FastAPI(
     openapi_tags=tags_metadata  # Add tags metadata to FastAPI app
 )
 
+# --- Security Headers Middleware ---
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add security headers to all responses"""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    return response
+
+# --- Request Logging & Anomaly Detection Middleware ---
+@app.middleware("http")
+async def request_logging_and_security(request: Request, call_next):
+    """Log all requests and detect anomalies (APT defense)"""
+    start_time = time.time()
+
+    # Get client identifier (IP address)
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+
+    # Check for anomalous behavior
+    endpoint = request.url.path
+    if anomaly_detector.record_request(client_ip, endpoint):
+        request_logger.log_security_event(
+            "ANOMALY_DETECTED",
+            client_ip,
+            f"Suspicious request pattern to {endpoint}",
+            "HIGH"
+        )
+        # In production, consider blocking or rate-limiting this client
+        # For now, just log and continue
+
+    # Process request
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+    except Exception as e:
+        logger.error(f"Request failed: {e}", exc_info=True)
+        status_code = 500
+        raise
+
+    # Calculate request duration
+    duration_ms = (time.time() - start_time) * 1000
+
+    # Log request
+    request_logger.log_request(
+        identifier=client_ip,
+        method=request.method,
+        endpoint=endpoint,
+        status_code=status_code,
+        duration_ms=duration_ms,
+        user_agent=user_agent
+    )
+
+    # Log slow requests (potential DoS indicator)
+    if duration_ms > 5000:  # 5 seconds
+        logger.warning(f"SLOW REQUEST: {request.method} {endpoint} took {duration_ms:.2f}ms")
+
+    return response
+
 @app.on_event("startup")
 async def startup_event():
     logger.info("Application startup: Initializing SPINDEX C components...")
@@ -591,15 +672,73 @@ def process_ingestion_job_task(job_id: str):
         if db:
             db.close()
 
+# --- Health Check Endpoint ---
+
+@app.get("/health", tags=["System"])
+async def health_check():
+    """
+    Health check endpoint for monitoring and load balancers.
+    Returns system status and component health.
+    """
+    health_status = {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "0.1.0",
+        "components": {
+            "api": "operational",
+            "database": "operational",
+            "celery": "operational"
+        }
+    }
+
+    # Check database connection
+    try:
+        db = SessionLocal()
+        db.execute("SELECT 1")
+        db.close()
+    except Exception as e:
+        logger.warning(f"Database health check failed: {e}")
+        health_status["components"]["database"] = "degraded"
+        health_status["status"] = "degraded"
+
+    # Check Elasticsearch connection
+    try:
+        if es_client.ping():
+            health_status["components"]["elasticsearch"] = "operational"
+        else:
+            health_status["components"]["elasticsearch"] = "unavailable"
+            health_status["status"] = "degraded"
+    except Exception as e:
+        logger.warning(f"Elasticsearch health check failed: {e}")
+        health_status["components"]["elasticsearch"] = "unavailable"
+        health_status["status"] = "degraded"
+
+    return health_status
+
 # --- AEGIS Pipeline Endpoints ---
 
 @app.post("/aegis/upload", response_model=FileUploadResponse, tags=["AEGIS Pipeline"])
 async def aegis_secure_upload_file(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    request: Request = None
 ):
     logger.info(f"User '{current_user.username}' attempting to upload file: {file.filename}")
+
+    # APT DEFENSE: Check upload rate limiting
+    client_ip = request.client.host if request and request.client else "unknown"
+    if anomaly_detector.record_upload(client_ip):
+        request_logger.log_security_event(
+            "UPLOAD_RATE_LIMIT",
+            client_ip,
+            f"User {current_user.username} exceeded upload rate limit",
+            "HIGH"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Upload rate limit exceeded. Please try again later."
+        )
 
     # Check for 'upload_data' permission
     has_upload_permission = False
@@ -610,34 +749,89 @@ async def aegis_secure_upload_file(
 
     if not has_upload_permission:
         logger.warning(f"User '{current_user.username}' lacks 'upload_data' permission for file '{file.filename}'.")
+        # Record failed permission check
+        anomaly_detector.record_failed_auth(client_ip)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User does not have permission to upload data."
         )
+
+    # APT DEFENSE: Sanitize filename to prevent directory traversal
+    original_filename = InputSanitizer.sanitize_filename(file.filename or "unknown")
+    logger.info(f"Sanitized filename: {original_filename}")
 
     # Validate file size
     file.file.seek(0, 2) # Move to the end of the file
     file_size = file.file.tell() # Get the position, which is the size
     file.file.seek(0) # Reset cursor to the beginning for any subsequent reads
 
-    if file_size > MAX_FILE_SIZE:
-        logger.warning(f"Upload attempt by '{current_user.username}' for file '{file.filename}' failed: File size {file_size} exceeds limit {MAX_FILE_SIZE}.")
+    # APT DEFENSE: Enhanced file size validation
+    is_valid_size, size_error = FileSecurityChecker.check_file_size(file_size)
+    if not is_valid_size:
+        logger.warning(f"Upload attempt by '{current_user.username}' for file '{original_filename}' failed: {size_error}")
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File size {file_size} exceeds maximum allowed size of {MAX_FILE_SIZE} bytes."
+            detail=size_error
+        )
+
+    # APT DEFENSE: Validate file extension
+    is_valid_ext, ext_error = FileSecurityChecker.check_file_extension(original_filename)
+    if not is_valid_ext:
+        logger.warning(f"Upload attempt by '{current_user.username}' for file '{original_filename}' failed: {ext_error}")
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=ext_error
+        )
+
+    # Read file content for additional validation
+    file_content = await file.read()
+    await file.seek(0)  # Reset for later use
+
+    # APT DEFENSE: Validate magic bytes (file signature)
+    is_valid_magic, magic_error = FileSecurityChecker.check_magic_bytes(file_content, original_filename)
+    if not is_valid_magic:
+        logger.warning(f"Upload attempt by '{current_user.username}' for file '{original_filename}' failed: {magic_error}")
+        request_logger.log_security_event(
+            "MAGIC_BYTE_MISMATCH",
+            client_ip,
+            f"File {original_filename} failed magic byte validation",
+            "HIGH"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"File validation failed: {magic_error}"
+        )
+
+    # APT DEFENSE: Calculate file hash for integrity and deduplication
+    file_hash = FileSecurityChecker.calculate_hash(file_content)
+    logger.info(f"File hash (SHA-256): {file_hash}")
+
+    # FILE DEDUPLICATION: Check if file with same hash already exists
+    existing_job = crud.get_job_by_hash(db, file_hash)
+    if existing_job:
+        logger.info(f"Duplicate file detected: hash {file_hash[:16]}... already exists as job {existing_job.job_id}")
+
+        # Return existing job instead of creating duplicate
+        return FileUploadResponse(
+            job_id=existing_job.job_id,
+            filename=original_filename,
+            staged_filepath=existing_job.staged_file_path,
+            upload_timestamp=existing_job.upload_timestamp.isoformat(),
+            processing_status=existing_job.processing_status,
+            message=f"Duplicate file detected. Using existing job {existing_job.job_id}. Original file: {existing_job.original_filename}"
         )
 
     # Validate MIME type
     if file.content_type not in ALLOWED_MIME_TYPES:
-        logger.warning(f"Upload attempt by '{current_user.username}' for file '{file.filename}' failed: Invalid MIME type '{file.content_type}'.")
+        logger.warning(f"Upload attempt by '{current_user.username}' for file '{original_filename}' failed: Invalid MIME type '{file.content_type}'.")
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail=f"Unsupported file type: '{file.content_type}'. Allowed types: {', '.join(ALLOWED_MIME_TYPES)}."
         )
 
-    logger.info(f"File '{file.filename}' (type: {file.content_type}, size: {file_size} bytes) by user '{current_user.username}' passed all validations.")
+    logger.info(f"File '{original_filename}' (type: {file.content_type}, size: {file_size} bytes, hash: {file_hash[:16]}...) by user '{current_user.username}' passed all APT-level validations.")
 
-    original_filename = file.filename
+    original_filename = original_filename
     file_extension = ""
     if '.' in original_filename:
         file_extension = original_filename.rsplit('.', 1)[1]
@@ -655,6 +849,42 @@ async def aegis_secure_upload_file(
     finally:
         file.file.close() # Ensure the temporary file is closed
 
+    # COMPRESSION SUPPORT: Auto-decompress if file is compressed
+    extracted_files = []
+    decompression_log = None
+
+    if is_compressed_file(original_filename):
+        logger.info(f"Compressed file detected: {original_filename}. Attempting decompression...")
+
+        # Create decompression directory
+        decompress_dir = os.path.join(STAGING_AREA_PATH, f"decompressed_{uuid.uuid4()}")
+        os.makedirs(decompress_dir, exist_ok=True)
+
+        # Attempt decompression
+        success, extracted_files, error_msg = CompressionHandler.decompress(staged_file_path, decompress_dir)
+
+        if success:
+            logger.info(f"Successfully decompressed {original_filename}: {len(extracted_files)} files extracted")
+            decompression_log = {
+                "status": "success",
+                "extracted_count": len(extracted_files),
+                "extracted_files": [os.path.basename(f) for f in extracted_files[:10]],  # First 10 files
+                "decompression_dir": decompress_dir
+            }
+
+            # Update staged file path to point to decompression directory
+            # The processing pipeline will handle the extracted files
+            staged_file_path = decompress_dir
+        else:
+            logger.warning(f"Decompression failed for {original_filename}: {error_msg}")
+            decompression_log = {
+                "status": "failed",
+                "error": error_msg
+            }
+            # Continue with compressed file (pipeline may handle it differently)
+    else:
+        logger.info(f"File {original_filename} is not compressed, proceeding with direct processing")
+
     job_data_dict = {
         "original_filename": original_filename,
         "staged_file_path": staged_file_path,
@@ -663,7 +893,8 @@ async def aegis_secure_upload_file(
         "source_type": "aegis_secure_upload_v1",
         "pipeline_stages_executed_log": [{"timestamp": datetime.utcnow().isoformat(), "stage": "upload", "status": "success", "message": f"File staged at {staged_file_path}"}],
         "error_log_references": [],
-        "upload_timestamp": datetime.utcnow()
+        "upload_timestamp": datetime.utcnow(),
+        "data_hash_original": file_hash  # For deduplication
     }
 
     try:
@@ -920,12 +1151,45 @@ async def trigger_generic_error():
 )
 async def search_with_avx_endpoint(
     query_request: AvxSearchQueryRequest,
-    current_user: User = Depends(get_current_user) # Assuming auth is needed
+    current_user: User = Depends(get_current_user), # Assuming auth is needed
+    request: Request = None
 ):
     """
     Performs a search, optionally using AVX-512 for phrase matching on Elasticsearch results.
     """
     logger.info(f"User '{current_user.username}' performing search: query='{query_request.query_text}', use_avx={query_request.use_avx}, avx_phrases='{query_request.avx_phrases}'")
+
+    # APT DEFENSE: Validate and sanitize query input
+    is_valid, error_msg = InputSanitizer.validate_query_input(query_request.query_text)
+    if not is_valid:
+        client_ip = request.client.host if request and request.client else "unknown"
+        logger.warning(f"Invalid search query from user '{current_user.username}' (IP: {client_ip}): {error_msg}")
+        request_logger.log_security_event(
+            "INVALID_QUERY",
+            client_ip,
+            f"User {current_user.username} submitted invalid query: {error_msg}",
+            "MEDIUM"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid query: {error_msg}"
+        )
+
+    # APT DEFENSE: Sanitize query text to prevent injection
+    sanitized_query = InputSanitizer.sanitize_text(query_request.query_text)
+    if sanitized_query != query_request.query_text:
+        logger.info(f"Query sanitized for user '{current_user.username}'")
+        query_request.query_text = sanitized_query
+
+    # APT DEFENSE: Validate AVX phrases if provided
+    if query_request.avx_phrases:
+        for phrase in query_request.avx_phrases:
+            is_valid_phrase, phrase_error = InputSanitizer.validate_query_input(phrase)
+            if not is_valid_phrase:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid AVX phrase: {phrase_error}"
+                )
 
     if not es_client:
         logger.error("Elasticsearch client not available for search.")

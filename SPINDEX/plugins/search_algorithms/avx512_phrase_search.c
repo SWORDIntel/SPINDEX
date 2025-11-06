@@ -68,6 +68,8 @@ void avx512_shutdown() {
     LOG_INFO("AVX-512 Phrase Searcher plugin shutting down.");
 }
 
+// Mark this function to use AVX512 instructions
+__attribute__((target("avx512f,avx512bw")))
 const char* avx512_find_substring(const char* text, size_t text_len, const char* phrase, size_t phrase_len) {
     if (phrase_len == 0) return NULL;
 
@@ -115,7 +117,7 @@ ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
 
     const char* text_to_search = (const char*)params->text_to_search->data;
 
-    char* phrases_str_copy = sp_strdup((const char*)params->phrases_to_find->data);
+    char* phrases_str_copy = strdup((const char*)params->phrases_to_find->data);
     if (!phrases_str_copy) {
         LOG_ERROR("AVX Search: Failed to allocate memory for phrases copy.");
         return NULL;
@@ -200,7 +202,7 @@ ProcessedDataChunk* avx512_process_data(const ProcessedDataChunk *input_chunk) {
     }
     output_chunk->data = (unsigned char*)json_buffer.buffer;
     output_chunk->length = json_buffer.length;
-    output_chunk->source_id = params->text_to_search->source_id ? sp_strdup(params->text_to_search->source_id) : NULL;
+    output_chunk->source_id = params->text_to_search->source_id ? strdup(params->text_to_search->source_id) : NULL;
     output_chunk->data_type = CHUNK_TYPE_PARSED_JSON;
 
     return output_chunk;
@@ -268,4 +270,16 @@ static void escape_json_string(const char *input, DynamicBuffer *db) {
                 break;
         }
     }
+}
+
+// Plugin dependency management (stub - no dependencies)
+SpindexPluginDependency* spindex_plugin_get_dependencies(int* count) {
+    if (count) *count = 0;
+    return NULL;  // This plugin has no dependencies
+}
+
+void spindex_plugin_free_dependencies_list(SpindexPluginDependency* dependencies, int count) {
+    // Nothing to free - we returned NULL
+    (void)dependencies;
+    (void)count;
 }

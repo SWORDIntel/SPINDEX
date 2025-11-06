@@ -123,3 +123,16 @@ ProcessedDataChunk* spindex_plugin_process_data(const ProcessedDataChunk *input_
     LOG_INFO("[%s] Successfully preprocessed text. Original length: %zu, Cleaned length: %zu", G_PLUGIN_NAME, original_length, output_chunk->length);
     return output_chunk;
 }
+
+// Plugin dependency management (stub - no dependencies)
+SpindexPluginDependency* spindex_plugin_get_dependencies(int* count) {
+    if (count) *count = 0;
+    return NULL;  // This plugin has no dependencies
+}
+
+void spindex_plugin_free_dependencies_list(SpindexPluginDependency* dependencies, int count) {
+    // Nothing to free - we returned NULL
+    (void)dependencies;
+    (void)count;
+}
+

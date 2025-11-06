@@ -1,0 +1,62 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "region_001",
+      "properties": {
+        "name": "Processing Zone A",
+        "type": "operational",
+        "capacity": "100TB",
+        "status": "active"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-122.5, 37.7],
+          [-122.3, 37.7],
+          [-122.3, 37.8],
+          [-122.5, 37.8],
+          [-122.5, 37.7]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "region_002",
+      "properties": {
+        "name": "Storage Area B",
+        "type": "archive",
+        "capacity": "500TB",
+        "status": "active"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.1, 40.6],
+          [-73.9, 40.6],
+          [-73.9, 40.8],
+          [-74.1, 40.8],
+          [-74.1, 40.6]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "route_001",
+      "properties": {
+        "name": "Data Transfer Route",
+        "bandwidth": "10Gbps",
+        "latency_ms": 45
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-122.4, 37.75],
+          [-100.0, 39.0],
+          [-74.0, 40.7]
+        ]
+      }
+    }
+  ]
+}

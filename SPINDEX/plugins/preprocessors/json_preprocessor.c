@@ -214,3 +214,15 @@ static char *plugin_internal_preprocess_json(const char *raw_content) {
     LOG_DEBUG("[%s] plugin_internal_preprocess_json: Finished.", G_PLUGIN_NAME);
     return current_content; // This string must be freed by the caller (or by ProcessedDataChunk freeing)
 }
+
+// Plugin dependency management (stub - no dependencies)
+SpindexPluginDependency* spindex_plugin_get_dependencies(int* count) {
+    if (count) *count = 0;
+    return NULL;  // This plugin has no dependencies
+}
+
+void spindex_plugin_free_dependencies_list(SpindexPluginDependency* dependencies, int count) {
+    // Nothing to free - we returned NULL
+    (void)dependencies;
+    (void)count;
+}

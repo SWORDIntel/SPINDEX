@@ -1,0 +1,14 @@
+# robots.txt for SPINDEX Backend API
+
+User-agent: *
+Disallow: /
+
+# Prevent indexing of API docs
+Disallow: /docs
+Disallow: /redoc
+Disallow: /openapi.json
+
+# No sensitive endpoints
+Disallow: /users/
+Disallow: /indexes/
+Disallow: /aegis/
