@@ -93,10 +93,9 @@ macro(add_core_test test_exe_name test_src_file)
     # endif()
 
     # For tests that load plugins
-    if("${test_exe_name}" STREQUAL "test_ingestion_pipeline" OR \
-       "${test_exe_name}" STREQUAL "test_elasticsearch_indexing" OR \
-       "${test_exe_name}" STREQUAL "test_plugin_loader"
-      )
+    if("${test_exe_name}" STREQUAL "test_ingestion_pipeline" OR
+       "${test_exe_name}" STREQUAL "test_elasticsearch_indexing" OR
+       "${test_exe_name}" STREQUAL "test_plugin_loader")
         set_tests_properties(${test_exe_name} PROPERTIES
             ENVIRONMENT "SPINDEX_PLUGIN_DIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
         # Ensure plugins are built before these tests run
