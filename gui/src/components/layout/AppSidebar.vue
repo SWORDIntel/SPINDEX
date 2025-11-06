@@ -2,18 +2,16 @@
   <aside class="app-sidebar">
     <nav>
       <ul>
-        <template v-for="item in navItems" :key="item.path">
-          <!-- Top-level item -->
-          <!-- TODO: Add RBAC v-if check here later using item.requiredRole and authStore -->
+        <template v-for="item in filteredNavItems" :key="item.path">
+          <!-- Top-level item with RBAC filtering applied -->
           <li>
             <RouterLink :to="item.path">
               <span v-if="item.icon" :class="item.icon"></span> <!-- Placeholder for icon -->
               {{ item.label }}
             </RouterLink>
-            <!-- Child items if any -->
+            <!-- Child items if any (already filtered by RBAC) -->
             <ul v-if="item.children && item.children.length > 0" class="child-menu">
               <template v-for="child in item.children" :key="child.path">
-                <!-- TODO: Add RBAC v-if check here for child items -->
                 <li>
                   <RouterLink :to="child.path">
                     <span v-if="child.icon" :class="child.icon"></span>
@@ -31,7 +29,8 @@
 
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useAuthStore } from '@/store/auth'
 
 interface NavItem {
   path: string;
@@ -40,6 +39,8 @@ interface NavItem {
   requiredRole?: Array<'admin' | 'analyst' | 'viewer'>; // Example roles
   children?: NavItem[];
 }
+
+const authStore = useAuthStore()
 
 // Placeholder navigation items. In a real app, this might come from a store or config.
 // For now, no roles are required for these basic links.
@@ -63,23 +64,23 @@ const navItems = ref<NavItem[]>([
   { path: '/settings', label: 'Settings', icon: 'icon-settings' },
 ])
 
-// Future: Filter navItems based on user role from authStore
-// const filteredNavItems = computed(() => {
-//   const userRoles = authStore.user?.roles || []; // Assuming roles is an array of strings
-//   return navItems.value.filter(item =>
-//     !item.requiredRole || item.requiredRole.some(role => userRoles.includes(role))
-//   ).map(item => {
-//     if (item.children) {
-//       return {
-//         ...item,
-//         children: item.children.filter(child =>
-//           !child.requiredRole || child.requiredRole.some(role => userRoles.includes(role))
-//         )
-//       };
-//     }
-//     return item;
-//   });
-// });
+// Filter navItems based on user role from authStore
+const filteredNavItems = computed(() => {
+  const userRoles = authStore.user?.roles || []; // Assuming roles is an array of strings
+  return navItems.value.filter(item =>
+    !item.requiredRole || item.requiredRole.some(role => userRoles.includes(role))
+  ).map(item => {
+    if (item.children) {
+      return {
+        ...item,
+        children: item.children.filter(child =>
+          !child.requiredRole || child.requiredRole.some(role => userRoles.includes(role))
+        )
+      };
+    }
+    return item;
+  });
+})
 
 </script>
 

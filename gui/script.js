@@ -504,19 +504,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if(wizardValGeom) wizardValGeom.textContent = geomSummary;
 
-        // TODO: Populate wizardAttributesSelect. Requires backend to provide feature attributes,
-        // ideally in selectedProcessedJobData.feature_attributes (as a list of strings)
-        // or via a new endpoint that returns the schema/attributes of the processed data.
+        // Populate wizardAttributesSelect with schema information from backend
         if (wizardAttributesSelect) {
             wizardAttributesSelect.innerHTML = ''; // Clear existing
             let attributes = [];
-            if (selectedProcessedJobData && selectedProcessedJobData.schema_preview) { // Assuming schema_preview might exist
-                // Example: selectedProcessedJobData.schema_preview = {"properties": {"name": "string", "value": "number"}}
-                // This is hypothetical, adapt if backend provides attributes differently
+
+            // Check for schema_preview in validation_summary (new location)
+            if (selectedProcessedJobData && selectedProcessedJobData.validation_summary && selectedProcessedJobData.validation_summary.schema_preview) {
+                const schemaPreview = selectedProcessedJobData.validation_summary.schema_preview;
+                if (schemaPreview.properties) {
+                    attributes = Object.keys(schemaPreview.properties);
+                }
+            }
+            // Fallback to old location for backward compatibility
+            else if (selectedProcessedJobData && selectedProcessedJobData.schema_preview) {
                 if (selectedProcessedJobData.schema_preview.properties) {
                     attributes = Object.keys(selectedProcessedJobData.schema_preview.properties);
-                } else if (Array.isArray(selectedProcessedJobData.schema_preview)) { // Or if it's just a list of strings
-                     attributes = selectedProcessedJobData.schema_preview;
+                } else if (Array.isArray(selectedProcessedJobData.schema_preview)) {
+                    attributes = selectedProcessedJobData.schema_preview;
                 }
             }
 

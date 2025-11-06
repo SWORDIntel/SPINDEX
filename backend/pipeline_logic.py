@@ -71,6 +71,63 @@ def calculate_sha256_checksum(file_path: str) -> str:
 
 # --- Helper Functions (moved from main.py) ---
 
+def extract_schema_from_geojson(features: list, logger_instance: logging.Logger, max_features_to_sample: int = 100) -> dict:
+    """
+    Extracts schema information from GeoJSON features by sampling properties.
+    Returns a dict with property names and their types.
+    """
+    if not features:
+        return {"properties": {}, "sample_count": 0}
+
+    # Sample a subset of features to determine schema
+    sample_size = min(len(features), max_features_to_sample)
+    sampled_features = features[:sample_size]
+
+    property_types = {}
+    for feature in sampled_features:
+        properties = feature.get("properties", {})
+        if not isinstance(properties, dict):
+            continue
+
+        for prop_name, prop_value in properties.items():
+            if prop_name not in property_types:
+                property_types[prop_name] = set()
+
+            # Determine the type of the property value
+            if prop_value is None:
+                property_types[prop_name].add("null")
+            elif isinstance(prop_value, bool):
+                property_types[prop_name].add("boolean")
+            elif isinstance(prop_value, int):
+                property_types[prop_name].add("integer")
+            elif isinstance(prop_value, float):
+                property_types[prop_name].add("number")
+            elif isinstance(prop_value, str):
+                property_types[prop_name].add("string")
+            elif isinstance(prop_value, list):
+                property_types[prop_name].add("array")
+            elif isinstance(prop_value, dict):
+                property_types[prop_name].add("object")
+            else:
+                property_types[prop_name].add("unknown")
+
+    # Convert sets to lists and simplify type representation
+    schema = {}
+    for prop_name, types in property_types.items():
+        types_list = list(types)
+        if len(types_list) == 1:
+            schema[prop_name] = types_list[0]
+        else:
+            # Remove 'null' from mixed types for cleaner display
+            non_null_types = [t for t in types_list if t != "null"]
+            if non_null_types:
+                schema[prop_name] = non_null_types[0] if len(non_null_types) == 1 else f"mixed ({', '.join(sorted(non_null_types))})"
+            else:
+                schema[prop_name] = "null"
+
+    logger_instance.info(f"Extracted schema with {len(schema)} properties from {sample_size} features")
+    return {"properties": schema, "sample_count": sample_size, "total_features": len(features)}
+
 def geocode_and_update_features(features: list, address_fields: list, nominatim_user_agent: str, logger_instance: logging.Logger) -> tuple[list, dict]:
     """
     Geocodes features that lack geometry using specified address fields.
@@ -421,6 +478,12 @@ def execute_aegis_pipeline(job_id: str, db: Session, logger_instance: logging.Lo
             with open(job.intermediate_geojson_path, 'r+') as f:
                 geojson_data = json.load(f)
                 if 'features' not in geojson_data or not isinstance(geojson_data['features'], list): raise ValueError("Invalid GeoJSON features list.")
+
+                # Extract schema from the GeoJSON features for the frontend
+                schema_preview = extract_schema_from_geojson(geojson_data['features'], logger_instance)
+                job.validation_summary = {**(job.validation_summary or {}), "schema_preview": schema_preview}
+                db.commit()
+
                 updated_features, geocoding_summary_dict = geocode_and_update_features(geojson_data['features'], GEOCODING_ADDRESS_FIELDS, NOMINATIM_USER_AGENT, logger_instance)
                 job.geocoding_summary = geocoding_summary_dict; geojson_data['features'] = updated_features
                 f.seek(0); json.dump(geojson_data, f); f.truncate()
@@ -767,6 +830,12 @@ def execute_aegis_pipeline(job_id: str, db: Session, logger_instance: logging.Lo
             with open(job.intermediate_geojson_path, 'r+') as f:
                 geojson_data = json.load(f)
                 if 'features' not in geojson_data or not isinstance(geojson_data['features'], list): raise ValueError("Invalid GeoJSON features list.")
+
+                # Extract schema from the GeoJSON features for the frontend
+                schema_preview = extract_schema_from_geojson(geojson_data['features'], logger_instance)
+                job.validation_summary = {**(job.validation_summary or {}), "schema_preview": schema_preview}
+                db.commit()
+
                 updated_features, geocoding_summary_dict = geocode_and_update_features(geojson_data['features'], GEOCODING_ADDRESS_FIELDS, NOMINATIM_USER_AGENT, logger_instance)
                 job.geocoding_summary = geocoding_summary_dict; geojson_data['features'] = updated_features
                 f.seek(0); json.dump(geojson_data, f); f.truncate()

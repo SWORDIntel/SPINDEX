@@ -187,12 +187,13 @@ def get_query_history_for_user(db: Session, user_id: str, skip: int = 0, limit: 
     Retrieves a list of query history records for a specific user_id, with pagination.
     Orders by timestamp descending.
     """
-    return db.query(models.QueryHistoryDB)\
-             .filter(models.QueryHistoryDB.user_id == user_id)\
-             .order_by(models.QueryHistoryDB.timestamp.desc())\
-             .offset(skip)\
-             .limit(limit)\
-             .all()
+    try:
+        return db.query(models.QueryHistoryDB)\
+                 .filter(models.QueryHistoryDB.user_id == user_id)\
+                 .order_by(models.QueryHistoryDB.timestamp.desc())\
+                 .offset(skip)\
+                 .limit(limit)\
+                 .all()
     except sqlalchemy_exc.SQLAlchemyError as e:
         logger.error(f"Database error retrieving query history for user {user_id}: {e}", exc_info=True)
         raise DatabaseErrorException(f"Error retrieving query history for user {user_id}.", original_exception=e)

@@ -936,20 +936,40 @@ async def search_with_avx_endpoint(
     # --- Pass 1: Elasticsearch Broad Search ---
     es_search_start_time = time.time()
     try:
-        # Example: Simple match query on a 'content' field.
-        # TODO: Replace with actual index name and more sophisticated query construction.
-        # The index name should likely come from QueryRequest or be globally configured.
-        es_response = es_client.search(
-            index=query_request.index_name or DEFAULT_ES_INDEX_NAME, # Use index from request or default
-            body={
-                "query": {
-                    "match": {
-                        # Assuming documents have a field named "text_content" or similar
-                        "text_content": query_request.query_text
-                    }
+        # Build a sophisticated multi-field query with boosting and highlighting
+        search_body = {
+            "query": {
+                "multi_match": {
+                    "query": query_request.query_text,
+                    "fields": [
+                        "text_content^3",      # Boost main content field
+                        "title^5",             # Boost title significantly
+                        "description^2",       # Boost description moderately
+                        "metadata.keywords^2", # Boost keywords
+                        "filename",            # Include filename
+                        "*"                    # Fallback to all text fields
+                    ],
+                    "type": "best_fields",     # Find best matching field
+                    "tie_breaker": 0.3,        # Consider other matching fields
+                    "minimum_should_match": "75%"  # Improve result quality
+                }
+            },
+            "highlight": {
+                "fields": {
+                    "text_content": {"fragment_size": 150, "number_of_fragments": 3},
+                    "title": {},
+                    "description": {}
                 },
-                "size": 100 # Limit candidate set for AVX processing
-            }
+                "pre_tags": ["<mark>"],
+                "post_tags": ["</mark>"]
+            },
+            "size": 100,  # Limit candidate set for AVX processing
+            "_source": ["text_content", "title", "description", "filename", "metadata"]
+        }
+
+        es_response = es_client.search(
+            index=query_request.index_name or DEFAULT_ES_INDEX_NAME,
+            body=search_body
         )
         es_hits = es_response.get("hits", {}).get("hits", [])
         total_results_before_avx = len(es_hits)
