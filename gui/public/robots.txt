@@ -1,0 +1,18 @@
+# SPINDEX robots.txt
+# Prevent search engine indexing of local/dev instance
+
+User-agent: *
+Disallow: /
+
+# API endpoints
+Disallow: /api/
+Disallow: /docs
+Disallow: /redoc
+Disallow: /openapi.json
+
+# Admin areas
+Disallow: /admin/
+Disallow: /settings/
+
+# Sitemap (if added later)
+# Sitemap: https://yourdomain.com/sitemap.xml
