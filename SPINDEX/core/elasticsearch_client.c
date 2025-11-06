@@ -393,7 +393,7 @@ int es_search_and_refine_with_avx(
     phrases_chunk.source_id = NULL; // Not strictly needed for phrases if not per-doc
 
     AvxSearchParams avx_params;
-    avx_params.text_to_search_in = &text_chunk;
+    avx_params.text_to_search = &text_chunk;
     avx_params.phrases_to_find = &phrases_chunk;
     avx_params.case_sensitive = case_sensitive_avx;
     avx_params.find_all_occurrences = find_all_occurrences_avx;

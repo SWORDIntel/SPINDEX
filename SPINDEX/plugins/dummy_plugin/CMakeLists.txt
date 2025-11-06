@@ -10,7 +10,6 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${plugin_source}")
     target_include_directories(${plugin_name} PUBLIC
         "${CMAKE_SOURCE_DIR}/include"
     )
-    target_compile_options(${plugin_name} PRIVATE ${CMAKE_C_FLAGS})
     # No specific link libraries for dummy plugin beyond what might be default (e.g. C runtime)
 
     list(APPEND SPINDEX_ALL_PLUGIN_TARGETS ${plugin_name})

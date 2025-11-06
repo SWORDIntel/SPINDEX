@@ -3,35 +3,11 @@
 #include <stdlib.h>    // For malloc, free
 #include <stdio.h>     // For snprintf if not in utils.h logging
 #include <string.h>    // For memset (optional, calloc preferred)
+#include <stdbool.h>   // For bool, true, false
 
 
 // --- Internal Structures ---
-
-// Internal representation of a task in the queue
-typedef struct Task {
-    void (*function)(void *arg);
-    void *arg;
-    struct Task *next;
-} Task;
-
-// Internal task queue structure
-typedef struct TaskQueue {
-    Task *head;
-    Task *tail;
-    int count;          // Current number of tasks in queue
-    size_t max_size;    // Maximum number of tasks, 0 for unbounded
-    pthread_mutex_t lock;
-    pthread_cond_t not_empty; // Signaled when a task is added to an empty queue
-    pthread_cond_t not_full;  // Signaled when a task is removed from a full queue
-} TaskQueue;
-
-// Definition of the opaque ThreadPool struct
-struct ThreadPool {
-    pthread_t *threads;
-    size_t num_threads;
-    TaskQueue task_queue;
-    int shutdown; // 0 = running, 1 = graceful shutdown initiated
-};
+// Note: Task, TaskQueue, and ThreadPool are defined in threading.h
 
 
 // --- Forward Declarations for Static Functions ---

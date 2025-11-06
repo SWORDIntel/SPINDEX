@@ -7,6 +7,11 @@
 #include <dlfcn.h>
 #include <stdbool.h> // For bool type
 
+// Initial capacity for dynamic plugin array
+#ifndef INITIAL_PLUGIN_CAPACITY
+#define INITIAL_PLUGIN_CAPACITY 5
+#endif
+
 // --- SemVer Parsing and Comparison Utility ---
 typedef struct {
     int major;

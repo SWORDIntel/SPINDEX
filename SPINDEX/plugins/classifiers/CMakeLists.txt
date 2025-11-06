@@ -11,7 +11,6 @@ macro(add_classifier_plugin plugin_id source_file)
         target_include_directories(${plugin_target_name} PUBLIC
             "${CMAKE_SOURCE_DIR}/include"
         )
-        target_compile_options(${plugin_target_name} PRIVATE ${CMAKE_C_FLAGS})
 
         if("${plugin_id}" STREQUAL "openvino")
             if(OPENVINO_FOUND) # This variable is set by find_package(OpenVINO CONFIG) in root CMake

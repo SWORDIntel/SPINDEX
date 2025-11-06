@@ -5,7 +5,7 @@
 #include <jansson.h> // Using Jansson as an example JSON library
 
 // Placeholder for actual implementation of load_complex_geometry_handler_config
-int load_complex_geometry_handler_config(const Config* config, ComplexGeometryHandlerConfig* handler_config) {
+int load_complex_geometry_handler_config(const SpindexConfig* config, ComplexGeometryHandlerConfig* handler_config) {
     if (!config || !handler_config) {
         // log_error("Null config provided to load_complex_geometry_handler_config");
         return -1;

@@ -21,7 +21,8 @@ class SpindexConan(ConanFile):
         # (e.g., Intel's Conan repository) or have a local recipe.
         # This is a placeholder; the exact package name and version will depend
         # on how OpenVINO is made available to Conan.
-        self.requires("openvino/2023.2.0", transitive_headers=True) # transitive_headers might be useful for OpenVINO
+        # DISABLED: OpenVINO causes build to hang - optional ML features
+        # self.requires("openvino/2023.2.0", transitive_headers=True)
         self.requires("libzip/1.10.1")
         self.requires("zlib/1.3")
         self.requires("zstd/1.5.5")
