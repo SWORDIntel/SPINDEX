@@ -147,3 +147,16 @@ ProcessedDataChunk* analyzer_process_data(const ProcessedDataChunk *input_chunk)
     LOG_DEBUG("Heuristic Analyzer: Returning a copy of the input chunk.");
     return output_chunk; // Caller is responsible for freeing this.
 }
+
+// Plugin dependency management (stub - no dependencies)
+SpindexPluginDependency* spindex_plugin_get_dependencies(int* count) {
+    if (count) *count = 0;
+    return NULL;  // This plugin has no dependencies
+}
+
+void spindex_plugin_free_dependencies_list(SpindexPluginDependency* dependencies, int count) {
+    // Nothing to free - we returned NULL
+    (void)dependencies;
+    (void)count;
+}
+
