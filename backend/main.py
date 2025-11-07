@@ -90,11 +90,10 @@ ALLOWED_MIME_TYPES = [
     "application/geo+json", "application/json", "application/zip",
     "application/vnd.google-earth.kml+xml", "application/gml+xml",
     "text/xml", "application/octet-stream", "text/plain",
-    # Compressed file formats
+    # Compressed file formats (supported by compression.py)
     "application/gzip", "application/x-gzip",  # .gz
     "application/x-tar", "application/x-compressed-tar",  # .tar, .tar.gz
-    "application/x-bzip2", "application/x-xz",  # .bz2, .xz
-    "application/x-7z-compressed"  # .7z
+    "application/x-bzip2", "application/x-xz"  # .bz2, .xz
 ]
 # NOMINATIM_USER_AGENT, GEOCODING_ADDRESS_FIELDS, etc. moved to pipeline_logic
 
