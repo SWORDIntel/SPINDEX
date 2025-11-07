@@ -47,6 +47,7 @@ const authStore = useAuthStore()
 const navItems = ref<NavItem[]>([
   { path: '/', label: 'Dashboard', icon: 'icon-dashboard' },
   { path: '/search', label: 'Search', icon: 'icon-search' },
+  { path: '/query-builder', label: 'Query Builder', icon: 'icon-build' },
   { path: '/indexes', label: 'Index Management', icon: 'icon-database' },
   { path: '/history', label: 'Query History', icon: 'icon-history' },
   {
@@ -59,6 +60,7 @@ const navItems = ref<NavItem[]>([
       { path: '/admin/system', label: 'System Status', icon: 'icon-system', requiredRole: ['admin'] },
       { path: '/admin/rbac', label: 'RBAC', icon: 'icon-rbac', requiredRole: ['admin'] },
       { path: '/admin/e2e-encryption', label: 'E2E Encryption', icon: 'icon-lock', requiredRole: ['admin'] },
+      { path: '/admin/api-keys', label: 'API Keys', icon: 'icon-key', requiredRole: ['admin'] },
     ]
   },
   { path: '/settings', label: 'Settings', icon: 'icon-settings' },
