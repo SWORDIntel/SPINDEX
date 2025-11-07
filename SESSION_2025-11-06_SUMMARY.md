@@ -261,7 +261,6 @@ Permissions-Policy: geolocation=(), microphone=(), camera=()
 - Tar (.tar, .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz)
 - Bzip2 (.bz2)
 - XZ (.xz)
-- 7-Zip (.7z)
 
 **Security Features:**
 - File count limits (max 100 files)

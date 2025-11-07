@@ -29,9 +29,9 @@ class SecurityConfig:
     ALLOWED_EXTENSIONS = {'.json', '.csv', '.geojson', '.txt', '.pdf',
                           '.doc', '.docx', '.xls', '.xlsx', '.rtf',
                           '.sqlite', '.db',
-                          # Compressed formats
+                          # Compressed formats (supported by compression.py)
                           '.zip', '.gz', '.tar', '.tgz', '.bz2', '.xz',
-                          '.7z', '.tar.gz', '.tar.bz2', '.tar.xz'}
+                          '.tar.gz', '.tar.bz2', '.tar.xz'}
 
     # Input validation
     MAX_QUERY_LENGTH = 10000
