@@ -1,49 +1,10 @@
 version: '3.8'
 
 services:
-  nats:
-    image: nats:2.9-alpine # Using a specific version, alpine for smaller size
-    ports:
-      - "4222:4222" # Client port
-      - "8222:8222" # HTTP monitoring port
-    # Command to enable JetStream if needed by application design:
-    # command: "-js"
-    networks:
-      - spindex_network
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  elasticsearch:
-    image: elasticsearch:7.17.10 # Using a specific version from 7.x series for wider compatibility
-    container_name: es01_spindex
-    environment:
-      - discovery.type=single-node
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g # Adjust heap size as needed for dev
-      - xpack.security.enabled=false # Disable security for local dev ease; use true for prod
-    ports:
-      - "9200:9200"
-      - "9300:9300"
-    volumes:
-      - es_data:/usr/share/elasticsearch/data
-    networks:
-      - spindex_network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -vq '\"status\":\"red\"'"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
+  # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: postgres_spindex
+    container_name: spindex_postgres
     environment:
       POSTGRES_USER: spindex_user
       POSTGRES_PASSWORD: spindex_password
@@ -51,7 +12,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - spindex_network
     healthcheck:
@@ -59,15 +20,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
+  # Redis for Celery
   redis:
     image: redis:7-alpine
-    container_name: redis_spindex
+    container_name: spindex_redis
     ports:
       - "6379:6379"
     networks:
@@ -77,37 +40,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # Placeholder for the SPINDEX C Worker (built from SPINDEX/Dockerfile)
-  # This assumes spindex_app is a long-running worker.
-  # If it's a command-line tool used by the backend, this service might not be run directly,
-  # or the backend's Docker image would incorporate the C build artifacts.
-  spindex-c-worker:
-    build:
-      context: ./SPINDEX # Assuming this docker-compose.yml is in the root of the project, alongside SPINDEX dir
-      dockerfile: Dockerfile
-    container_name: spindex_c_worker_instance
-    depends_on:
-      # Add dependencies if the C worker directly connects to them on startup
-      # For example, if it uses NATS or Elasticsearch directly via config:
-      # nats:
-      #   condition: service_started # or service_healthy if nats image has healthcheck
-      # elasticsearch:
-      #   condition: service_healthy
-    environment:
-      # These would be passed to the C application if it reads them
-      NATS_URL: "nats://nats:4222"
-      ELASTICSEARCH_HOST: "http://elasticsearch:9200"
-      SPINDEX_CONFIG_FILE: "/opt/spindex/config/spindex.conf" # Default from Dockerfile
-      SPINDEX_PLUGIN_DIR: "/opt/spindex/plugins"      # Default from Dockerfile
-      # Add any other environment variables your C worker needs
-    networks:
-      - spindex_network
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -115,54 +47,110 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Placeholder for the SPINDEX Backend API (Python FastAPI)
-  # This service would require its own Dockerfile (e.g., SPINDEX/backend/Dockerfile)
-  spindex-backend:
+  # Elasticsearch
+  elasticsearch:
+    image: elasticsearch:7.17.10
+    container_name: spindex_elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - spindex_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -vq '\"status\":\"red\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # FastAPI Backend
+  backend:
     build:
-      context: ./SPINDEX/backend # Example path to backend Dockerfile context
-      dockerfile: Dockerfile # Assuming Dockerfile is in backend/
-    container_name: spindex_backend_api
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: spindex_backend
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      nats:
-        condition: service_started # Or service_healthy if NATS image has it
       elasticsearch:
         condition: service_healthy
-      # spindex-c-worker: # If backend calls the C worker as a service, or needs its artifacts
-      #   condition: service_started
     ports:
-      - "8000:8000" # Expose FastAPI port
+      - "8000:8000"
     environment:
+      # Database
       DATABASE_URL: "postgresql://spindex_user:spindex_password@postgres:5432/spindex_db"
+
+      # Celery
       CELERY_BROKER_URL: "redis://redis:6379/0"
       CELERY_RESULT_BACKEND: "redis://redis:6379/1"
-      NATS_URL: "nats://nats:4222"
+
+      # Elasticsearch
       ELASTICSEARCH_HOST: "http://elasticsearch:9200"
-      # Path to C library for CFFI, if backend loads it directly.
-      # This path would be relative to where the C artifacts are copied into the backend image.
-      # SPINDEX_C_LIB_PATH: "/usr/local/lib/libspindex_core_cffi.so" # Example
-      # AEGIS tokens for development (override in prod)
+
+      # Authentication tokens (change in production!)
       AEGIS_TOKEN_ADMIN: "secure-dev-token-admin"
       AEGIS_TOKEN_ANALYST: "secure-dev-token-analyst"
       AEGIS_TOKEN_VIEWER: "secure-dev-token-viewer"
-      # SPINDEX_PLUGIN_DIR and SPINDEX_CONFIG_FILE for the C components if used by backend via CFFI
-      SPINDEX_PLUGIN_DIR_FOR_C_LIBS: "/opt/spindex_c_artifacts/plugins" # Example path if C libs are copied
-      SPINDEX_CONFIG_FILE_FOR_C_LIBS: "/opt/spindex_c_artifacts/config/spindex.conf" # Example
+
+      # Security settings
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_PER_MINUTE: "60"
+      RATE_LIMIT_PER_HOUR: "1000"
+      ENABLE_SECURITY_HEADERS: "true"
+
+      # App settings
+      PYTHONUNBUFFERED: "1"
     volumes:
-      # For development, mount backend code to allow live reload (if uvicorn is run with --reload)
-      # - ./SPINDEX/backend:/app
-      # The SPINDEX/Dockerfile for C worker uses /app as workdir.
-      # If this backend service needs C artifacts, a multi-stage build in its own Dockerfile
-      # copying from an image built by SPINDEX/Dockerfile is a good approach.
-      # Example:
-      # COPY --from=my_c_worker_image /opt/spindex /opt/spindex_c_artifacts
-      # Then set SPINDEX_C_LIB_PATH, SPINDEX_PLUGIN_DIR_FOR_C_LIBS etc. based on /opt/spindex_c_artifacts
-      - ./SPINDEX/backend:/app # Example for dev, adjust if needed
+      # Mount directories for file operations
+      - ./staging_area:/app/backend/staging_area
+      - ./processed_area:/app/backend/processed_area
+      - ./trusted_data_area:/app/backend/trusted_data_area
     networks:
       - spindex_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Vue.js Frontend
+  frontend:
+    build:
+      context: ./gui
+      dockerfile: Dockerfile
+    container_name: spindex_frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    networks:
+      - spindex_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -175,9 +163,7 @@ networks:
     driver: bridge
 
 volumes:
-  es_data:
+  postgres_data:
     driver: local
-  pg_data:
+  elasticsearch_data:
     driver: local
-  # redis_data: # Redis can be ephemeral for Celery in dev, or use a volume
-  #   driver: local

@@ -41,6 +41,15 @@ const routes: Array<RouteRecordRaw> = [
     }
   },
   {
+    path: '/query-builder',
+    name: 'QueryBuilder',
+    component: () => import('@/views/QueryBuilderView.vue'),
+    meta: {
+      requiresAuth: true,
+      breadcrumb: 'Query Builder'
+    }
+  },
+  {
     path: '/indexes',
     name: 'IndexManagement',
     component: () => import('@/views/IndexManagementView.vue'), // Placeholder view
@@ -106,6 +115,16 @@ const routes: Array<RouteRecordRaw> = [
       requiresAuth: true,
       roles: ['admin'],
       breadcrumb: 'E2E Encryption'
+    }
+  },
+  {
+    path: '/admin/api-keys',
+    name: 'ApiKeyManagement',
+    component: () => import('@/views/admin/ApiKeyManagementView.vue'),
+    meta: {
+      requiresAuth: true,
+      roles: ['admin'],
+      breadcrumb: 'API Key Management'
     }
   },
   // Catch-all 404
