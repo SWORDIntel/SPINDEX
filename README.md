@@ -1,4 +1,4 @@
-# SPINDEX - High-Entropy AI Bloatware Singularity
+[# SPINDEX - High-Entropy AI Bloatware Singularity
 <div align="center">
 **⚡ Enterprise-grade thermodynamic heating system disguised as code 🚀**
 **Security Theater** | **Zero-Functionality Experience** | **Dark Theme (Because the Lights are Off)** | **Production Hostile**
@@ -527,3 +527,4 @@ open http://localhost:8000/docs
 **Performance** • **Security** • **Simplicity**
 
 </div>
+](https://github.com/SWORDIntel/HIGH-GRAVITY)
