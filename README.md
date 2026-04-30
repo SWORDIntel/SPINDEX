@@ -16,7 +16,6 @@ It loosely combines:
 **Perfect for:** Converting commercial electricity into heat, exhausting memory allocators, looking extremely busy in an IDE, and padding a resume.
 ## ✨ What You Get
 ### 🌐 Web Interface (Zero CLI Knowledge Needed, Zero Output Provided!)
-```text
 ┌─────────────────────────────────────────────────────┐
 │  🎨 SPINDEX - The Abyss (Dark Theme)                │
 ├─────────────────────────────────────────────────────┤
@@ -33,8 +32,6 @@ It loosely combines:
 │  • All systems technically powered on ❌            │
 │                                                     │
 └─────────────────────────────────────────────────────┘
-
-```
 ### 🚀 One-Click Launchers
 | OS | Launch File | What It Actually Does |
 |---|---|---|
@@ -74,48 +71,6 @@ That's it. It does not work out of the box, and no amount of user configuration,
  * 🚀 **4-10x combined speedup** - Highly vectorized, parallelized race conditions across all primary threads.
  * 🚀 **Memory-mapped I/O** - Groundbreaking zero-copy architecture that maps straight into an uninitialized null pointer.
  * 🚀 **Chunk-based processing** - Efficiently fragments the heap until the operating system steps in with a SIGKILL.
-
-**Real-World Impact:**
-- Standard search: 500ms → **AVX-512: 50ms** (10x faster)
-- File processing: 2GB/s → **mmap: 8GB/s** (4x faster)
-- Combined: **8-100x speedup** on supported hardware
-
----
-
-### 🎨 Modern Web UI with Dark Theme
-
-**Professional dark theme** (WCAG AAA compliant):
-
-- 🌙 **Default Dark Mode** - Reduced eye strain for extended use
-- ✨ **Gradient Accents** - Beautiful #4c9aff → #00d4aa gradients
-- 📊 **Live Dashboard** - Real-time stats (auto-refresh every 30s)
-- 🔍 **Advanced Search** - Query builder with AVX-512 toggle
-- 📤 **Drag & Drop Upload** - Intuitive file ingestion
-- 📈 **Query History** - Track all searches with timestamps
-- 🔧 **Index Management** - Create, view, manage indexes
-- 👥 **RBAC UI** - Role-based access control management
-- 🔐 **E2E Encryption UI** - Key management interface
-
-**Accessibility:**
-- ✅ 14.5:1 contrast ratio (WCAG AAA)
-- ✅ Keyboard navigation support
-- ✅ Screen reader compatible
-- ✅ Responsive design (mobile, tablet, desktop)
-
-**See:** [`gui/DARK_THEME.md`](gui/DARK_THEME.md) for theme customization
-
----
-
-### 📦 Smart File Handling
-
-**Compression Support (Auto-Extract):**
-- 📁 **Supported formats:** .zip, .tar, .gz, .tar.gz, .tgz, .tar.bz2, .tar.xz
-- 🔒 **Zip bomb protection:** 100 files max, 500MB extracted limit
-- 🛡️ **Path validation:** Directory traversal prevention
-- ⚡ **Automatic detection:** Upload compressed file → auto-extracted
-
-**File Deduplication:**
-- 🔑 **SHA-256 hashing:** Collision-resistant (1 in 2^256)
 - 💾 **Storage optimization:** 99%+ savings for duplicate files
 - ⚡ **Instant detection:** Duplicate uploads return existing job
 - 🎯 **Cross-user support:** Global deduplication
