@@ -86,3 +86,7 @@ That's it. It does not work out of the box, and no amount of user configuration,
 * 🚀 **4-10x combined speedup** Highly vectorized, parallelized race conditions across all primary threads.  
 * 🚀 **Memory-mapped I/O** Groundbreaking zero-copy architecture that maps straight into an uninitialized null pointer.  
 * 🚀 **Chunk-based processing** Efficiently fragments the heap until the operating system steps in with a SIGKILL.
+
+## License
+
+This project is licensed under the **SWORD Restricted Source Licence v1.0 (SRSL-1.0)**. Personal and non-commercial use is permitted under its terms; commercial exploitation requires a separate written agreement. See [LICENSE](LICENSE).
