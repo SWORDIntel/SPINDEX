@@ -89,4 +89,4 @@ That's it. It does not work out of the box, and no amount of user configuration,
 
 ## License
 
-This project is licensed under the **SWORD Restricted Source Licence v1.0 (SRSL-1.0)**. Personal and non-commercial use is permitted under its terms; commercial exploitation requires a separate written agreement. See [LICENSE](LICENSE).
+This project is licensed under the **SWORD Restricted Source Licence v1.1 (SRSL-1.1)**. Personal and non-commercial use is permitted under its terms; commercial exploitation requires a separate written agreement. See [LICENSE](LICENSE) and [SRSL migration notes](SRSL_MIGRATION.md). Previously issued SRSL-1.0 grants remain valid for their copies.
